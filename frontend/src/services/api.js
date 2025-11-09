@@ -1,6 +1,22 @@
 import axios from 'axios';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+// Auto-detect production URL based on current domain
+const getApiBaseUrl = () => {
+  // If VITE_API_URL is set during build, use it
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+  
+  // If running on Timeweb Cloud (*.twc1.net), use production backend
+  if (window.location.hostname.includes('twc1.net')) {
+    return 'https://wemdio-parserandscanner-7067.twc1.net/api';
+  }
+  
+  // Default to localhost for local development
+  return 'http://localhost:3000/api';
+};
+
+const API_BASE_URL = getApiBaseUrl();
 
 // User ID management (temporary - in production this would come from auth)
 const USER_ID_KEY = 'telegram_scanner_user_id';
