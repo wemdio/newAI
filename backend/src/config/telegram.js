@@ -231,8 +231,6 @@ export const formatLeadMessage = (lead, analysis, messageSuggestion = null) => {
     : '🔒 _Скрыт пользователем_';
   
   let message = `
-${confidenceEmoji} *НОВЫЙ ЛИД*
-
 👤 *Контактная информация*
 • *Имя:* ${escapeMarkdown(fullName)}
 • *Username:* ${usernameDisplay}
