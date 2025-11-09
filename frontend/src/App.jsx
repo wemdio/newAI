@@ -1,22 +1,55 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { createClient } from '@supabase/supabase-js';
 import './App.css';
 import Configuration from './pages/Configuration';
 import Leads from './pages/Leads';
-import { getUserId, setUserId } from './services/api';
+import Login from './pages/Login';
+
+// Initialize Supabase client
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL || 'https://liavhyhyzqadilfmicba.supabase.co',
+  import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYXZoeWh5enFhZGlsZm1pY2JhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE1ODQ1NzIsImV4cCI6MjA3NzE2MDU3Mn0.tlqzG7LygCEKPtFIiXxChqef4JNMaXqj69ygLww1GQM'
+);
 
 function App() {
-  const [userId, setUserIdState] = useState(getUserId());
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('leads');
 
   useEffect(() => {
-    // If no user ID, generate a temporary one
-    if (!userId) {
-      const tempId = '00000000-0000-0000-0000-000000000001'; // Default test user ID
-      setUserId(tempId);
-      setUserIdState(tempId);
-    }
-  }, [userId]);
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
+
+  if (loading) {
+    return (
+      <div className="app loading-screen">
+        <div className="loading-spinner"></div>
+        <p>Загрузка...</p>
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Login supabase={supabase} />;
+  }
 
   return (
     <Router>
@@ -49,7 +82,10 @@ function App() {
               </Link>
             </div>
             <div className="user-info">
-              <span className="user-id">User: {userId?.slice(0, 8)}...</span>
+              <span className="user-email">{session.user.email}</span>
+              <button onClick={handleSignOut} className="btn-signout">
+                Выйти
+              </button>
             </div>
           </div>
         </nav>

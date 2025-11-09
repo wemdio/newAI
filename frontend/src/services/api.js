@@ -1,4 +1,11 @@
 import axios from 'axios';
+import { createClient } from '@supabase/supabase-js';
+
+// Initialize Supabase client
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL || 'https://liavhyhyzqadilfmicba.supabase.co',
+  import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYXZoeWh5enFhZGlsZm1pY2JhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE1ODQ1NzIsImV4cCI6MjA3NzE2MDU3Mn0.tlqzG7LygCEKPtFIiXxChqef4JNMaXqj69ygLww1GQM'
+);
 
 // Auto-detect production URL based on current domain
 const getApiBaseUrl = () => {
@@ -18,17 +25,6 @@ const getApiBaseUrl = () => {
 
 const API_BASE_URL = getApiBaseUrl();
 
-// User ID management (temporary - in production this would come from auth)
-const USER_ID_KEY = 'telegram_scanner_user_id';
-
-export const getUserId = () => {
-  return localStorage.getItem(USER_ID_KEY) || '00000000-0000-0000-0000-000000000001';
-};
-
-export const setUserId = (userId) => {
-  localStorage.setItem(USER_ID_KEY, userId);
-};
-
 // Create axios instance
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -37,9 +33,15 @@ const api = axios.create({
   },
 });
 
-// Add user ID to all requests
-api.interceptors.request.use((config) => {
-  config.headers['x-user-id'] = getUserId();
+// Add Supabase Auth token to all requests
+api.interceptors.request.use(async (config) => {
+  const { data: { session } } = await supabase.auth.getSession();
+  
+  if (session?.user) {
+    // Use user ID from Supabase Auth
+    config.headers['x-user-id'] = session.user.id;
+  }
+  
   return config;
 });
 
