@@ -22,15 +22,19 @@ const app = express();
 
 // ============= MIDDLEWARE =============
 
-// Security headers
-app.use(helmet());
-
-// CORS configuration - Allow all origins for deployment
+// CORS configuration - MUST BE BEFORE HELMET!
 app.use(cors({
   origin: '*',
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
   credentials: false
+}));
+
+// Security headers - configured to not block CORS
+app.use(helmet({
+  crossOriginResourcePolicy: false,
+  crossOriginOpenerPolicy: false,
+  crossOriginEmbedderPolicy: false
 }));
 
 // Body parsing
