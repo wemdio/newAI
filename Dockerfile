@@ -1,37 +1,41 @@
-# Stage 1: Build
+# Stage 1: Build the application
 FROM node:22-slim AS builder
 
+WORKDIR /app
+
+# Copy backend package.json and install dependencies
+COPY backend/package.json backend/pnpm-lock.yaml* backend/package-lock.json* backend/pnpm-workspace.yaml* ./backend/
 WORKDIR /app/backend
+RUN npm install --omit=dev
 
-# Copy package files and install dependencies
-COPY backend/package*.json ./
-RUN npm ci --omit=dev
-
-# Copy source code
+# Copy the rest of the backend source code
 COPY backend/ ./
 
-# Stage 2: Run
+# Stage 2: Run the application
 FROM node:22-slim
 
 WORKDIR /app
 
-# Create non-root user
+# Create a non-root user
 RUN groupadd --gid 2000 app && useradd --uid 2000 --gid 2000 -m -s /bin/bash app
 
-# Copy from builder
-COPY --from=builder /app/backend ./
+# Copy runtime dependencies from builder stage
+COPY --from=builder /app/backend/node_modules ./backend/node_modules
 
-# Set ownership
+# Copy the rest of the backend application code
+COPY --from=builder /app/backend/ ./
+
+# Set proper ownership
 RUN chown -R app:app /app
 
-# Switch to non-root user
-USER app
-
-# Expose port
+# Expose the port the app runs on (must match PORT env variable)
 EXPOSE 3000
 
-# Set environment
+# Switch to the non-root user
+USER app
+
+# Set environment for Node.js
 ENV NODE_ENV=production
 
-# Start application
+# Command to run the application
 CMD ["node", "src/index.js"]
