@@ -118,8 +118,8 @@ export const postLeadToChannel = async (lead, analysis, channelId, botToken = nu
       hasSuggestion: !!messageSuggestion
     });
     
-    // Check for duplicates if userId provided (TEMPORARILY DISABLED FOR TESTING)
-    if (false && userId) {
+    // Check for duplicates if userId provided
+    if (userId) {
       const duplicateCheck = await checkDuplicateLead(lead, userId);
       if (duplicateCheck.isDuplicate) {
         logger.info('Skipping duplicate lead', {
