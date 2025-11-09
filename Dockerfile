@@ -1,24 +1,38 @@
-# Backend Dockerfile for Timeweb Cloud
-FROM node:22-slim
+# Stage 1: Build the application
+FROM node:22-slim AS builder
 
-# Install PM2 globally
-RUN npm install -g pm2
-
-# Create app directory
 WORKDIR /app
 
-# Copy backend package files
-COPY backend/package*.json ./
+# Copy backend package.json and install dependencies
+COPY backend/package.json backend/pnpm-lock.yaml* backend/package-lock.json* backend/pnpm-workspace.yaml* ./backend/
+WORKDIR /app/backend
+RUN npm install --omit=dev
 
-# Install dependencies
-RUN npm install --production
-
-# Copy backend source code
+# Copy the rest of the backend source code
 COPY backend/ ./
 
-# Expose port
+# Stage 2: Run the application
+FROM node:22-slim
+
+WORKDIR /app
+
+# Create a non-root user
+RUN groupadd --gid 2000 app && useradd --uid 2000 --gid 2000 -m -s /bin/bash app
+
+# Copy runtime dependencies from builder stage
+COPY --from=builder /app/backend/node_modules ./backend/node_modules
+
+# Copy the rest of the backend application code
+COPY --from=builder /app/backend/ ./
+
+# Set proper ownership
+RUN chown -R app:app /app
+
+# Expose the port the app runs on
 EXPOSE 8000
 
-# Start with PM2
-CMD ["pm2-runtime", "start", "src/index.js", "--name", "telegram-scanner"]
+# Switch to the non-root user
+USER app
 
+# Command to run the application
+CMD ["node", "src/index.js"]
