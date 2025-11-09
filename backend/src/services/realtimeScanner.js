@@ -185,6 +185,14 @@ const processMessagesForUser = async (messages, userConfig) => {
 
         // Post to Telegram immediately (with duplicate check and message suggestion)
         try {
+          logger.info('🚀 ATTEMPTING TO POST LEAD TO TELEGRAM', {
+            userId,
+            leadId: savedLead.id,
+            channelId: userConfig.telegram_channel_id,
+            hasMessageSuggestion: !!messageSuggestion,
+            messagePreview: match.message.message?.substring(0, 100)
+          });
+
           const postResult = await postLeadToChannel(
             match.message,
             match.analysis.aiResponse,
@@ -194,26 +202,39 @@ const processMessagesForUser = async (messages, userConfig) => {
             messageSuggestion // message suggestion
           );
 
+          logger.info('📬 POST RESULT FROM TELEGRAM', {
+            userId,
+            leadId: savedLead.id,
+            success: postResult.success,
+            skipped: postResult.skipped,
+            messageId: postResult.messageId,
+            reason: postResult.reason
+          });
+
           // Only mark as posted if actually posted (not skipped as duplicate)
           if (postResult.success && !postResult.skipped) {
             await markLeadAsPosted(savedLead.id);
 
-            logger.info('Lead posted to Telegram', {
+            logger.info('✅ Lead posted to Telegram successfully', {
               userId,
               leadId: savedLead.id,
+              telegramMessageId: postResult.messageId,
               hasSuggestion: !!messageSuggestion
             });
           } else if (postResult.skipped) {
-            logger.info('Lead skipped (duplicate)', {
+            logger.info('⏭️ Lead skipped (duplicate)', {
               userId,
-              leadId: savedLead.id
+              leadId: savedLead.id,
+              reason: postResult.reason
             });
           }
         } catch (postError) {
-          logger.error('Failed to post lead to Telegram', {
+          logger.error('❌ FAILED TO POST LEAD TO TELEGRAM', {
             userId,
             leadId: savedLead.id,
-            error: postError.message
+            channelId: userConfig.telegram_channel_id,
+            error: postError.message,
+            stack: postError.stack
           });
         }
       } catch (saveError) {
