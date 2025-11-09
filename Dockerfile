@@ -4,8 +4,7 @@ FROM node:22-slim AS builder
 WORKDIR /app
 
 # Copy backend package.json and install dependencies
-COPY backend/package.json backend/pnpm-lock.yaml* backend/package-lock.json* backend/pnpm-workspace.yaml* ./backend/
-WORKDIR /app/backend
+COPY backend/package.json backend/package-lock.json* ./
 RUN npm install --omit=dev
 
 # Copy the rest of the backend source code
@@ -20,10 +19,11 @@ WORKDIR /app
 RUN groupadd --gid 2000 app && useradd --uid 2000 --gid 2000 -m -s /bin/bash app
 
 # Copy runtime dependencies from builder stage
-COPY --from=builder /app/backend/node_modules ./backend/node_modules
+COPY --from=builder /app/node_modules ./node_modules
 
 # Copy the rest of the backend application code
-COPY --from=builder /app/backend/ ./
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/package.json ./package.json
 
 # Set proper ownership
 RUN chown -R app:app /app
