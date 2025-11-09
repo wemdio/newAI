@@ -4,7 +4,8 @@ FROM node:22-slim AS builder
 WORKDIR /app
 
 # Copy frontend package files and install dependencies
-COPY frontend/package.json frontend/package-lock.json* ./
+COPY frontend/package.json frontend/package-lock.json* ./frontend/
+WORKDIR /app/frontend
 RUN npm install
 
 # Copy frontend source code
@@ -17,7 +18,7 @@ RUN npm run build
 FROM nginx:alpine
 
 # Copy built files to nginx
-COPY --from=builder /app/dist /usr/share/nginx/html
+COPY --from=builder /app/frontend/dist /usr/share/nginx/html
 
 # Copy nginx configuration (optional, for custom routing)
 RUN echo 'server { \
