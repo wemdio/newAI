@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "postbuild": "node -e \"const fs=require('fs'); if (fs.existsSync('node_modules')) { fs.rmSync('node_modules', { recursive: true, force: true }); }\"",
     "preview": "vite preview"
   },
   "devDependencies": {
