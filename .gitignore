@@ -1,34 +1,19 @@
 # Dependencies
 node_modules/
-*/node_modules/
 
-# Environment variables
-.env
-.env.local
-.env.production
-backend/.env
-frontend/.env
-
-# Build outputs
+# Build output
 dist/
-build/
-*/dist/
-*/build/
+
+# Environment
+.env*
 
 # Logs
-logs/
 *.log
 npm-debug.log*
 
-# OS files
+# Editor/OS
 .DS_Store
 Thumbs.db
-
-# IDE
 .vscode/
 .idea/
-
-# Temporary files
-*.tmp
-*.temp
 

@@ -1,0 +1,30 @@
+# Node dependencies
+node_modules
+
+# Git metadata
+.git
+.gitignore
+
+# Logs and temporary files
+logs
+*.log
+*.tmp
+*.temp
+
+# Tests and local scripts not required in the container
+.tests
+coverage
+*.spec.js
+*.test.js
+
+# Documentation and local configs
+*.md
+.env*
+frontend
+Dockerfile.frontend
+
+# Editor and OS files
+.vscode
+.idea
+.DS_Store
+Thumbs.db
