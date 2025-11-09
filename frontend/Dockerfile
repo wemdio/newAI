@@ -3,12 +3,12 @@ FROM node:22-slim AS builder
 
 WORKDIR /app
 
-# Copy package files and install dependencies
-COPY package.json package-lock.json* ./
+# Copy frontend package files and install dependencies
+COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
 
-# Copy source code
-COPY . .
+# Copy frontend source code
+COPY frontend/ ./
 
 # Build the application
 RUN npm run build
