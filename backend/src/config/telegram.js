@@ -212,6 +212,16 @@ export const formatLeadMessage = (lead, analysis, messageSuggestion = null) => {
     return text.replace(/([_*\[\]()~`>#+\-=|{}.!])/g, '\\$1');
   };
   
+  // Get confidence emoji based on score
+  const getConfidenceEmoji = (score) => {
+    if (score >= 90) return '🟢'; // Green - very high
+    if (score >= 75) return '🔵'; // Blue - high
+    if (score >= 60) return '🟡'; // Yellow - medium
+    return '🟠'; // Orange - low
+  };
+  
+  const confidenceEmoji = getConfidenceEmoji(analysis.confidence_score);
+  
   const fullName = [lead.first_name, lead.last_name]
     .filter(Boolean)
     .join(' ') || 'Не указано';
@@ -221,37 +231,47 @@ export const formatLeadMessage = (lead, analysis, messageSuggestion = null) => {
     : '🔒 _Скрыт пользователем_';
   
   let message = `
-🎯 *НАЙДЕН НОВЫЙ ЛИД*
+╔═══════════════════════════╗
+║   ${confidenceEmoji} *НОВЫЙ ЛИД*   ${confidenceEmoji}   ║
+╚═══════════════════════════╝
 
-👤 *Контактная информация*:
-• Имя: ${escapeMarkdown(fullName)}
-• Username: ${usernameDisplay}
-• Био: ${escapeMarkdown(lead.bio || 'Не указано')}
+👤 *Контактная информация*
+━━━━━━━━━━━━━━━━━━━━━
+• *Имя:* ${escapeMarkdown(fullName)}
+• *Username:* ${usernameDisplay}
+• *Био:* ${escapeMarkdown(lead.bio || 'Не указано')}
 
-📱 *Источник*:
-• Канал: ${escapeMarkdown(lead.chat_name)}
-• Время: ${new Date(lead.message_time).toLocaleString('ru-RU')}
+📱 *Источник*
+━━━━━━━━━━━━━━━━━━━━━
+• *Канал:* ${escapeMarkdown(lead.chat_name)}
+• *Время:* ${new Date(lead.message_time).toLocaleString('ru-RU')}
 
-💬 *Сообщение*:
-${escapeMarkdown(lead.message)}
+💬 *Сообщение лида*
+━━━━━━━━━━━━━━━━━━━━━
+_${escapeMarkdown(lead.message)}_
 
-🤖 *AI Анализ*:
-• Уверенность: ${analysis.confidence_score}%
-• Обоснование: ${analysis.reasoning}`;
+🤖 *AI Анализ*
+━━━━━━━━━━━━━━━━━━━━━
+• *Уверенность:* ${confidenceEmoji} *${analysis.confidence_score}%*
+• *Обоснование:* ${escapeMarkdown(analysis.reasoning)}`;
 
-  // Add message suggestion if provided (without escaping to avoid visual issues)
+  // Add message suggestion if provided - in copyable code block
   if (messageSuggestion) {
-    // Don't escape suggestion - keep it readable
     message += `
 
-💡 *Подсказка для первого сообщения*:
-${messageSuggestion}`;
+💡 *Подсказка для первого сообщения*
+━━━━━━━━━━━━━━━━━━━━━
+_Нажмите и удерживайте текст ниже для копирования:_
+
+\`\`\`
+${messageSuggestion}
+\`\`\``;
   }
 
   message += `
 
----
-ID лида: ${lead.id}`;
+━━━━━━━━━━━━━━━━━━━━━
+_ID лида: ${lead.id}_`;
   
   return message.trim();
 };
