@@ -28,11 +28,14 @@ COPY --from=builder /app/backend/ ./
 # Set proper ownership
 RUN chown -R app:app /app
 
-# Expose the port the app runs on
-EXPOSE 8000
+# Expose the port the app runs on (must match PORT env variable)
+EXPOSE 3000
 
 # Switch to the non-root user
 USER app
+
+# Set environment for Node.js
+ENV NODE_ENV=production
 
 # Command to run the application
 CMD ["node", "src/index.js"]
