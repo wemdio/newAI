@@ -5,7 +5,7 @@ import { initializeDatabase, healthCheck as dbHealthCheck } from '../config/data
 import { healthCheck as openrouterHealthCheck } from '../config/openrouter.js';
 import { healthCheck as telegramHealthCheck } from '../config/telegram.js';
 import { errorMiddleware } from '../utils/errorHandler.js';
-import { generalLimiter } from './middleware/rateLimiter.js';
+import { generalLimiter, lightLimiter } from './middleware/rateLimiter.js';
 import logger from '../utils/logger.js';
 
 // Import routes
@@ -41,7 +41,8 @@ app.use(helmet({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Rate limiting
+// Rate limiting - general limit for all API endpoints
+// Individual routes can override with more specific limits
 app.use('/api/', generalLimiter);
 
 // Request logging

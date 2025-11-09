@@ -26,8 +26,8 @@ function Configuration() {
     loadConfiguration();
     loadScannerStatus();
     
-    // Poll scanner status every 5 seconds
-    const interval = setInterval(loadScannerStatus, 5000);
+    // Poll scanner status every 10 seconds (optimized for multi-tenant SaaS)
+    const interval = setInterval(loadScannerStatus, 10000);
     return () => clearInterval(interval);
   }, []);
 
