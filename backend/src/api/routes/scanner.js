@@ -6,7 +6,7 @@ import {
 } from '../../services/realtimeScanner.js';
 import { runHourlyScan } from '../../jobs/hourlyScanner.js';
 import { authenticateUser } from '../middleware/auth.js';
-import { strictLimiter, lightLimiter } from '../middleware/rateLimiter.js';
+import { strictLimiter } from '../middleware/rateLimiter.js';
 import { asyncHandler } from '../../utils/errorHandler.js';
 import logger from '../../utils/logger.js';
 
@@ -15,9 +15,8 @@ const router = express.Router();
 /**
  * GET /api/scanner/status
  * Get scanner status
- * Uses light limiter for frequent polling (1000 req/15min per user)
  */
-router.get('/status', lightLimiter, asyncHandler(async (req, res) => {
+router.get('/status', asyncHandler(async (req, res) => {
   const status = getScannerStatus();
   const mode = process.env.SCAN_MODE || 'cron';
 

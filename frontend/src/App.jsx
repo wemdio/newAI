@@ -45,7 +45,7 @@ function App() {
         <p>Загрузка...</p>
       </div>
     );
-  }
+    }
 
   if (!session) {
     return <Login supabase={supabase} />;
