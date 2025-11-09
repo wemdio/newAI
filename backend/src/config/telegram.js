@@ -243,7 +243,7 @@ ${confidenceEmoji} *НОВЫЙ ЛИД*
 • *Время:* ${new Date(lead.message_time).toLocaleString('ru-RU')}
 
 💬 *Сообщение лида*
-_${escapeMarkdown(lead.message)}_
+*${escapeMarkdown(lead.message)}*
 
 🤖 *AI Анализ*
 • *Уверенность:* ${confidenceEmoji} *${analysis.confidence_score}%*
