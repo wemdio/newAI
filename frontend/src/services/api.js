@@ -9,7 +9,7 @@ const getApiBaseUrl = () => {
   
   // If running on Timeweb Cloud (*.twc1.net), use production backend
   if (window.location.hostname.includes('twc1.net')) {
-    return 'https://wemdio-parserandscanner-7067.twc1.net/api';
+    return 'https://wemdio-parserandscanner-40d8.twc1.net/api';
   }
   
   // Default to localhost for local development
