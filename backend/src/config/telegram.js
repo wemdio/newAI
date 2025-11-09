@@ -231,46 +231,34 @@ export const formatLeadMessage = (lead, analysis, messageSuggestion = null) => {
     : '🔒 _Скрыт пользователем_';
   
   let message = `
-╔═══════════════════════════╗
-║   ${confidenceEmoji} *НОВЫЙ ЛИД*   ${confidenceEmoji}   ║
-╚═══════════════════════════╝
+${confidenceEmoji} *НОВЫЙ ЛИД*
 
 👤 *Контактная информация*
-━━━━━━━━━━━━━━━━━━━━━
 • *Имя:* ${escapeMarkdown(fullName)}
 • *Username:* ${usernameDisplay}
 • *Био:* ${escapeMarkdown(lead.bio || 'Не указано')}
 
 📱 *Источник*
-━━━━━━━━━━━━━━━━━━━━━
 • *Канал:* ${escapeMarkdown(lead.chat_name)}
 • *Время:* ${new Date(lead.message_time).toLocaleString('ru-RU')}
 
 💬 *Сообщение лида*
-━━━━━━━━━━━━━━━━━━━━━
 _${escapeMarkdown(lead.message)}_
 
 🤖 *AI Анализ*
-━━━━━━━━━━━━━━━━━━━━━
 • *Уверенность:* ${confidenceEmoji} *${analysis.confidence_score}%*
 • *Обоснование:* ${escapeMarkdown(analysis.reasoning)}`;
 
-  // Add message suggestion if provided - in copyable code block
+  // Add message suggestion if provided - compact format
   if (messageSuggestion) {
     message += `
 
 💡 *Подсказка для первого сообщения*
-━━━━━━━━━━━━━━━━━━━━━
-_Нажмите и удерживайте текст ниже для копирования:_
-
-\`\`\`
-${messageSuggestion}
-\`\`\``;
+\`${messageSuggestion}\``;
   }
 
   message += `
 
-━━━━━━━━━━━━━━━━━━━━━
 _ID лида: ${lead.id}_`;
   
   return message.trim();
