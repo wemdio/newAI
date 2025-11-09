@@ -1,0 +1,13 @@
+{
+  "name": "telegram-lead-scanner",
+  "version": "1.0.0",
+  "description": "Telegram Lead Scanner - Full Stack Application",
+  "scripts": {
+    "build": "cd frontend && npm install && npm run build",
+    "start": "cd backend && npm start",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && node src/index.js"
+  },
+  "private": true
+}
+
