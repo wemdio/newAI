@@ -25,11 +25,12 @@ const app = express();
 // Security headers
 app.use(helmet());
 
-// CORS configuration
+// CORS configuration - Allow all origins for deployment
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id']
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
+  credentials: false
 }));
 
 // Body parsing
