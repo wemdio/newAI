@@ -51,7 +51,11 @@ function App() {
         {/* Header */}
         <header className="app-header">
           <div className="container">
-            <h1>Telegram Lead Scanner</h1>
+            <img 
+              src="/assets/logo.png" 
+              alt="POLZA Agency" 
+              className="app-logo"
+            />
             <p className="subtitle">AI-Powered Lead Detection</p>
           </div>
         </header>

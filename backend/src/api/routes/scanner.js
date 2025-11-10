@@ -6,7 +6,6 @@ import {
 } from '../../services/realtimeScanner.js';
 import { runHourlyScan } from '../../jobs/hourlyScanner.js';
 import { authenticateUser } from '../middleware/auth.js';
-import { strictLimiter } from '../middleware/rateLimiter.js';
 import { asyncHandler } from '../../utils/errorHandler.js';
 import logger from '../../utils/logger.js';
 
@@ -31,7 +30,7 @@ router.get('/status', asyncHandler(async (req, res) => {
  * POST /api/scanner/start
  * Start realtime scanner
  */
-router.post('/start', authenticateUser, strictLimiter, asyncHandler(async (req, res) => {
+router.post('/start', authenticateUser, asyncHandler(async (req, res) => {
   logger.info('Starting realtime scanner via API', {
     userId: req.userId
   });
@@ -49,7 +48,7 @@ router.post('/start', authenticateUser, strictLimiter, asyncHandler(async (req, 
  * POST /api/scanner/stop
  * Stop realtime scanner
  */
-router.post('/stop', authenticateUser, strictLimiter, asyncHandler(async (req, res) => {
+router.post('/stop', authenticateUser, asyncHandler(async (req, res) => {
   logger.info('Stopping realtime scanner via API', {
     userId: req.userId
   });
@@ -67,7 +66,7 @@ router.post('/stop', authenticateUser, strictLimiter, asyncHandler(async (req, r
  * POST /api/scanner/manual-scan
  * Trigger manual scan (like hourly cron)
  */
-router.post('/manual-scan', authenticateUser, strictLimiter, asyncHandler(async (req, res) => {
+router.post('/manual-scan', authenticateUser, asyncHandler(async (req, res) => {
   logger.info('Manual scan triggered via API', {
     userId: req.userId
   });

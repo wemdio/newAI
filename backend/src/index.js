@@ -19,22 +19,9 @@ const main = async () => {
     logger.info('Starting API server...');
     await startServer();
     
-    // Auto-start scanner if user has active config
-    try {
-      const activeUsers = await getActiveUserConfigs();
-      if (activeUsers.length > 0) {
-        logger.info('🚀 Auto-starting scanner (found active user configs)...');
-        await startRealtimeScanner();
-        logger.info('✅ Scanner started automatically');
-      } else {
-        logger.info('💡 Scanner is STOPPED (no active user configs)');
-      }
-    } catch (scannerError) {
-      logger.warn('Could not auto-start scanner', {
-        error: scannerError.message
-      });
-      logger.info('🎛️  Use the UI to Start/Stop the scanner manually');
-    }
+    // Scanner is controlled manually via UI
+    logger.info('🎛️  Scanner is STOPPED');
+    logger.info('💡 Use the UI to Start/Stop the scanner manually');
     
     logger.info('========================================');
     logger.info('✅ Application started successfully');

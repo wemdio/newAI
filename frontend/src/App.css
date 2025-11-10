@@ -33,10 +33,18 @@ body {
   border-bottom: 1px solid #222;
 }
 
-.app-header h1 {
-  font-size: 24px;
-  font-weight: 400;
-  letter-spacing: -0.5px;
+.app-header .container {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.app-logo {
+  height: 50px;
+  width: auto;
+  object-fit: contain;
+  filter: brightness(1.1);
 }
 
 .app-header .subtitle {

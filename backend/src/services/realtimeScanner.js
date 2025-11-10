@@ -14,6 +14,7 @@ import logger from '../utils/logger.js';
 
 let realtimeChannel = null;
 let isRunning = false;
+let subscribedAt = null;
 let processedMessageIds = new Set();
 const BATCH_INTERVAL = 5000; // 5 seconds
 let pendingMessages = [];
@@ -328,13 +329,18 @@ export const startRealtimeScanner = async () => {
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
           isRunning = true;
-          logger.info('✅ Realtime scanner subscribed successfully');
+          subscribedAt = new Date().toISOString();
+          logger.info('✅ Realtime scanner subscribed successfully', {
+            subscribedAt
+          });
         } else if (status === 'CHANNEL_ERROR') {
           logger.error('❌ Realtime channel error');
           isRunning = false;
+          subscribedAt = null;
         } else if (status === 'TIMED_OUT') {
           logger.error('⏱️ Realtime connection timed out');
           isRunning = false;
+          subscribedAt = null;
         } else {
           logger.info('Realtime status:', { status });
         }
@@ -389,6 +395,7 @@ export const stopRealtimeScanner = async () => {
     }
 
     isRunning = false;
+    subscribedAt = null;
 
     logger.info('✅ Realtime scanner stopped');
 
@@ -411,6 +418,7 @@ export const stopRealtimeScanner = async () => {
 export const getScannerStatus = () => {
   return {
     isRunning,
+    subscribedAt,
     pendingBatchSize: pendingMessages.length,
     processedMessagesCount: processedMessageIds.size
   };
