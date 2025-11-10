@@ -310,7 +310,28 @@ export const startRealtimeScanner = async () => {
     isRunning = true;
     subscribedAt = new Date().toISOString();
     
+    // CRITICAL: Initialize lastProcessedId to max ID in database
+    // This prevents processing thousands of old messages on startup
     let lastProcessedId = null;
+    try {
+      const { data: latestMessage } = await supabase
+        .from('messages')
+        .select('id')
+        .order('id', { ascending: false })
+        .limit(1)
+        .single();
+      
+      if (latestMessage) {
+        lastProcessedId = latestMessage.id;
+        logger.info('Scanner initialized - will process only NEW messages', {
+          startingFromId: lastProcessedId
+        });
+      }
+    } catch (error) {
+      logger.warn('Could not get latest message ID, will process from beginning', {
+        error: error.message
+      });
+    }
 
     // Polling function - check for new messages every 5 seconds
     const pollForMessages = async () => {
