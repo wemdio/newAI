@@ -163,9 +163,26 @@ function App() {
     );
   }
 
-  // Show login if no session (both browser and Telegram without data)
-  if (!session) {
+  // Show login for browser users (not Telegram)
+  if (!session && !isTelegram) {
     return <Login supabase={supabase} />;
+  }
+
+  // Show loading if in Telegram but not authenticated yet
+  if (!session && isTelegram) {
+    return (
+      <div className="app loading-screen">
+        <div className="loading-spinner"></div>
+        <p>Аутентификация через Telegram...</p>
+        <p style={{ marginTop: '20px', fontSize: '12px', color: '#888' }}>
+          ⚠️ Если загрузка зависла:
+        </p>
+        <p style={{ fontSize: '12px', color: '#888' }}>
+          1. Отправьте /start боту<br/>
+          2. Откройте через кнопку "🚀 Открыть Lead Scanner"
+        </p>
+      </div>
+    );
   }
 
   return (
