@@ -321,7 +321,7 @@ export const startRealtimeScanner = async () => {
           .from('messages')
           .select('*')
           .order('id', { ascending: false })
-          .limit(10);
+          .limit(100); // Increased from 10 to 100 to handle high-volume channels
 
         if (lastProcessedId) {
           query.gt('id', lastProcessedId);
