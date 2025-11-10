@@ -5,9 +5,29 @@
 
 /**
  * Check if running inside Telegram Web App
+ * More reliable check - not just SDK presence, but actual Telegram context
  */
 export const isTelegramWebApp = () => {
-  return typeof window !== 'undefined' && !!window.Telegram?.WebApp;
+  if (typeof window === 'undefined') return false;
+  
+  const tg = window.Telegram?.WebApp;
+  if (!tg) return false;
+  
+  // Check if we have actual init data from Telegram
+  // If initData is empty or initDataUnsafe is empty, we're not in Telegram
+  const hasInitData = !!(tg.initData && tg.initData.length > 0);
+  const hasUser = !!(tg.initDataUnsafe && tg.initDataUnsafe.user);
+  
+  console.log('🔍 Telegram detection:', {
+    hasTelegramObject: !!tg,
+    hasInitData,
+    hasUser,
+    initDataLength: tg.initData?.length || 0,
+    platform: tg.platform || 'none'
+  });
+  
+  // We're in Telegram only if we have init data or user data
+  return hasInitData || hasUser;
 };
 
 /**
