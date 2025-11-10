@@ -71,14 +71,16 @@ function App() {
         console.error('❌ No Telegram user data available');
         console.log('telegramUser:', telegramUser);
         console.log('initData:', initData);
-        console.error('⚠️ Mini App bot might not be configured properly!');
-        console.log('📋 Please check: https://github.com/wemdio/newAI/blob/main/TELEGRAM_MINI_APP_SETUP.md');
+        console.error('⚠️ Telegram opened but no user data provided');
+        console.log('💡 This can happen if:');
+        console.log('  1. Mini App bot not configured properly');
+        console.log('  2. Opening via direct link (not via Menu Button)');
+        console.log('  3. Telegram needs time to sync');
+        console.log('📋 Falling back to email/password login...');
         
-        // Fall back to regular login after 3 seconds
-        setTimeout(() => {
-          setIsTelegram(false); // Switch to browser mode
-          setLoading(false);
-        }, 3000);
+        // Fall back to regular login immediately
+        setIsTelegram(false); // Switch to browser mode
+        setLoading(false);
         return;
       }
 
