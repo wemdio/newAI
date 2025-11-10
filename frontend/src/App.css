@@ -34,16 +34,15 @@ body {
   position: relative;
   width: 100%;
   overflow: hidden;
+  height: 200px;
 }
 
 .app-logo {
   width: 100%;
-  height: auto;
-  max-height: 200px;
-  object-fit: contain;
-  object-position: center;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
   display: block;
-  margin: 0 auto;
 }
 
 /* Navigation */
@@ -274,8 +273,8 @@ body {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .app-logo {
-    max-height: 120px;
+  .app-header {
+    height: 120px;
   }
   
   .app-nav .container {
