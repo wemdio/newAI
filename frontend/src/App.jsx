@@ -72,15 +72,14 @@ function App() {
         console.log('telegramUser:', telegramUser);
         console.log('initData:', initData);
         console.error('⚠️ Telegram opened but no user data provided');
-        console.log('💡 This can happen if:');
-        console.log('  1. Mini App bot not configured properly');
-        console.log('  2. Opening via direct link (not via Menu Button)');
-        console.log('  3. Telegram needs time to sync');
-        console.log('📋 Falling back to email/password login...');
+        console.log('💡 Opening via Menu Button instead of Web App button');
+        console.log('📋 Falling back to email/password login in 2 seconds...');
         
-        // Fall back to regular login immediately
-        setIsTelegram(false); // Switch to browser mode
-        setLoading(false);
+        // Fall back to regular login after 2 seconds
+        setTimeout(() => {
+          setIsTelegram(false); // Switch to browser mode
+          setLoading(false);
+        }, 2000);
         return;
       }
 
@@ -174,13 +173,19 @@ function App() {
       <div className="app loading-screen">
         <div className="loading-spinner"></div>
         <p>Аутентификация через Telegram...</p>
-        <p style={{ marginTop: '20px', fontSize: '12px', color: '#888' }}>
-          ⚠️ Если загрузка зависла:
-        </p>
-        <p style={{ fontSize: '12px', color: '#888' }}>
-          1. Отправьте /start боту<br/>
-          2. Откройте через кнопку "🚀 Открыть Lead Scanner"
-        </p>
+        <div style={{ marginTop: '20px', padding: '0 20px', textAlign: 'left', maxWidth: '400px', margin: '20px auto' }}>
+          <p style={{ fontSize: '14px', color: '#ff9800', marginBottom: '10px' }}>
+            ⚠️ Загрузка долгая?
+          </p>
+          <p style={{ fontSize: '13px', color: '#aaa', lineHeight: '1.6' }}>
+            <strong>Для авто-входа через Telegram:</strong><br/>
+            1. Напишите боту <strong>/start</strong><br/>
+            2. Нажмите кнопку <strong>"🚀 Открыть Lead Scanner"</strong>
+          </p>
+          <p style={{ fontSize: '12px', color: '#888', marginTop: '15px', fontStyle: 'italic' }}>
+            Если открыли через Menu Button - сейчас откроется форма входа
+          </p>
+        </div>
       </div>
     );
   }
