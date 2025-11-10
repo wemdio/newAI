@@ -3,14 +3,14 @@
 ## 🎉 Ваши приложения:
 
 ### 🔧 Backend
-- **URL**: https://wemdio-newai-963f.twc1.net
-- **Health Check**: https://wemdio-newai-963f.twc1.net/health
-- **API**: https://wemdio-newai-963f.twc1.net/api
+- **URL**: https://wemdio-newai-87c5.twc1.net
+- **Health Check**: https://wemdio-newai-87c5.twc1.net/health
+- **API**: https://wemdio-newai-87c5.twc1.net/api
 - **Конфигурация**: 1 CPU, 1GB RAM, 15GB диск
 - **Стоимость**: 188₽/мес
 
 ### 🎨 Frontend  
-- **URL**: https://wemdio-newai-1db8.twc1.net
+- **URL**: https://wemdio-newai-1e9d.twc1.net
 - **Конфигурация**: 1GB диск
 - **Стоимость**: 99₽/мес
 
@@ -26,7 +26,7 @@
 
 ### Шаг 2: Настройте Backend
 
-1. Найдите приложение **"telegram-lead-scanner-backend"**
+1. Найдите приложение **"lead-scanner-backend-v2"**
 2. Перейдите в **"Переменные окружения"**
 3. Добавьте недостающие переменные:
 
@@ -91,7 +91,7 @@ TELEGRAM_BOT_TOKEN=ваш-telegram-bot-token-здесь
 ```
 Ваш доступ к Telegram Lead Scanner:
 
-🔗 URL: https://wemdio-newai-1db8.twc1.net
+🔗 URL: https://wemdio-newai-1e9d.twc1.net
 📧 Email: client@company.com
 🔑 Пароль: TempPass123!
 
@@ -115,7 +115,7 @@ TELEGRAM_BOT_TOKEN=ваш-telegram-bot-token-здесь
 
 ### Backend Health Check:
 
-Откройте: https://wemdio-newai-963f.twc1.net/health
+Откройте: https://wemdio-newai-87c5.twc1.net/health
 
 Должен вернуть:
 ```json
@@ -128,7 +128,7 @@ TELEGRAM_BOT_TOKEN=ваш-telegram-bot-token-здесь
 
 ### Frontend:
 
-Откройте: https://wemdio-newai-1db8.twc1.net
+Откройте: https://wemdio-newai-1e9d.twc1.net
 
 Должна показаться страница входа ✅
 
@@ -137,11 +137,11 @@ TELEGRAM_BOT_TOKEN=ваш-telegram-bot-token-здесь
 ## 📊 Мониторинг
 
 ### Логи Backend:
-1. Timeweb Dashboard → **telegram-lead-scanner-backend**
+1. Timeweb Dashboard → **lead-scanner-backend-v2**
 2. Вкладка **"Логи"**
 
 ### Логи Frontend:
-1. Timeweb Dashboard → **telegram-lead-scanner-frontend**
+1. Timeweb Dashboard → **lead-scanner-frontend-v2**
 2. Вкладка **"Логи"**
 
 ### Использование:
@@ -171,9 +171,9 @@ TELEGRAM_BOT_TOKEN=ваш-telegram-bot-token-здесь
 
 ## 🔗 Полезные ссылки
 
-- **Frontend**: https://wemdio-newai-1db8.twc1.net
-- **Backend**: https://wemdio-newai-963f.twc1.net
-- **Backend Health**: https://wemdio-newai-963f.twc1.net/health
+- **Frontend**: https://wemdio-newai-1e9d.twc1.net
+- **Backend**: https://wemdio-newai-87c5.twc1.net
+- **Backend Health**: https://wemdio-newai-87c5.twc1.net/health
 - **GitHub**: https://github.com/wemdio/newAI
 - **Supabase**: https://supabase.com/dashboard/project/liavhyhyzqadilfmicba
 - **Timeweb**: https://timeweb.cloud/my/apps
