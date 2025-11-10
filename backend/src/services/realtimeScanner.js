@@ -320,8 +320,8 @@ export const startRealtimeScanner = async () => {
         const query = supabase
           .from('messages')
           .select('*')
-          .order('id', { ascending: false })
-          .limit(100); // Increased from 10 to 100 to handle high-volume channels
+          .order('id', { ascending: true }) // FIXED: ascending to process oldest first
+          .limit(100); // Process up to 100 messages per poll
 
         if (lastProcessedId) {
           query.gt('id', lastProcessedId);
@@ -337,11 +337,11 @@ export const startRealtimeScanner = async () => {
         if (messages && messages.length > 0) {
           logger.info('New messages found', { count: messages.length });
           
-          // Update last processed ID
+          // Update last processed ID to the highest ID in this batch
           lastProcessedId = Math.max(...messages.map(m => m.id));
 
-          // Process messages in reverse order (oldest first)
-          for (const message of messages.reverse()) {
+          // Process messages in order (already sorted oldest first)
+          for (const message of messages) {
             addToBatch(message);
           }
         }
