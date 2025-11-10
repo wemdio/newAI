@@ -75,7 +75,7 @@ npm install node-telegram-bot-api
 
 2. Запустите Mini App бота:
 ```bash
-node ../telegram-bot-mini-app.js
+node telegram-bot-mini-app.js
 ```
 
 3. Откройте чат с ботом в Telegram

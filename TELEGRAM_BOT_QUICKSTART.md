@@ -38,8 +38,9 @@ services:
       - TELEGRAM_MINI_APP_BOT_TOKEN=${TELEGRAM_MINI_APP_BOT_TOKEN}
 ```
 
-Или запустите в отдельном терминале:
+Или запустите в отдельном терминале (из папки backend):
 ```bash
+cd backend
 node telegram-bot-mini-app.js
 ```
 
@@ -79,7 +80,7 @@ User → /start → Bot отправляет inline кнопку → User наж
 
 ## 🎯 Что делает бот?
 
-**Файл:** `telegram-bot-mini-app.js`
+**Файл:** `backend/telegram-bot-mini-app.js`
 
 ```javascript
 // При /start отправляет сообщение с Web App кнопкой

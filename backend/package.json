@@ -7,7 +7,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
-    "miniapp-bot": "node ../telegram-bot-mini-app.js",
+    "miniapp-bot": "node telegram-bot-mini-app.js",
     "test": "node --test",
     "test-db": "node scripts/test-db.js",
     "test-scan": "node scripts/test-scan.js",
