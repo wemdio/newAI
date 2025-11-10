@@ -64,7 +64,7 @@ BotFather даст вам токен вида:
 
 **Введите URL вашего приложения:**
 ```
-https://wemdio-newai-39bb.twc1.net
+https://telegram-scanner.ru
 ```
 
 **Введите текст кнопки:**

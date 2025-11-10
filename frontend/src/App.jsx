@@ -68,7 +68,10 @@ function App() {
       console.log('🔐 Authenticating via Telegram...', telegramUser);
 
       // Get API base URL
-      const apiUrl = window.location.hostname.includes('twc1.net')
+      const apiUrl = (
+        window.location.hostname === 'telegram-scanner.ru' ||
+        window.location.hostname.includes('twc1.net')
+      )
         ? 'https://wemdio-newai-87c5.twc1.net/api'
         : 'http://localhost:3000/api';
 
