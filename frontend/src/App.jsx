@@ -18,10 +18,20 @@ function App() {
   useEffect(() => {
     // Check if running in Telegram
     const telegramApp = isTelegramWebApp();
+    const tg = window.Telegram?.WebApp;
+    
     console.log('🔍 Context check:', {
       isTelegram: telegramApp,
-      hasTelegramWebApp: !!window.Telegram?.WebApp,
-      hostname: window.location.hostname
+      hasTelegramWebApp: !!tg,
+      hostname: window.location.hostname,
+      // Detailed Telegram info
+      telegramVersion: tg?.version || 'none',
+      platform: tg?.platform || 'none',
+      initData: tg?.initData ? `${tg.initData.substring(0, 50)}...` : 'empty',
+      initDataLength: tg?.initData?.length || 0,
+      hasUser: !!(tg?.initDataUnsafe?.user),
+      userId: tg?.initDataUnsafe?.user?.id || 'none',
+      colorScheme: tg?.colorScheme || 'none'
     });
     
     setIsTelegram(telegramApp);
