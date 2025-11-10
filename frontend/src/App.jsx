@@ -18,17 +18,24 @@ function App() {
   useEffect(() => {
     // Check if running in Telegram
     const telegramApp = isTelegramWebApp();
+    console.log('🔍 Context check:', {
+      isTelegram: telegramApp,
+      hasTelegramWebApp: !!window.Telegram?.WebApp,
+      hostname: window.location.hostname
+    });
+    
     setIsTelegram(telegramApp);
     
     if (telegramApp) {
       // Initialize Telegram Web App
-      initTelegram();
-      console.log('Running in Telegram Web App');
+      const tg = initTelegram();
+      console.log('📱 Running in Telegram Web App', tg);
       
       // Try auto-login via Telegram
       handleTelegramAuth();
     } else {
       // Regular browser - check Supabase session
+      console.log('🌐 Running in regular browser');
       supabase.auth.getSession().then(({ data: { session } }) => {
         setSession(session);
         setLoading(false);
@@ -52,11 +59,13 @@ function App() {
       
       if (!telegramUser || !initData) {
         console.error('No Telegram user data available');
+        console.log('telegramUser:', telegramUser);
+        console.log('initData:', initData);
         setLoading(false);
         return;
       }
 
-      console.log('Authenticating via Telegram...', telegramUser);
+      console.log('🔐 Authenticating via Telegram...', telegramUser);
 
       // Get API base URL
       const apiUrl = window.location.hostname.includes('twc1.net')
@@ -130,10 +139,21 @@ function App() {
         <p>Загрузка...</p>
       </div>
     );
-    }
+  }
 
-  if (!session) {
+  // Show login for browser users (not Telegram)
+  if (!session && !isTelegram) {
     return <Login supabase={supabase} />;
+  }
+
+  // Show loading if in Telegram but not authenticated yet
+  if (!session && isTelegram) {
+    return (
+      <div className="app loading-screen">
+        <div className="loading-spinner"></div>
+        <p>Аутентификация через Telegram...</p>
+      </div>
+    );
   }
 
   return (
