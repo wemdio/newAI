@@ -95,8 +95,8 @@ export const testChannelAccess = async (channelId, token = null) => {
     // Try to send a test message
     const testMessage = await bot.sendMessage(
       channelId,
-      '✅ *Bot Connection Test*\n\nThis is a test message to verify bot access.',
-      { parse_mode: 'Markdown' }
+      '✅ *Bot Connection Test*\n\nThis is a test message to verify bot access\\.',
+      { parse_mode: 'MarkdownV2' }
     );
     
     logger.info('Channel access test successful', {
@@ -138,7 +138,7 @@ export const sendMessage = async (channelId, message, options = {}, token = null
     const bot = getTelegramBot(token);
     
     const defaultOptions = {
-      parse_mode: 'Markdown',
+      parse_mode: 'MarkdownV2',
       disable_web_page_preview: true,
       ...options
     };
