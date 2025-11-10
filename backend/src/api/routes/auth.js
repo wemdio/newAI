@@ -9,6 +9,9 @@ const router = express.Router();
 /**
  * Verify Telegram Web App init data
  * Uses HMAC-SHA256 to verify data authenticity
+ * 
+ * @param {string} initData - Init data from Telegram Web App
+ * @param {string} botToken - Bot token from Mini App bot (not lead posting bot)
  */
 const verifyTelegramWebAppData = (initData, botToken) => {
   try {
@@ -86,10 +89,13 @@ router.post('/telegram', asyncHandler(async (req, res) => {
   });
   
   // Verify Telegram data signature (optional but recommended)
-  if (process.env.TELEGRAM_BOT_TOKEN) {
-    const isValid = verifyTelegramWebAppData(initData, process.env.TELEGRAM_BOT_TOKEN);
+  // Use separate token for Mini App bot (not the same as lead posting bot)
+  const miniAppBotToken = process.env.TELEGRAM_MINI_APP_BOT_TOKEN;
+  
+  if (miniAppBotToken) {
+    const isValid = verifyTelegramWebAppData(initData, miniAppBotToken);
     if (!isValid) {
-      logger.warn('Invalid Telegram signature', {
+      logger.warn('Invalid Telegram Mini App signature', {
         telegramId: telegramUser.id
       });
       return res.status(401).json({
@@ -97,11 +103,11 @@ router.post('/telegram', asyncHandler(async (req, res) => {
         message: 'Invalid Telegram data signature'
       });
     }
-    logger.info('Telegram signature verified', {
+    logger.info('Telegram Mini App signature verified', {
       telegramId: telegramUser.id
     });
   } else {
-    logger.warn('TELEGRAM_BOT_TOKEN not set - skipping verification');
+    logger.warn('TELEGRAM_MINI_APP_BOT_TOKEN not set - skipping verification');
   }
   
   const supabase = getSupabase();
