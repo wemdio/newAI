@@ -39,6 +39,9 @@ body {
 .app-logo {
   width: 100%;
   height: auto;
+  max-height: 150px;
+  object-fit: cover;
+  object-position: center;
   display: block;
 }
 
@@ -270,6 +273,10 @@ body {
 
 /* Responsive */
 @media (max-width: 768px) {
+  .app-logo {
+    max-height: 100px;
+  }
+  
   .app-nav .container {
     flex-direction: column;
     gap: 0;
