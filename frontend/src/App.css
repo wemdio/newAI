@@ -29,22 +29,16 @@ body {
 .app-header {
   background: #111;
   color: #fff;
-  padding: 40px 0;
+  padding: 0;
   border-bottom: 1px solid #222;
   position: relative;
   width: 100%;
   overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .app-logo {
   width: 100%;
   height: auto;
-  max-height: 120px;
-  object-fit: contain;
-  object-position: center center;
   display: block;
 }
 
@@ -276,14 +270,6 @@ body {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .app-header {
-    padding: 20px 0;
-  }
-  
-  .app-logo {
-    max-height: 80px;
-  }
-  
   .app-nav .container {
     flex-direction: column;
     gap: 0;
