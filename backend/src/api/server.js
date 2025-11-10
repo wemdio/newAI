@@ -9,6 +9,7 @@ import { generalLimiter } from './middleware/rateLimiter.js';
 import logger from '../utils/logger.js';
 
 // Import routes
+import authRoutes from './routes/auth.js';
 import configRoutes from './routes/config.js';
 import leadsRoutes from './routes/leads.js';
 import analyticsRoutes from './routes/analytics.js';
@@ -101,6 +102,7 @@ app.get('/', (req, res) => {
 });
 
 // API routes
+app.use('/api/auth', authRoutes);
 app.use('/api/config', configRoutes);
 app.use('/api/leads', leadsRoutes);
 app.use('/api/analytics', analyticsRoutes);
