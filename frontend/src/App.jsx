@@ -58,10 +58,17 @@ function App() {
       const initData = getTelegramInitData();
       
       if (!telegramUser || !initData) {
-        console.error('No Telegram user data available');
+        console.error('❌ No Telegram user data available');
         console.log('telegramUser:', telegramUser);
         console.log('initData:', initData);
-        setLoading(false);
+        console.error('⚠️ Mini App bot might not be configured properly!');
+        console.log('📋 Please check: https://github.com/wemdio/newAI/blob/main/TELEGRAM_MINI_APP_SETUP.md');
+        
+        // Fall back to regular login after 3 seconds
+        setTimeout(() => {
+          setIsTelegram(false); // Switch to browser mode
+          setLoading(false);
+        }, 3000);
         return;
       }
 
@@ -155,6 +162,9 @@ function App() {
       <div className="app loading-screen">
         <div className="loading-spinner"></div>
         <p>Аутентификация через Telegram...</p>
+        <p style={{ marginTop: '20px', fontSize: '12px', color: '#888' }}>
+          Если загрузка не завершается, проверьте настройки бота
+        </p>
       </div>
     );
   }
