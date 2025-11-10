@@ -26,9 +26,8 @@ function Configuration() {
     loadConfiguration();
     loadScannerStatus();
     
-    // Poll scanner status every 5 seconds
-    const interval = setInterval(loadScannerStatus, 5000);
-    return () => clearInterval(interval);
+    // Auto-polling disabled to reduce API requests
+    // Use the refresh button or scanner control buttons to update status
   }, []);
 
   const loadConfiguration = async () => {

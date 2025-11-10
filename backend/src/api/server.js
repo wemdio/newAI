@@ -41,8 +41,8 @@ app.use(helmet({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Rate limiting
-app.use('/api/', generalLimiter);
+// Rate limiting - DISABLED FOR LOCAL DEVELOPMENT
+// app.use('/api/', generalLimiter);
 
 // Request logging
 app.use((req, res, next) => {

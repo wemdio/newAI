@@ -14,7 +14,12 @@ function Leads() {
   const [selectedLeads, setSelectedLeads] = useState(new Set());
 
   useEffect(() => {
-    loadLeads();
+    // Debounce: wait 500ms after filter change before loading
+    const timer = setTimeout(() => {
+      loadLeads();
+    }, 500);
+    
+    return () => clearTimeout(timer);
   }, [filters]);
 
   const loadLeads = async () => {
@@ -141,7 +146,7 @@ function Leads() {
       <div className="leads-header">
         <h2>Detected Leads</h2>
         <div className="header-actions">
-          <button onClick={loadLeads} className="btn-refresh">
+        <button onClick={loadLeads} className="btn-refresh">
             Refresh
           </button>
           {selectedLeads.size > 0 && (
@@ -152,7 +157,7 @@ function Leads() {
           {leads.length > 0 && (
             <button onClick={handleDeleteAll} className="btn-delete-all">
               Delete All
-            </button>
+        </button>
           )}
         </div>
       </div>
@@ -232,8 +237,8 @@ function Leads() {
                     onChange={() => toggleSelectLead(lead.id)}
                     className="lead-checkbox"
                   />
-                  <div className="confidence-badge" style={{ backgroundColor: getConfidenceColor(lead.confidence_score) }}>
-                    {lead.confidence_score}%
+                <div className="confidence-badge" style={{ backgroundColor: getConfidenceColor(lead.confidence_score) }}>
+                  {lead.confidence_score}%
                   </div>
                   {lead.lead_status && lead.lead_status !== 'lead' && (
                     <div className="status-badge" style={{ borderColor: getStatusColor(lead.lead_status) }}>
@@ -270,13 +275,13 @@ function Leads() {
               </div>
 
               <div className="lead-actions">
-                <button
+                  <button
                   onClick={() => handleUpdateStatus(lead.id, 'lead')}
                   className={`btn-status ${lead.lead_status === 'lead' ? 'active' : ''}`}
                   disabled={lead.lead_status === 'lead'}
-                >
+                  >
                   Lead
-                </button>
+                  </button>
                 <button
                   onClick={() => handleUpdateStatus(lead.id, 'not_lead')}
                   className={`btn-status ${lead.lead_status === 'not_lead' ? 'active' : ''}`}
@@ -284,20 +289,20 @@ function Leads() {
                 >
                   Not Lead
                 </button>
-                <button
+                    <button
                   onClick={() => handleUpdateStatus(lead.id, 'sale')}
                   className={`btn-status ${lead.lead_status === 'sale' ? 'active' : ''}`}
                   disabled={lead.lead_status === 'sale'}
-                >
+                    >
                   Sale
-                </button>
-                <button
+                    </button>
+                    <button
                   onClick={() => handleDeleteLead(lead.id)}
                   className="btn-delete-single"
-                >
+                    >
                   Delete
-                </button>
-              </div>
+                    </button>
+                  </div>
             </div>
           ))}
         </div>

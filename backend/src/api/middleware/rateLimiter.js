@@ -7,19 +7,24 @@ import logger from '../../utils/logger.js';
 
 /**
  * General API rate limiter
- * 100 requests per 15 minutes
+ * 1000 requests per 15 minutes (very high limit for development)
  */
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
+  max: 1000, // Very high limit for smooth development
   message: {
     error: 'Too many requests',
-    message: 'Too many requests from this IP, please try again later.'
+    message: 'Too many requests, please try again later.'
   },
   standardHeaders: true,
   legacyHeaders: false,
+  // Use userId if available, otherwise fallback to IP
+  keyGenerator: (req) => {
+    return req.headers['x-user-id'] || req.ip;
+  },
   handler: (req, res) => {
     logger.warn('Rate limit exceeded', {
+      userId: req.headers['x-user-id'],
       ip: req.ip,
       path: req.path
     });

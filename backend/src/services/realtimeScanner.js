@@ -161,25 +161,34 @@ const processMessagesForUser = async (messages, userConfig) => {
         let messageSuggestion = null;
         if (userConfig.message_prompt) {
           try {
+            logger.info('Attempting to generate message suggestion', {
+              userId,
+              leadId: savedLead.id
+            });
+            
             const suggestionResult = await generateMessageSuggestion(
               match.message,
               match.analysis.aiResponse,
               userConfig.message_prompt,
               userConfig.openrouter_api_key
             );
-            messageSuggestion = suggestionResult.suggestion;
             
-            logger.info('Message suggestion generated', {
-              userId,
-              leadId: savedLead.id
-            });
-          } catch (suggestionError) {
-            logger.error('Failed to generate message suggestion', {
+            messageSuggestion = suggestionResult?.suggestion || null;
+            
+            logger.info('Message suggestion generated successfully', {
               userId,
               leadId: savedLead.id,
-              error: suggestionError.message
+              hasSuggestion: !!messageSuggestion
             });
-            // Continue without suggestion - not critical
+          } catch (suggestionError) {
+            logger.error('Failed to generate message suggestion - CONTINUING WITHOUT IT', {
+              userId,
+              leadId: savedLead.id,
+              error: suggestionError.message,
+              stack: suggestionError.stack
+            });
+            // Set to null and continue - suggestion is not critical
+            messageSuggestion = null;
           }
         }
 
