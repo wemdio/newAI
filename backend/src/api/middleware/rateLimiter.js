@@ -18,6 +18,8 @@ export const generalLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  // Trust proxy headers (required for Timeweb Cloud)
+  trust: true,
   // Use userId if available, otherwise fallback to IP
   keyGenerator: (req) => {
     return req.headers['x-user-id'] || req.ip;
@@ -51,6 +53,8 @@ export const strictLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: false,
+  // Trust proxy headers (required for Timeweb Cloud)
+  trust: true,
   handler: (req, res) => {
     logger.warn('Strict rate limit exceeded', {
       ip: req.ip,
@@ -77,7 +81,9 @@ export const authLimiter = rateLimit({
     message: 'Too many authentication attempts, please try again later.'
   },
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  // Trust proxy headers (required for Timeweb Cloud)
+  trust: true
 });
 
 export default {

@@ -22,6 +22,10 @@ const app = express();
 
 // ============= MIDDLEWARE =============
 
+// Trust proxy - REQUIRED for Timeweb Cloud deployment
+// This allows Express to trust X-Forwarded-For headers from the proxy
+app.set('trust proxy', 1);
+
 // CORS configuration - MUST BE BEFORE HELMET!
 app.use(cors({
   origin: '*',
