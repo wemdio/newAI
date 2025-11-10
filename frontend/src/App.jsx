@@ -48,15 +48,6 @@ function App() {
   return (
     <Router>
       <div className="app">
-        {/* Header */}
-        <header className="app-header">
-          <img 
-            src="/assets/logo.png" 
-            alt="POLZA Agency" 
-            className="app-logo"
-          />
-        </header>
-
         {/* Navigation */}
         <nav className="app-nav">
           <div className="container">
