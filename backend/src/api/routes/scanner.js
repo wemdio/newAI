@@ -28,39 +28,19 @@ router.get('/status', asyncHandler(async (req, res) => {
 
 /**
  * POST /api/scanner/start
- * Start realtime scanner
+ * Start realtime scanner (REMOVED - scanner runs 24/7)
+ * Each user controls their own analysis via is_active flag
  */
-router.post('/start', authenticateUser, asyncHandler(async (req, res) => {
-  logger.info('Starting realtime scanner via API', {
-    userId: req.userId
-  });
-
-  const result = await startRealtimeScanner();
-
-  res.json({
-    success: true,
-    message: 'Realtime scanner started successfully',
-    ...result
-  });
-}));
+// SECURITY: Removed to prevent one company from controlling scanner for all companies
+// Scanner now runs automatically 24/7, users control their own analysis via Configuration
 
 /**
  * POST /api/scanner/stop
- * Stop realtime scanner
+ * Stop realtime scanner (REMOVED - scanner runs 24/7)
+ * Each user controls their own analysis via is_active flag
  */
-router.post('/stop', authenticateUser, asyncHandler(async (req, res) => {
-  logger.info('Stopping realtime scanner via API', {
-    userId: req.userId
-  });
-
-  const result = await stopRealtimeScanner();
-
-  res.json({
-    success: true,
-    message: 'Realtime scanner stopped successfully',
-    ...result
-  });
-}));
+// SECURITY: Removed to prevent one company from controlling scanner for all companies
+// Scanner now runs automatically 24/7, users control their own analysis via Configuration
 
 /**
  * POST /api/scanner/manual-scan

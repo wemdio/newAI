@@ -465,8 +465,8 @@
   border: 1px solid #3e2a2a;
 }
 
-/* Scanner Control Panel */
-.scanner-control-panel {
+/* Scanner Status Panel (Read-Only) */
+.scanner-status-panel {
   background: #111;
   border-radius: 4px;
   padding: 0;
@@ -536,50 +536,42 @@
 .scanner-info {
   color: #888;
   font-size: 13px;
-  margin: 0 0 16px 0;
+  margin: 8px 0;
 }
 
-.scanner-buttons {
+/* Info Box */
+.info-box {
   display: flex;
-  gap: 12px;
+  gap: 16px;
+  background: #1a1e2e;
+  border: 1px solid #2a3e4a;
+  border-radius: 4px;
+  padding: 16px;
+  margin-bottom: 16px;
 }
 
-.btn-success,
-.btn-danger {
-  border: 1px solid;
-  padding: 10px 20px;
-  border-radius: 2px;
+.info-icon {
+  font-size: 24px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.info-text {
+  flex: 1;
+}
+
+.info-title {
+  color: #7d9dd1;
   font-size: 14px;
-  font-weight: 400;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  background: transparent;
+  font-weight: 500;
+  margin: 0 0 8px 0;
 }
 
-.btn-success {
-  color: #7dd17d;
-  border-color: #2a3e2a;
-}
-
-.btn-success:hover:not(:disabled) {
-  border-color: #7dd17d;
-  background: #1a2e1a;
-}
-
-.btn-danger {
-  color: #d17d7d;
-  border-color: #3e2a2a;
-}
-
-.btn-danger:hover:not(:disabled) {
-  border-color: #d17d7d;
-  background: #2e1a1a;
-}
-
-.btn-success:disabled,
-.btn-danger:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
+.info-description {
+  color: #b0c0d0;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0;
 }
 
 /* Responsive */
@@ -602,12 +594,8 @@
     gap: 12px;
   }
 
-  .scanner-buttons {
+  .info-box {
     flex-direction: column;
-  }
-
-  .btn-success,
-  .btn-danger {
-    width: 100%;
+    gap: 12px;
   }
 }

@@ -19,9 +19,18 @@ const main = async () => {
     logger.info('Starting API server...');
     await startServer();
     
-    // Scanner is controlled manually via UI
-    logger.info('🎛️  Scanner is STOPPED');
-    logger.info('💡 Use the UI to Start/Stop the scanner manually');
+    // Auto-start scanner (runs 24/7)
+    logger.info('🚀 Starting scanner automatically...');
+    try {
+      await startRealtimeScanner();
+      logger.info('✅ Scanner started successfully (24/7 mode)');
+      logger.info('💡 Users control their own analysis via "Active/Paused" toggle');
+    } catch (scannerError) {
+      logger.error('Failed to start scanner', {
+        error: scannerError.message
+      });
+      // Continue - scanner can be started via API if needed
+    }
     
     logger.info('========================================');
     logger.info('✅ Application started successfully');

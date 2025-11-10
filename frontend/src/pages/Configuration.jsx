@@ -17,10 +17,8 @@ function Configuration() {
     isActive: true
   });
 
-  // Scanner control state
+  // Scanner status (read-only)
   const [scannerStatus, setScannerStatus] = useState(null);
-  const [scannerLoading, setScannerLoading] = useState(false);
-  const [scannerError, setScannerError] = useState(null);
 
   useEffect(() => {
     loadConfiguration();
@@ -142,35 +140,8 @@ function Configuration() {
     try {
       const response = await scannerApi.status();
       setScannerStatus(response.data.status);
-      setScannerError(null);
     } catch (err) {
       console.error('Scanner status error:', err);
-    }
-  };
-
-  const handleStartScanner = async () => {
-    try {
-      setScannerLoading(true);
-      setScannerError(null);
-      await scannerApi.start();
-      await loadScannerStatus();
-    } catch (err) {
-      setScannerError(err.response?.data?.message || 'Не удалось запустить сканер');
-    } finally {
-      setScannerLoading(false);
-    }
-  };
-
-  const handleStopScanner = async () => {
-    try {
-      setScannerLoading(true);
-      setScannerError(null);
-      await scannerApi.stop();
-      await loadScannerStatus();
-    } catch (err) {
-      setScannerError(err.response?.data?.message || 'Не удалось остановить сканер');
-    } finally {
-      setScannerLoading(false);
     }
   };
 
@@ -314,57 +285,43 @@ function Configuration() {
         </div>
       </form>
 
-      {/* Scanner Control Panel */}
-      <div className="scanner-control-panel">
+      {/* Scanner Status (Read-Only) */}
+      <div className="scanner-status-panel">
         <div className="panel-header">
-          <h3>Управление сканером</h3>
+          <h3>Статус сканера</h3>
           {scannerStatus && (
             <div className="status-badge">
               <span className={`status-dot ${scannerStatus.isRunning ? 'active' : 'inactive'}`}></span>
               <span className="status-text">
-                {scannerStatus.isRunning ? 'Работает' : 'Остановлен'}
+                {scannerStatus.isRunning ? 'Работает 24/7' : 'Остановлен'}
               </span>
             </div>
           )}
         </div>
 
         <div className="panel-content">
-          <p className="panel-description">
-            {scannerStatus?.isRunning 
-              ? 'Сканер работает и анализирует новые сообщения в реальном времени'
-              : 'Сканер остановлен. Нажмите "Запустить" чтобы начать анализ новых сообщений'}
-          </p>
+          <div className="info-box">
+            <div className="info-icon">ℹ️</div>
+            <div className="info-text">
+              <p className="info-title">Сканер работает автоматически круглосуточно</p>
+              <p className="info-description">
+                Система постоянно анализирует новые сообщения для всех активных пользователей. 
+                Используйте тумблер "Активно/Приостановлено" выше, чтобы включить или приостановить 
+                анализ сообщений для вашей компании.
+              </p>
+            </div>
+          </div>
 
           {scannerStatus?.isRunning && scannerStatus.subscribedAt && (
             <p className="scanner-info">
-              Запущен: {new Date(scannerStatus.subscribedAt).toLocaleString('ru-RU')}
+              <strong>Запущен:</strong> {new Date(scannerStatus.subscribedAt).toLocaleString('ru-RU')}
             </p>
           )}
 
-          <div className="scanner-buttons">
-            {scannerStatus?.isRunning ? (
-              <button 
-                onClick={handleStopScanner} 
-                disabled={scannerLoading}
-                className="btn-danger btn-large"
-              >
-                {scannerLoading ? 'Останавливается...' : 'Остановить сканер'}
-              </button>
-            ) : (
-              <button 
-                onClick={handleStartScanner} 
-                disabled={scannerLoading}
-                className="btn-success btn-large"
-              >
-                {scannerLoading ? 'Запускается...' : 'Запустить сканер'}
-              </button>
-            )}
-          </div>
-
-          {scannerError && (
-            <div className="alert alert-error" style={{ marginTop: '15px' }}>
-              {scannerError}
-            </div>
+          {scannerStatus?.pendingBatchSize > 0 && (
+            <p className="scanner-info">
+              <strong>В обработке:</strong> {scannerStatus.pendingBatchSize} сообщений
+            </p>
           )}
         </div>
       </div>
