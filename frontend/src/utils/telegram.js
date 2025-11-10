@@ -18,23 +18,18 @@ export const isTelegramWebApp = () => {
   const hasInitData = !!(tg.initData && tg.initData.length > 0);
   const hasUser = !!(tg.initDataUnsafe && tg.initDataUnsafe.user);
   
-  // Also check for platform - real Telegram always has platform
-  const hasPlatform = !!(tg.platform && tg.platform !== 'unknown');
-  
   console.log('🔍 Telegram detection:', {
     hasTelegramObject: !!tg,
     hasInitData,
     hasUser,
-    hasPlatform,
     initDataLength: tg.initData?.length || 0,
     platform: tg.platform || 'none',
     version: tg.version || 'none'
   });
   
-  // We're in Telegram only if we have init data or user data
-  // BUT if we're opening from URL directly (not via bot), we won't have data
-  // So check platform as fallback
-  return hasInitData || hasUser || hasPlatform;
+  // STRICT CHECK: We're in Telegram ONLY if we have actual init data or user data
+  // If Telegram doesn't provide data, treat as regular browser (show email/password login)
+  return hasInitData || hasUser;
 };
 
 /**
