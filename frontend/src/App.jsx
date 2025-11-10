@@ -69,28 +69,47 @@ function App() {
       });
 
       if (response.data.success) {
-        // Create Supabase session using the virtual email
-        const { data, error } = await supabase.auth.signInWithPassword({
-          email: response.data.user.email,
-          password: `telegram_${telegramUser.id}` // This won't work - need better solution
-        });
+        const userData = response.data.user;
+        
+        // Sign in using the email and password from backend
+        if (userData.password) {
+          const { data, error } = await supabase.auth.signInWithPassword({
+            email: userData.email,
+            password: userData.password
+          });
 
-        if (error) {
-          // User exists but we need admin to sign them in
-          // For now, just set a mock session
-          console.log('Telegram user authenticated', response.data.user);
+          if (error) {
+            console.error('Supabase sign in failed:', error);
+            // Fallback to mock session
+            setSession({
+              user: {
+                id: userData.id,
+                email: userData.email,
+                user_metadata: {
+                  telegram_id: telegramUser.id,
+                  telegram_username: telegramUser.username,
+                  telegram_first_name: telegramUser.first_name
+                }
+              }
+            });
+          } else {
+            console.log('✅ Telegram user signed in successfully');
+            setSession(data.session);
+          }
+        } else {
+          // No password - use mock session
+          console.log('No password available, using mock session');
           setSession({
             user: {
-              id: response.data.user.id,
-              email: response.data.user.email,
+              id: userData.id,
+              email: userData.email,
               user_metadata: {
                 telegram_id: telegramUser.id,
-                telegram_username: telegramUser.username
+                telegram_username: telegramUser.username,
+                telegram_first_name: telegramUser.first_name
               }
             }
           });
-        } else {
-          setSession(data.session);
         }
       }
     } catch (error) {

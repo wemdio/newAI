@@ -85,15 +85,24 @@ router.post('/telegram', asyncHandler(async (req, res) => {
     username: telegramUser.username
   });
   
-  // Note: Verification is optional for now
-  // In production, you should verify with BOT_TOKEN
-  // const isValid = verifyTelegramWebAppData(initData, process.env.TELEGRAM_BOT_TOKEN);
-  // if (!isValid) {
-  //   return res.status(401).json({
-  //     error: 'Unauthorized',
-  //     message: 'Invalid Telegram data signature'
-  //   });
-  // }
+  // Verify Telegram data signature (optional but recommended)
+  if (process.env.TELEGRAM_BOT_TOKEN) {
+    const isValid = verifyTelegramWebAppData(initData, process.env.TELEGRAM_BOT_TOKEN);
+    if (!isValid) {
+      logger.warn('Invalid Telegram signature', {
+        telegramId: telegramUser.id
+      });
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'Invalid Telegram data signature'
+      });
+    }
+    logger.info('Telegram signature verified', {
+      telegramId: telegramUser.id
+    });
+  } else {
+    logger.warn('TELEGRAM_BOT_TOKEN not set - skipping verification');
+  }
   
   const supabase = getSupabase();
   
@@ -114,10 +123,13 @@ router.post('/telegram', asyncHandler(async (req, res) => {
     }
     
     if (existingUser) {
-      // User exists - return user info
+      // User exists - return user info with password for auto-login
+      const storedPassword = existingUser.user_metadata?.telegram_password;
+      
       logger.info('Telegram user found', {
         userId: existingUser.id,
-        telegramId: telegramUser.id
+        telegramId: telegramUser.id,
+        hasStoredPassword: !!storedPassword
       });
       
       return res.json({
@@ -125,6 +137,7 @@ router.post('/telegram', asyncHandler(async (req, res) => {
         user: {
           id: existingUser.id,
           email: existingUser.email,
+          password: storedPassword || null, // Send stored password for auto-login
           telegram_id: telegramUser.id,
           telegram_username: telegramUser.username,
           telegram_first_name: telegramUser.first_name,
@@ -147,7 +160,8 @@ router.post('/telegram', asyncHandler(async (req, res) => {
         telegram_username: telegramUser.username,
         telegram_first_name: telegramUser.first_name,
         telegram_last_name: telegramUser.last_name,
-        auth_method: 'telegram'
+        auth_method: 'telegram',
+        telegram_password: password // Store for auto-login
       }
     });
     
@@ -166,6 +180,7 @@ router.post('/telegram', asyncHandler(async (req, res) => {
       user: {
         id: newUser.user.id,
         email: email,
+        password: password, // Send to frontend for auto-login
         telegram_id: telegramUser.id,
         telegram_username: telegramUser.username,
         telegram_first_name: telegramUser.first_name,
