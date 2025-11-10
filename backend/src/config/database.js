@@ -28,6 +28,16 @@ export const initializeDatabase = () => {
       },
       db: {
         schema: 'public'
+      },
+      realtime: {
+        params: {
+          eventsPerSecond: 10
+        }
+      },
+      global: {
+        headers: {
+          'x-application-name': 'telegram-lead-scanner'
+        }
       }
     });
 
