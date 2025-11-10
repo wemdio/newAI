@@ -1,0 +1,52 @@
+# Dependencies
+node_modules
+npm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Frontend
+frontend/node_modules
+frontend/dist
+frontend/.vite
+frontend/build
+
+# Backend
+backend/node_modules
+backend/logs
+backend/.env
+backend/.env.local
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation
+*.md
+README.md
+CHANGELOG.md
+
+# Tests
+*.test.js
+*.spec.js
+__tests__
+coverage
+
+# Other
+.dockerignore
+Dockerfile*
+docker-compose*.yml
+
