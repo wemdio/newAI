@@ -8,7 +8,12 @@ const getApiBaseUrl = () => {
     return import.meta.env.VITE_API_URL;
   }
   
-  // If running on Timeweb Cloud (*.twc1.net), use production backend
+  // Production domain
+  if (window.location.hostname === 'telegram-scanner.ru') {
+    return 'https://wemdio-newai-87c5.twc1.net/api';
+  }
+  
+  // Timeweb Cloud fallback (*.twc1.net)
   if (window.location.hostname.includes('twc1.net')) {
     return 'https://wemdio-newai-87c5.twc1.net/api';
   }
