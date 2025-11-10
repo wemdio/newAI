@@ -1,12 +1,13 @@
 import 'dotenv/config';
 import { startServer } from './api/server.js';
 import { startRealtimeScanner } from './services/realtimeScanner.js';
+import { startMiniAppBot } from './services/miniAppBot.js';
 import { getActiveUserConfigs } from './database/queries.js';
 import logger from './utils/logger.js';
 
 /**
  * Application entry point
- * Starts API server and auto-starts scanner if user config is active
+ * Starts API server, scanner, and Mini App bot
  */
 
 const main = async () => {
@@ -30,6 +31,18 @@ const main = async () => {
         error: scannerError.message
       });
       // Continue - scanner can be started via API if needed
+    }
+    
+    // Start Mini App Bot (for Telegram auto-login)
+    logger.info('🤖 Starting Mini App bot...');
+    try {
+      startMiniAppBot();
+      logger.info('✅ Mini App bot started (if token provided)');
+    } catch (botError) {
+      logger.warn('Mini App bot not started', {
+        error: botError.message
+      });
+      logger.info('💡 Users can still use Menu Button with email/password');
     }
     
     logger.info('========================================');
