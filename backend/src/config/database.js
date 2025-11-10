@@ -15,11 +15,10 @@ let supabaseClient = null;
 export const initializeDatabase = () => {
   try {
     const supabaseUrl = process.env.SUPABASE_URL;
-    // Use SERVICE_ROLE_KEY for backend operations (bypasses RLS, needed for Realtime)
-    const supabaseKey = process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_ANON_KEY;
+    const supabaseKey = process.env.SUPABASE_ANON_KEY;
 
     if (!supabaseUrl || !supabaseKey) {
-      throw new DatabaseError('Missing Supabase credentials. Ensure SUPABASE_URL and SUPABASE_SERVICE_KEY (or SUPABASE_ANON_KEY) are set.');
+      throw new DatabaseError('Missing Supabase credentials. Ensure SUPABASE_URL and SUPABASE_ANON_KEY are set.');
     }
 
     supabaseClient = createClient(supabaseUrl, supabaseKey, {
