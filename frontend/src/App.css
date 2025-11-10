@@ -29,12 +29,11 @@ body {
 .app-header {
   background: #111;
   color: #fff;
-  padding: 0;
+  padding: 40px 0;
   border-bottom: 1px solid #222;
   position: relative;
   width: 100%;
   overflow: hidden;
-  height: 200px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -42,8 +41,9 @@ body {
 
 .app-logo {
   width: 100%;
-  height: 100%;
-  object-fit: cover;
+  height: auto;
+  max-height: 120px;
+  object-fit: contain;
   object-position: center center;
   display: block;
 }
@@ -277,7 +277,11 @@ body {
 /* Responsive */
 @media (max-width: 768px) {
   .app-header {
-    height: 120px;
+    padding: 20px 0;
+  }
+  
+  .app-logo {
+    max-height: 80px;
   }
   
   .app-nav .container {
