@@ -58,7 +58,7 @@ function Configuration() {
         // 404 is OK - means first time setup
         setConfigExists(false);
       } else {
-        setError(err.response?.data?.message || 'Failed to load configuration');
+        setError(err.response?.data?.message || 'Не удалось загрузить настройки');
       }
     } finally {
       setLoading(false);
@@ -70,18 +70,18 @@ function Configuration() {
     
     // Validation
     if (!config.leadPrompt.trim()) {
-      setError('Lead detection criteria is required');
+      setError('Критерии определения лидов обязательны');
       return;
     }
     if (!config.telegramChannelId.trim()) {
-      setError('Telegram channel ID is required');
+      setError('ID Telegram канала обязателен');
       return;
     }
     
     // API key is required only for new configs OR if user wants to update it
     const isUpdatingApiKey = config.openrouterApiKey.trim().length > 0;
     if (!configExists && !isUpdatingApiKey) {
-      setError('OpenRouter API key is required for first-time setup');
+      setError('API ключ OpenRouter обязателен при первой настройке');
       return;
     }
 
@@ -120,7 +120,7 @@ function Configuration() {
       
       setTimeout(() => setSuccess(false), 3000);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to save configuration');
+      setError(err.response?.data?.message || 'Не удалось сохранить настройки');
     } finally {
       setSaving(false);
     }
@@ -134,7 +134,7 @@ function Configuration() {
       setSuccess(true);
       setTimeout(() => setSuccess(false), 2000);
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to update status');
+      setError(err.response?.data?.message || 'Не удалось обновить статус');
     }
   };
 
@@ -155,7 +155,7 @@ function Configuration() {
       await scannerApi.start();
       await loadScannerStatus();
     } catch (err) {
-      setScannerError(err.response?.data?.message || 'Failed to start scanner');
+      setScannerError(err.response?.data?.message || 'Не удалось запустить сканер');
     } finally {
       setScannerLoading(false);
     }
@@ -168,20 +168,20 @@ function Configuration() {
       await scannerApi.stop();
       await loadScannerStatus();
     } catch (err) {
-      setScannerError(err.response?.data?.message || 'Failed to stop scanner');
+      setScannerError(err.response?.data?.message || 'Не удалось остановить сканер');
     } finally {
       setScannerLoading(false);
     }
   };
 
   if (loading) {
-    return <div className="loading">Loading configuration...</div>;
+    return <div className="loading">Загрузка настроек...</div>;
   }
 
   return (
     <div className="configuration">
       <div className="config-header">
-        <h2>Configuration</h2>
+        <h2>Настройки</h2>
         <div className="status-toggle">
           <label className="toggle-label">
             <input
@@ -192,7 +192,7 @@ function Configuration() {
             />
             <span className="toggle-slider"></span>
             <span className="toggle-text">
-              {config.isActive ? 'Active' : 'Paused'}
+              {config.isActive ? 'Активно' : 'Приостановлено'}
             </span>
           </label>
         </div>
@@ -200,7 +200,7 @@ function Configuration() {
 
       {!configExists && !error && (
         <div className="alert alert-info">
-          Welcome! This is your first time setting up. Please fill in all the fields below to get started.
+          Добро пожаловать! Это ваша первая настройка. Пожалуйста, заполните все поля ниже для начала работы.
         </div>
       )}
 
@@ -212,93 +212,93 @@ function Configuration() {
 
       {success && (
         <div className="alert alert-success">
-          Configuration saved successfully!
+          Настройки успешно сохранены!
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="config-form">
         {/* OpenRouter API Key */}
         <div className="form-section">
-          <h3>OpenRouter API Key</h3>
+          <h3>OpenRouter API ключ</h3>
           <p className="section-description">
-            Your OpenRouter API key for AI analysis. Get it from{' '}
+            Ваш API ключ OpenRouter для AI анализа. Получите его на{' '}
             <a href="https://openrouter.ai/" target="_blank" rel="noopener noreferrer">
               openrouter.ai
             </a>
           </p>
           {maskedApiKey && (
             <div className="alert alert-info" style={{ marginBottom: '10px' }}>
-              API Key already set: {maskedApiKey}
+              API ключ уже установлен: {maskedApiKey}
             </div>
           )}
           <input
             type="password"
             value={config.openrouterApiKey}
             onChange={(e) => setConfig({ ...config, openrouterApiKey: e.target.value })}
-            placeholder={maskedApiKey ? "Leave empty to keep current key" : "sk-or-v1-..."}
+            placeholder={maskedApiKey ? "Оставьте пустым, чтобы сохранить текущий ключ" : "sk-or-v1-..."}
             className="form-input"
             required={!configExists}
           />
           <small className="form-hint">
             {maskedApiKey 
-              ? "Enter a new key only if you want to update it"
-              : "Your API key is encrypted and stored securely"}
+              ? "Введите новый ключ только если хотите обновить его"
+              : "Ваш API ключ шифруется и хранится безопасно"}
           </small>
         </div>
 
         {/* Telegram Channel ID */}
         <div className="form-section">
-          <h3>Telegram Channel ID</h3>
+          <h3>ID Telegram канала</h3>
           <p className="section-description">
-            Your private Telegram channel where leads will be posted
+            Ваш приватный Telegram канал, куда будут публиковаться лиды
           </p>
           <input
             type="text"
             value={config.telegramChannelId}
             onChange={(e) => setConfig({ ...config, telegramChannelId: e.target.value })}
-            placeholder="@your_channel or -100123456789"
+            placeholder="@your_channel или -100123456789"
             className="form-input"
             required
           />
           <small className="form-hint">
-            Format: @channel_name or numeric ID (e.g., -100123456789)
+            Формат: @имя_канала или числовой ID (например, -100123456789)
           </small>
         </div>
 
         {/* Lead Detection Criteria */}
         <div className="form-section">
-          <h3>Lead Detection Criteria</h3>
+          <h3>Критерии определения лидов</h3>
           <p className="section-description">
-            Describe what kind of messages should be identified as leads
+            Опишите, какие сообщения должны определяться как лиды
           </p>
           <textarea
             value={config.leadPrompt}
             onChange={(e) => setConfig({ ...config, leadPrompt: e.target.value })}
-            placeholder="Example: Identify messages where people are looking for web development services, mentioning they need a website or looking for a developer. Also include messages about mobile app development, e-commerce solutions, or technical consulting."
+            placeholder="Пример: Определяй сообщения, где люди ищут услуги веб-разработки, упоминают что им нужен сайт или ищут разработчика. Также включай сообщения о разработке мобильных приложений, e-commerce решениях или техническом консалтинге."
             className="form-textarea"
             rows={8}
             required
           />
           <small className="form-hint">
-            Be specific! The AI will use this to determine what counts as a lead.
+            Будьте конкретны! AI будет использовать это для определения лидов.
           </small>
         </div>
 
         {/* Message Suggestion Prompt */}
         <div className="form-section">
-          <h3>Message Suggestion Prompt (Optional)</h3>
+          <h3>Подсказки для сообщений (опционально)</h3>
           <p className="section-description">
-            Instructions for AI to generate first message suggestions for sales managers
+            Инструкции для AI по генерации первых сообщений для менеджеров по продажам
           </p>
           <textarea
             value={config.messagePrompt}
             onChange={(e) => setConfig({ ...config, messagePrompt: e.target.value })}
-            placeholder="Example: Generate a friendly, personalized first message. Mention their specific need, offer help, and suggest a quick call. Keep it short (2-3 sentences) and professional."
+            placeholder="Пример: Создай дружелюбное, персонализированное первое сообщение. Упомяни их конкретную потребность, предложи помощь и предложи быстрый звонок. Делай коротко (2-3 предложения) и профессионально."
             className="form-textarea"
             rows={5}
           />
           <small className="form-hint">
-            AI will generate a message suggestion for each lead based on these instructions. Leave empty to disable.
+            AI будет генерировать предложение сообщения для каждого лида на основе этих инструкций. Оставьте пустым чтобы отключить.
           </small>
         </div>
 
@@ -309,7 +309,7 @@ function Configuration() {
             disabled={saving}
             className="btn-primary btn-large"
           >
-            {saving ? 'Saving...' : 'Save Configuration'}
+            {saving ? 'Сохранение...' : 'Сохранить настройки'}
           </button>
         </div>
       </form>
@@ -317,12 +317,12 @@ function Configuration() {
       {/* Scanner Control Panel */}
       <div className="scanner-control-panel">
         <div className="panel-header">
-          <h3>Scanner Control</h3>
+          <h3>Управление сканером</h3>
           {scannerStatus && (
             <div className="status-badge">
               <span className={`status-dot ${scannerStatus.isRunning ? 'active' : 'inactive'}`}></span>
               <span className="status-text">
-                {scannerStatus.isRunning ? 'Active' : 'Stopped'}
+                {scannerStatus.isRunning ? 'Работает' : 'Остановлен'}
               </span>
             </div>
           )}
@@ -331,13 +331,13 @@ function Configuration() {
         <div className="panel-content">
           <p className="panel-description">
             {scannerStatus?.isRunning 
-              ? 'Scanner is running and analyzing new messages in real-time'
-              : 'Scanner is stopped. Click "Start" to begin analyzing new messages'}
+              ? 'Сканер работает и анализирует новые сообщения в реальном времени'
+              : 'Сканер остановлен. Нажмите "Запустить" чтобы начать анализ новых сообщений'}
           </p>
 
           {scannerStatus?.isRunning && scannerStatus.subscribedAt && (
             <p className="scanner-info">
-              Started: {new Date(scannerStatus.subscribedAt).toLocaleString('en-US')}
+              Запущен: {new Date(scannerStatus.subscribedAt).toLocaleString('ru-RU')}
             </p>
           )}
 
@@ -348,7 +348,7 @@ function Configuration() {
                 disabled={scannerLoading}
                 className="btn-danger btn-large"
               >
-                {scannerLoading ? 'Stopping...' : 'Stop Scanner'}
+                {scannerLoading ? 'Останавливается...' : 'Остановить сканер'}
               </button>
             ) : (
               <button 
@@ -356,7 +356,7 @@ function Configuration() {
                 disabled={scannerLoading}
                 className="btn-success btn-large"
               >
-                {scannerLoading ? 'Starting...' : 'Start Scanner'}
+                {scannerLoading ? 'Запускается...' : 'Запустить сканер'}
               </button>
             )}
           </div>

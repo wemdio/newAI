@@ -37,7 +37,7 @@ function Leads() {
       setLeads(response.data.leads || []);
       setSelectedLeads(new Set()); // Clear selection on reload
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to load leads');
+      setError(err.response?.data?.message || 'Не удалось загрузить лиды');
       console.error('Leads error:', err);
     } finally {
       setLoading(false);
@@ -51,47 +51,47 @@ function Leads() {
         lead.id === leadId ? { ...lead, lead_status: status } : lead
       ));
     } catch (err) {
-      alert('Failed to update lead status');
+      alert('Не удалось обновить статус лида');
     }
   };
 
   const handleDeleteLead = async (leadId) => {
-    if (!confirm('Delete this lead?')) return;
+    if (!confirm('Удалить этот лид?')) return;
     
     try {
       await leadsApi.delete(leadId);
       setLeads(leads.filter(lead => lead.id !== leadId));
     } catch (err) {
-      alert('Failed to delete lead');
+      alert('Не удалось удалить лид');
     }
   };
 
   const handleDeleteSelected = async () => {
     if (selectedLeads.size === 0) {
-      alert('No leads selected');
+      alert('Нет выбранных лидов');
       return;
     }
     
-    if (!confirm(`Delete ${selectedLeads.size} selected leads?`)) return;
+    if (!confirm(`Удалить ${selectedLeads.size} выбранных лидов?`)) return;
     
     try {
       await leadsApi.deleteBulk(Array.from(selectedLeads));
       setLeads(leads.filter(lead => !selectedLeads.has(lead.id)));
       setSelectedLeads(new Set());
     } catch (err) {
-      alert('Failed to delete selected leads');
+      alert('Не удалось удалить выбранные лиды');
     }
   };
 
   const handleDeleteAll = async () => {
-    if (!confirm('Delete ALL leads? This cannot be undone!')) return;
+    if (!confirm('Удалить ВСЕ лиды? Это действие необратимо!')) return;
     
     try {
       await leadsApi.deleteAll();
       setLeads([]);
       setSelectedLeads(new Set());
     } catch (err) {
-      alert('Failed to delete all leads');
+      alert('Не удалось удалить все лиды');
     }
   };
 
@@ -128,15 +128,15 @@ function Leads() {
   };
 
   if (loading) {
-    return <div className="loading">Loading leads...</div>;
+    return <div className="loading">Загрузка лидов...</div>;
   }
 
   if (error) {
     return (
       <div className="error-container">
-        <h2>Error</h2>
+        <h2>Ошибка</h2>
         <p>{error}</p>
-        <button onClick={loadLeads} className="btn-primary">Retry</button>
+        <button onClick={loadLeads} className="btn-primary">Повторить</button>
       </div>
     );
   }
@@ -144,19 +144,19 @@ function Leads() {
   return (
     <div className="leads">
       <div className="leads-header">
-        <h2>Detected Leads</h2>
+        <h2>Обнаруженные лиды</h2>
         <div className="header-actions">
         <button onClick={loadLeads} className="btn-refresh">
-            Refresh
+            Обновить
           </button>
           {selectedLeads.size > 0 && (
             <button onClick={handleDeleteSelected} className="btn-delete">
-              Delete Selected ({selectedLeads.size})
+              Удалить выбранные ({selectedLeads.size})
             </button>
           )}
           {leads.length > 0 && (
             <button onClick={handleDeleteAll} className="btn-delete-all">
-              Delete All
+              Удалить все
         </button>
           )}
         </div>
@@ -165,35 +165,35 @@ function Leads() {
       {/* Filters */}
       <div className="filters">
         <div className="filter-group">
-          <label>Status:</label>
+          <label>Статус:</label>
           <select
             value={filters.status}
             onChange={(e) => setFilters({ ...filters, status: e.target.value })}
             className="filter-select"
           >
-            <option value="all">All</option>
-            <option value="lead">Lead</option>
-            <option value="not_lead">Not Lead</option>
-            <option value="sale">Sale</option>
+            <option value="all">Все</option>
+            <option value="lead">Лид</option>
+            <option value="not_lead">Не лид</option>
+            <option value="sale">Продажа</option>
           </select>
         </div>
 
         <div className="filter-group">
-          <label>Min Confidence:</label>
+          <label>Мин. уверенность:</label>
           <select
             value={filters.minConfidence}
             onChange={(e) => setFilters({ ...filters, minConfidence: Number(e.target.value) })}
             className="filter-select"
           >
-            <option value={0}>All (0%+)</option>
-            <option value={50}>Medium (50%+)</option>
-            <option value={70}>High (70%+)</option>
-            <option value={90}>Very High (90%+)</option>
+            <option value={0}>Все (0%+)</option>
+            <option value={50}>Средняя (50%+)</option>
+            <option value={70}>Высокая (70%+)</option>
+            <option value={90}>Очень высокая (90%+)</option>
           </select>
         </div>
 
         <div className="filter-group">
-          <label>Limit:</label>
+          <label>Лимит:</label>
           <select
             value={filters.limit}
             onChange={(e) => setFilters({ ...filters, limit: Number(e.target.value) })}
@@ -213,7 +213,7 @@ function Leads() {
                 checked={selectedLeads.size === leads.length}
                 onChange={toggleSelectAll}
               />
-              Select All
+              Выбрать все
             </label>
           </div>
         )}
@@ -222,8 +222,8 @@ function Leads() {
       {/* Leads List */}
       {leads.length === 0 ? (
         <div className="no-data">
-          <h3>No leads found</h3>
-          <p>Configure your lead detection criteria and start the scanner</p>
+          <h3>Лиды не найдены</h3>
+          <p>Настройте критерии определения лидов и запустите сканер</p>
         </div>
       ) : (
         <div className="leads-list">
@@ -242,7 +242,7 @@ function Leads() {
                   </div>
                   {lead.lead_status && lead.lead_status !== 'lead' && (
                     <div className="status-badge" style={{ borderColor: getStatusColor(lead.lead_status) }}>
-                      {lead.lead_status === 'sale' ? 'Sale' : 'Not Lead'}
+                      {lead.lead_status === 'sale' ? 'Продажа' : 'Не лид'}
                     </div>
                   )}
                 </div>
@@ -253,18 +253,18 @@ function Leads() {
 
               <div className="lead-content">
                 <div className="lead-message">
-                  <strong>Message:</strong>
-                  <p>{lead.messages?.message || 'N/A'}</p>
+                  <strong>Сообщение:</strong>
+                  <p>{lead.messages?.message || 'Нет данных'}</p>
                 </div>
 
                 <div className="lead-reasoning">
-                  <strong>Why this is a lead:</strong>
+                  <strong>Почему это лид:</strong>
                   <p>{lead.reasoning}</p>
                 </div>
 
                 {lead.matched_criteria && lead.matched_criteria.length > 0 && (
                   <div className="matched-criteria">
-                    <strong>Matched criteria:</strong>
+                    <strong>Совпавшие критерии:</strong>
                     <div className="criteria-tags">
                       {lead.matched_criteria.map((criterion, idx) => (
                         <span key={idx} className="criterion-tag">{criterion}</span>
@@ -280,27 +280,27 @@ function Leads() {
                   className={`btn-status ${lead.lead_status === 'lead' ? 'active' : ''}`}
                   disabled={lead.lead_status === 'lead'}
                   >
-                  Lead
+                  Лид
                   </button>
                 <button
                   onClick={() => handleUpdateStatus(lead.id, 'not_lead')}
                   className={`btn-status ${lead.lead_status === 'not_lead' ? 'active' : ''}`}
                   disabled={lead.lead_status === 'not_lead'}
                 >
-                  Not Lead
+                  Не лид
                 </button>
                     <button
                   onClick={() => handleUpdateStatus(lead.id, 'sale')}
                   className={`btn-status ${lead.lead_status === 'sale' ? 'active' : ''}`}
                   disabled={lead.lead_status === 'sale'}
                     >
-                  Sale
+                  Продажа
                     </button>
                     <button
                   onClick={() => handleDeleteLead(lead.id)}
                   className="btn-delete-single"
                     >
-                  Delete
+                  Удалить
                     </button>
                   </div>
             </div>

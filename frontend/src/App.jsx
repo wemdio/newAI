@@ -66,14 +66,14 @@ function App() {
                 className={`nav-link ${activeTab === 'leads' ? 'active' : ''}`}
                 onClick={() => setActiveTab('leads')}
               >
-                Leads
+                Лиды
               </Link>
               <Link 
                 to="/config" 
                 className={`nav-link ${activeTab === 'config' ? 'active' : ''}`}
                 onClick={() => setActiveTab('config')}
               >
-                Configuration
+                Настройки
               </Link>
             </div>
             <div className="user-info">
@@ -99,7 +99,7 @@ function App() {
         {/* Footer */}
         <footer className="app-footer">
           <div className="container">
-            <p>Telegram Lead Scanner & Analyzer © 2025</p>
+            <p>Сканер и анализатор лидов в Telegram © 2025</p>
           </div>
         </footer>
       </div>
