@@ -32,33 +32,18 @@ body {
   padding: 0;
   border-bottom: 1px solid #222;
   position: relative;
-}
-
-.app-header .container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0;
-  padding: 0;
-  max-width: 100%;
+  width: 100%;
+  overflow: hidden;
 }
 
 .app-logo {
   width: 100%;
   height: auto;
   max-height: 200px;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
   display: block;
-}
-
-.app-header .subtitle {
-  font-size: 14px;
-  opacity: 0.6;
-  font-weight: 300;
-  padding: 15px 20px;
-  text-align: center;
-  width: 100%;
+  margin: 0 auto;
 }
 
 /* Navigation */
@@ -291,11 +276,6 @@ body {
 @media (max-width: 768px) {
   .app-logo {
     max-height: 120px;
-  }
-  
-  .app-header .subtitle {
-    font-size: 12px;
-    padding: 10px 15px;
   }
   
   .app-nav .container {

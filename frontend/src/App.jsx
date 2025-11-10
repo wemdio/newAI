@@ -50,14 +50,11 @@ function App() {
       <div className="app">
         {/* Header */}
         <header className="app-header">
-          <div className="container">
-            <img 
-              src="/assets/logo.png" 
-              alt="POLZA Agency" 
-              className="app-logo"
-            />
-            <p className="subtitle">AI-Powered Lead Detection</p>
-          </div>
+          <img 
+            src="/assets/logo.png" 
+            alt="POLZA Agency" 
+            className="app-logo"
+          />
         </header>
 
         {/* Navigation */}
