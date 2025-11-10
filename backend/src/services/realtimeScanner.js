@@ -293,7 +293,7 @@ const addToBatch = (message) => {
 };
 
 /**
- * Start real-time message scanner
+ * Start real-time message scanner (using polling instead of Realtime)
  */
 export const startRealtimeScanner = async () => {
   if (isRunning) {
@@ -304,47 +304,59 @@ export const startRealtimeScanner = async () => {
   try {
     const supabase = getSupabase();
 
-    logger.info('🔄 Starting Realtime Message Scanner...');
+    logger.info('🔄 Starting Realtime Message Scanner (polling mode)...');
 
-    // Create channel and subscribe to INSERT events
-    realtimeChannel = supabase
-      .channel('messages-insert')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'messages'
-        },
-        (payload) => {
-          logger.info('New message received', {
-            messageId: payload.new.id,
-            chatName: payload.new.chat_name
-          });
+    // Mark as running immediately
+    isRunning = true;
+    subscribedAt = new Date().toISOString();
+    
+    let lastProcessedId = null;
 
-          // Add to batch for processing
-          addToBatch(payload.new);
+    // Polling function - check for new messages every 5 seconds
+    const pollForMessages = async () => {
+      if (!isRunning) return;
+
+      try {
+        const query = supabase
+          .from('messages')
+          .select('*')
+          .order('id', { ascending: false })
+          .limit(10);
+
+        if (lastProcessedId) {
+          query.gt('id', lastProcessedId);
         }
-      )
-      .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          isRunning = true;
-          subscribedAt = new Date().toISOString();
-          logger.info('✅ Realtime scanner subscribed successfully', {
-            subscribedAt
-          });
-        } else if (status === 'CHANNEL_ERROR') {
-          logger.error('❌ Realtime channel error');
-          isRunning = false;
-          subscribedAt = null;
-        } else if (status === 'TIMED_OUT') {
-          logger.error('⏱️ Realtime connection timed out');
-          isRunning = false;
-          subscribedAt = null;
-        } else {
-          logger.info('Realtime status:', { status });
+
+        const { data: messages, error } = await query;
+
+        if (error) {
+          logger.error('Error polling for messages', { error: error.message });
+          return;
         }
-      });
+
+        if (messages && messages.length > 0) {
+          logger.info('New messages found', { count: messages.length });
+          
+          // Update last processed ID
+          lastProcessedId = Math.max(...messages.map(m => m.id));
+
+          // Process messages in reverse order (oldest first)
+          for (const message of messages.reverse()) {
+            addToBatch(message);
+          }
+        }
+      } catch (error) {
+        logger.error('Polling error', { error: error.message });
+      }
+    };
+
+    // Start polling every 5 seconds
+    realtimeChannel = setInterval(pollForMessages, 5000);
+    
+    logger.info('✅ Realtime scanner started successfully (polling mode)', {
+      subscribedAt,
+      interval: '5 seconds'
+    });
 
     // Clean up old processed IDs every hour
     setInterval(() => {
@@ -384,8 +396,8 @@ export const stopRealtimeScanner = async () => {
     logger.info('Stopping Realtime Message Scanner...');
 
     if (realtimeChannel) {
-      const supabase = getSupabase();
-      await supabase.removeChannel(realtimeChannel);
+      // Clear interval (polling mode)
+      clearInterval(realtimeChannel);
       realtimeChannel = null;
     }
 
