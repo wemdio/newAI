@@ -209,7 +209,7 @@ export const formatLeadMessage = (lead, analysis, messageSuggestion = null) => {
   const escapeMarkdown = (text) => {
     if (!text) return 'Не указано';
     // Escape special MarkdownV2 characters
-    // Must escape: _ * [ ] ( ) ~ ` > # + - = | { } . !
+    // Must escape: _ * [ ] ( ) ~ ` > # + - = | { } . ! \
     return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
   };
   
