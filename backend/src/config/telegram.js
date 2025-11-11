@@ -239,13 +239,13 @@ export const formatLeadMessage = (lead, analysis, messageSuggestion = null) => {
 
 📱 *Источник*
 • *Канал:* ${escapeMarkdown(lead.chat_name)}
-• *Время:* ${new Date(lead.message_time).toLocaleString('ru-RU')}
+• *Время:* ${escapeMarkdown(new Date(lead.message_time).toLocaleString('ru-RU'))}
 
 💬 *Сообщение лида*
 *${escapeMarkdown(lead.message)}*
 
 🤖 *AI Анализ*
-• *Уверенность:* ${confidenceEmoji} *${analysis.confidence_score}%*
+• *Уверенность:* ${confidenceEmoji} *${escapeMarkdown(String(analysis.confidence_score))}%*
 • *Обоснование:* ${escapeMarkdown(analysis.reasoning)}`;
 
   // Add message suggestion if provided - compact format
@@ -253,12 +253,12 @@ export const formatLeadMessage = (lead, analysis, messageSuggestion = null) => {
     message += `
 
 💡 *Подсказка для первого сообщения*
-\`${messageSuggestion}\``;
+\`${escapeMarkdown(messageSuggestion)}\``;
   }
 
   message += `
 
-_ID лида: ${lead.id}_`;
+_ID лида: ${escapeMarkdown(String(lead.id))}_`;
   
   return message.trim();
 };
