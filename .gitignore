@@ -32,3 +32,10 @@ Thumbs.db
 *.tmp
 *.temp
 
+# Reference implementation (contains real data and secrets)
+ai responder 10.11/
+
+# Python service session files and logs
+backend/python-service/sessions/
+backend/python-service/logs/
+backend/python-service/.env

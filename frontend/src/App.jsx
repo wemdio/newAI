@@ -6,6 +6,7 @@ import './styles/telegram.css';
 import Configuration from './pages/Configuration';
 import Leads from './pages/Leads';
 import Login from './pages/Login';
+import AIMessaging from './pages/AIMessaging';
 import { isTelegramWebApp, initTelegram, getTelegramUser, getTelegramInitData } from './utils/telegram';
 import axios from 'axios';
 
@@ -206,6 +207,13 @@ function App() {
                   Лиды
                 </Link>
                 <Link 
+                  to="/messaging" 
+                  className={`nav-link ${activeTab === 'messaging' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('messaging')}
+                >
+                  AI Рассылки
+                </Link>
+                <Link 
                   to="/config" 
                   className={`nav-link ${activeTab === 'config' ? 'active' : ''}`}
                   onClick={() => setActiveTab('config')}
@@ -234,6 +242,13 @@ function App() {
               Лиды
             </Link>
             <Link 
+              to="/messaging" 
+              className={`telegram-nav-item ${activeTab === 'messaging' ? 'active' : ''}`}
+              onClick={() => setActiveTab('messaging')}
+            >
+              AI Рассылки
+            </Link>
+            <Link 
               to="/config" 
               className={`telegram-nav-item ${activeTab === 'config' ? 'active' : ''}`}
               onClick={() => setActiveTab('config')}
@@ -249,6 +264,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Leads />} />
               <Route path="/config" element={<Configuration />} />
+              <Route path="/messaging" element={<AIMessaging />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>

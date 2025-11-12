@@ -14,6 +14,7 @@ import configRoutes from './routes/config.js';
 import leadsRoutes from './routes/leads.js';
 import analyticsRoutes from './routes/analytics.js';
 import scannerRoutes from './routes/scanner.js';
+import messagingRoutes from './routes/messaging.js';
 
 /**
  * Express server setup
@@ -96,7 +97,8 @@ app.get('/', (req, res) => {
       config: '/api/config',
       leads: '/api/leads',
       analytics: '/api/analytics',
-      scanner: '/api/scanner'
+      scanner: '/api/scanner',
+      messaging: '/api/messaging'
     }
   });
 });
@@ -107,6 +109,7 @@ app.use('/api/config', configRoutes);
 app.use('/api/leads', leadsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/scanner', scannerRoutes);
+app.use('/api/messaging', messagingRoutes);
 
 // 404 handler
 app.use((req, res) => {
