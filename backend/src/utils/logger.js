@@ -19,6 +19,47 @@ const logFormat = printf(({ level, message, timestamp, stack, ...metadata }) => 
   return msg;
 });
 
+// Build transports based on environment
+const transports = [
+  // Console output (always enabled)
+  new winston.transports.Console({
+    format: combine(
+      colorize(),
+      logFormat
+    )
+  })
+];
+
+// Only add file transports in development (not in Docker/production)
+if (process.env.NODE_ENV !== 'production') {
+  try {
+    // Create logs directory if it doesn't exist
+    import fs from 'fs';
+    if (!fs.existsSync('logs')) {
+      fs.mkdirSync('logs', { recursive: true });
+    }
+    
+    transports.push(
+      // File output - errors
+      new winston.transports.File({
+        filename: 'logs/error.log',
+        level: 'error',
+        maxsize: 5242880, // 5MB
+        maxFiles: 5
+      }),
+      // File output - all logs
+      new winston.transports.File({
+        filename: 'logs/combined.log',
+        maxsize: 5242880, // 5MB
+        maxFiles: 5
+      })
+    );
+  } catch (e) {
+    // Ignore file logging errors in production
+    console.warn('File logging disabled:', e.message);
+  }
+}
+
 // Create logger instance
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
@@ -27,43 +68,7 @@ const logger = winston.createLogger({
     timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
     logFormat
   ),
-  transports: [
-    // Console output
-    new winston.transports.Console({
-      format: combine(
-        colorize(),
-        logFormat
-      )
-    }),
-    // File output - errors
-    new winston.transports.File({
-      filename: 'logs/error.log',
-      level: 'error',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5
-    }),
-    // File output - all logs
-    new winston.transports.File({
-      filename: 'logs/combined.log',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5
-    })
-  ],
-  // Handle uncaught exceptions
-  exceptionHandlers: [
-    new winston.transports.File({ filename: 'logs/exceptions.log' })
-  ],
-  // Handle unhandled promise rejections
-  rejectionHandlers: [
-    new winston.transports.File({ filename: 'logs/rejections.log' })
-  ]
+  transports
 });
 
-// Create logs directory if it doesn't exist
-import fs from 'fs';
-if (!fs.existsSync('logs')) {
-  fs.mkdirSync('logs');
-}
-
 export default logger;
-
