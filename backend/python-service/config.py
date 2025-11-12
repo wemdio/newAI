@@ -23,7 +23,8 @@ def get_database_url():
 DATABASE_URL = get_database_url()
 
 # OpenRouter Configuration (Claude)
-OPENROUTER_API_KEY = os.getenv('OPENROUTER_API_KEY', '')
+# NOTE: API key is now user-specific and loaded from database (user_config table)
+# Each user provides their own OpenRouter API key in the app settings
 CLAUDE_MODEL = 'anthropic/claude-3.5-sonnet'
 
 # Safety Limits (Anti-ban)

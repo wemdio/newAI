@@ -104,10 +104,23 @@ class AIMessagingService:
     async def process_campaign(self, campaign: dict):
         """Process a single campaign"""
         try:
-            # Create AI communicator for this campaign
+            user_id = str(campaign['user_id'])
+            
+            # Get user's OpenRouter API key from database
+            user_config = await self.supabase.get_user_config(user_id)
+            
+            if not user_config or not user_config.get('openrouter_api_key'):
+                print(f"⚠️ Campaign {campaign['id']}: User {user_id} has no OpenRouter API key configured")
+                print(f"   💡 User must add their API key in app settings")
+                return
+            
+            openrouter_api_key = user_config['openrouter_api_key']
+            
+            # Create AI communicator for this campaign (with user's API key)
             ai = AICommunicator(
                 communication_prompt=campaign['communication_prompt'],
-                hot_lead_criteria=campaign['hot_lead_criteria']
+                hot_lead_criteria=campaign['hot_lead_criteria'],
+                openrouter_api_key=openrouter_api_key
             )
             
             # Create lead manager

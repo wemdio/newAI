@@ -2,15 +2,19 @@
 import aiohttp
 import json
 from typing import List, Dict, Tuple
-from config import OPENROUTER_API_KEY, CLAUDE_MODEL
+from config import CLAUDE_MODEL
 
 
 class AICommunicator:
     """Handles AI-powered conversations using Claude 3.5 Sonnet via OpenRouter"""
     
-    def __init__(self, communication_prompt: str, hot_lead_criteria: str):
+    def __init__(self, communication_prompt: str, hot_lead_criteria: str, openrouter_api_key: str):
         self.communication_prompt = communication_prompt
         self.hot_lead_criteria = hot_lead_criteria
+        self.openrouter_api_key = openrouter_api_key
+        
+        if not self.openrouter_api_key:
+            raise ValueError("OpenRouter API key is required for user")
     
     async def generate_first_message(self, lead_info: Dict) -> str:
         """
@@ -131,7 +135,7 @@ class AICommunicator:
     
     async def _call_claude(self, system_prompt: str, conversation_history: List[Dict]) -> str:
         """
-        Call OpenRouter API with Claude 3.5 Sonnet
+        Call OpenRouter API with Claude 3.5 Sonnet using user's API key
         
         Args:
             system_prompt: System instructions
@@ -140,8 +144,8 @@ class AICommunicator:
         Returns:
             Claude's response text
         """
-        if not OPENROUTER_API_KEY:
-            raise ValueError("OPENROUTER_API_KEY not configured")
+        if not self.openrouter_api_key:
+            raise ValueError("OpenRouter API key not configured for this user")
         
         url = 'https://openrouter.ai/api/v1/chat/completions'
         
@@ -150,7 +154,7 @@ class AICommunicator:
         messages.extend(conversation_history)
         
         headers = {
-            'Authorization': f'Bearer {OPENROUTER_API_KEY}',
+            'Authorization': f'Bearer {self.openrouter_api_key}',
             'Content-Type': 'application/json',
             'HTTP-Referer': 'https://github.com/your-repo',  # Optional
             'X-Title': 'AI Lead Messenger'  # Optional

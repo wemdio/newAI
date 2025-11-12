@@ -26,6 +26,17 @@ class SupabaseClient:
         if self.pool:
             await self.pool.close()
     
+    # ============= USER CONFIG =============
+    
+    async def get_user_config(self, user_id: str) -> Optional[Dict]:
+        """Get user configuration including OpenRouter API key"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                "SELECT * FROM user_config WHERE user_id = $1",
+                user_id
+            )
+            return dict(row) if row else None
+    
     # ============= CAMPAIGNS =============
     
     async def get_active_campaigns(self) -> List[Dict]:
