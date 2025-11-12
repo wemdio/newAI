@@ -11,9 +11,9 @@ import { promises as fs } from 'fs';
 
 const router = express.Router();
 
-// Configure multer for tdata upload
+// Configure multer for tdata upload (use memory storage to avoid permission issues)
 const upload = multer({ 
-  dest: 'uploads/tdata/',
+  storage: multer.memoryStorage(),
   limits: { fileSize: 100 * 1024 * 1024 } // 100MB max
 });
 
