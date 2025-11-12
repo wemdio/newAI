@@ -29,11 +29,13 @@ const app = express();
 app.set('trust proxy', 1);
 
 // CORS configuration - MUST BE BEFORE HELMET!
+// Allow all origins for Timeweb deployment
 app.use(cors({
-  origin: '*',
+  origin: true, // Allow all origins in production
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
-  credentials: false
+  credentials: false,
+  optionsSuccessStatus: 200
 }));
 
 // Security headers - configured to not block CORS
