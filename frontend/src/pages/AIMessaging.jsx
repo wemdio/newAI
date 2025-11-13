@@ -757,7 +757,7 @@ const AIMessaging = () => {
                     <li><strong>macOS:</strong> ~/Library/Application Support/Telegram Desktop/tdata</li>
                     <li><strong>Linux:</strong> ~/.local/share/TelegramDesktop/tdata</li>
                   </ul>
-                  <p style="margin-top: 8px;">
+                  <p style={{ marginTop: '8px' }}>
                     {tdataUploadType === 'folder' 
                       ? '✨ Просто выберите папку tdata - не нужно архивировать!'
                       : '📦 Заархивируйте папку tdata в ZIP перед загрузкой'
