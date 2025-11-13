@@ -146,6 +146,26 @@ router.post('/accounts/upload-tdata', upload.single('tdata'), async (req, res) =
     const zip = new AdmZip(req.file.buffer);
     zip.extractAllTo(tdataDir, true);
     
+    // Check if there's a nested tdata folder and fix the structure
+    const nestedTdataPath = path.join(tdataDir, 'tdata');
+    try {
+      const stats = await fs.stat(nestedTdataPath);
+      if (stats.isDirectory()) {
+        logger.info('Found nested tdata folder, moving contents up...');
+        const files = await fs.readdir(nestedTdataPath);
+        for (const file of files) {
+          const oldPath = path.join(nestedTdataPath, file);
+          const newPath = path.join(tdataDir, file);
+          await fs.rename(oldPath, newPath);
+        }
+        await fs.rmdir(nestedTdataPath);
+        logger.info('Nested tdata folder contents moved successfully');
+      }
+    } catch (err) {
+      // No nested tdata folder, that's fine
+      logger.info('No nested tdata folder found, using direct structure');
+    }
+    
     // Generate session filename
     const sessionName = `session_${tempId}`;
     const sessionPath = path.join(sessionsDir, sessionName);
