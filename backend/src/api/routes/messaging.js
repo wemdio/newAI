@@ -131,11 +131,11 @@ router.post('/accounts/upload-tdata', upload.single('tdata'), async (req, res) =
     
     logger.info('Processing tdata upload', { userId, filename: req.file.originalname });
     
-    // Create temporary directory
+    // Create temporary directory (all in /tmp to avoid permission issues)
     const tempId = randomUUID();
     tempDir = path.join('/tmp', `tdata_${tempId}`);
     const tdataDir = path.join(tempDir, 'tdata');
-    const sessionsDir = path.join(process.cwd(), 'python-service', 'sessions');
+    const sessionsDir = path.join('/tmp', 'sessions');
     
     await fs.mkdir(tempDir, { recursive: true });
     await fs.mkdir(tdataDir, { recursive: true });
