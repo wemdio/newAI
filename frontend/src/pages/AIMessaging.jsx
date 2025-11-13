@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import JSZip from 'jszip';
 import './AIMessaging.css';
 
 const AIMessaging = () => {
+  // Refs
+  const folderInputRef = useRef(null);
+  
   // State management
   const [accounts, setAccounts] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
@@ -56,6 +59,14 @@ const AIMessaging = () => {
     // In production, get from session/auth
     return '00000000-0000-0000-0000-000000000001';
   };
+  
+  // Set folder input attributes via DOM (workaround for React limitation)
+  useEffect(() => {
+    if (folderInputRef.current) {
+      folderInputRef.current.setAttribute('webkitdirectory', '');
+      folderInputRef.current.setAttribute('directory', '');
+    }
+  }, [tdataUploadType]);
   
   // Load all data
   const loadData = async () => {
@@ -701,8 +712,8 @@ const AIMessaging = () => {
                     <>
                       <label>Выберите папку tdata *</label>
                       <input
+                        ref={folderInputRef}
                         type="file"
-                        {...({ webkitdirectory: "true", directory: "true" })}
                         multiple
                         onChange={handleFolderSelect}
                         required
