@@ -323,6 +323,91 @@ router.post('/accounts/upload-tdata', upload.single('tdata'), async (req, res) =
 });
 
 /**
+ * POST /api/messaging/accounts/import-session
+ * Import Telegram account from session string (from account shops)
+ */
+router.post('/accounts/import-session', async (req, res) => {
+  try {
+    const userId = req.user?.id || '00000000-0000-0000-0000-000000000001';
+    const { account_name, session_string, api_id, api_hash } = req.body;
+    
+    if (!session_string) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Session string is required' 
+      });
+    }
+    
+    logger.info('Importing session string', { userId, accountNameLength: account_name?.length || 0 });
+    
+    // Generate session filename
+    const sessionName = `imported_${Date.now()}`;
+    const sessionsDir = path.join('/tmp', 'sessions');
+    await fs.mkdir(sessionsDir, { recursive: true });
+    const sessionPath = path.join(sessionsDir, `${sessionName}.session`);
+    
+    // Decode hex string to binary and save as session file
+    // Session string format: hex-encoded SQLite database
+    try {
+      // Remove any whitespace/newlines
+      const cleanSessionString = session_string.replace(/\s/g, '');
+      
+      // Convert hex to buffer
+      const sessionBuffer = Buffer.from(cleanSessionString, 'hex');
+      
+      logger.info('Decoded session string', { 
+        originalLength: cleanSessionString.length,
+        bufferLength: sessionBuffer.length
+      });
+      
+      // Save as .session file
+      await fs.writeFile(sessionPath, sessionBuffer);
+      logger.info('Session file created', { sessionPath });
+      
+    } catch (decodeError) {
+      logger.error('Failed to decode session string', { error: decodeError.message });
+      throw new Error('Invalid session string format. Expected hex-encoded string.');
+    }
+    
+    // Save to database
+    const supabase = getSupabase();
+    const { data: account, error: dbError } = await supabase
+      .from('telegram_accounts')
+      .insert({
+        user_id: userId,
+        account_name: account_name || 'Imported Account',
+        session_file: sessionName,
+        api_id: api_id || null,
+        api_hash: api_hash || null,
+        phone_number: null, // Will be filled when session is used
+        status: 'active'
+      })
+      .select()
+      .single();
+    
+    if (dbError) throw dbError;
+    
+    logger.info('Account imported from session string', { 
+      userId, 
+      accountId: account.id
+    });
+    
+    res.json({ 
+      success: true, 
+      account: account,
+      message: 'Session string imported successfully'
+    });
+    
+  } catch (error) {
+    logger.error('Failed to import session string', { error: error.message });
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+/**
  * PUT /api/messaging/accounts/:id
  * Update account (proxy, status, etc)
  */

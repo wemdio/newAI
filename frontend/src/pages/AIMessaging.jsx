@@ -21,11 +21,12 @@ const AIMessaging = () => {
   const [showConversationDetail, setShowConversationDetail] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState(null);
   
-  // Account upload method: 'manual' or 'tdata'
-  const [accountUploadMethod, setAccountUploadMethod] = useState('tdata');
+  // Account upload method: 'manual', 'tdata', or 'session'
+  const [accountUploadMethod, setAccountUploadMethod] = useState('session');
   const [tdataFile, setTdataFile] = useState(null);
   const [tdataUploadType, setTdataUploadType] = useState('folder'); // 'folder' or 'zip'
   const [uploading, setUploading] = useState(false);
+  const [sessionString, setSessionString] = useState('');
   
   // Form states
   const [newAccount, setNewAccount] = useState({
@@ -649,10 +650,17 @@ const AIMessaging = () => {
             <div className="method-selector">
               <button
                 type="button"
+                className={`method-btn ${accountUploadMethod === 'session' ? 'active' : ''}`}
+                onClick={() => setAccountUploadMethod('session')}
+              >
+                🔑 Session String (магазин аккаунтов)
+              </button>
+              <button
+                type="button"
                 className={`method-btn ${accountUploadMethod === 'tdata' ? 'active' : ''}`}
                 onClick={() => setAccountUploadMethod('tdata')}
               >
-                📦 Загрузить tdata (рекомендуется)
+                📦 Загрузить tdata
               </button>
               <button
                 type="button"
@@ -780,6 +788,108 @@ const AIMessaging = () => {
                     disabled={uploading}
                   >
                     {uploading ? '⏳ Загрузка...' : '📤 Загрузить tdata'}
+                  </button>
+                </div>
+              </form>
+            )}
+            
+            {/* Session String Form */}
+            {accountUploadMethod === 'session' && (
+              <form onSubmit={async (e) => {
+                e.preventDefault();
+                if (!sessionString.trim()) {
+                  alert('Введите session string!');
+                  return;
+                }
+                
+                setUploading(true);
+                try {
+                  const accountName = newAccount.account_name || 'Imported Account';
+                  const response = await axios.post(
+                    'https://wemdio-newai-f239.twc1.net/api/messaging/accounts/import-session',
+                    {
+                      account_name: accountName,
+                      session_string: sessionString.trim(),
+                      api_id: newAccount.api_id || '',
+                      api_hash: newAccount.api_hash || ''
+                    }
+                  );
+                  
+                  if (response.data.success) {
+                    alert('✅ Аккаунт успешно добавлен!');
+                    setShowAddAccount(false);
+                    setSessionString('');
+                    setNewAccount({
+                      account_name: '',
+                      session_file: '',
+                      api_id: '',
+                      api_hash: '',
+                      proxy_url: '',
+                      phone_number: ''
+                    });
+                    fetchAccounts();
+                  }
+                } catch (error) {
+                  console.error('Failed to import session:', error);
+                  alert('Ошибка импорта session: ' + (error.response?.data?.error || error.message));
+                } finally {
+                  setUploading(false);
+                }
+              }}>
+                <div className="help-box">
+                  💡 <strong>Session String</strong> - это зашифрованные данные сессии Telegram.<br/>
+                  Обычно выдается магазинами аккаунтов как длинная hex-строка.<br/>
+                  <br/>
+                  <strong>Пример:</strong> 838bbfe1808a243cecf7155620941acc2107...
+                </div>
+                
+                <div className="form-group">
+                  <label>Название аккаунта *</label>
+                  <input
+                    type="text"
+                    placeholder="Мой аккаунт"
+                    value={newAccount.account_name}
+                    onChange={e => setNewAccount({...newAccount, account_name: e.target.value})}
+                    required
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label>Session String *</label>
+                  <textarea
+                    placeholder="Вставьте сюда hex-строку session (838bbfe1808a243cecf7...)"
+                    value={sessionString}
+                    onChange={e => setSessionString(e.target.value)}
+                    rows={6}
+                    style={{ fontFamily: 'monospace', fontSize: '12px' }}
+                    required
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label>API ID (опционально)</label>
+                  <input
+                    type="text"
+                    placeholder="Если известен"
+                    value={newAccount.api_id}
+                    onChange={e => setNewAccount({...newAccount, api_id: e.target.value})}
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label>API Hash (опционально)</label>
+                  <input
+                    type="text"
+                    placeholder="Если известен"
+                    value={newAccount.api_hash}
+                    onChange={e => setNewAccount({...newAccount, api_hash: e.target.value})}
+                  />
+                </div>
+                
+                <div className="form-actions">
+                  <button type="button" onClick={() => setShowAddAccount(false)}>Отмена</button>
+                  <button type="submit" className="primary" disabled={uploading}>
+                    {uploading ? '⏳ Импорт...' : '✅ Импортировать Session'}
                   </button>
                 </div>
               </form>
