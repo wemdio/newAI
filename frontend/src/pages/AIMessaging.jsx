@@ -553,7 +553,7 @@ const AIMessaging = () => {
                       proxy_url: '',
                       phone_number: ''
                     });
-                    fetchAccounts();
+                    loadData();
                   }
                 } catch (error) {
                   console.error('Failed to import session:', error);
