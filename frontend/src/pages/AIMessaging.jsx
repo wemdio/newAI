@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import JSZip from 'jszip';
 import './AIMessaging.css';
 
 const AIMessaging = () => {
@@ -20,6 +21,7 @@ const AIMessaging = () => {
   // Account upload method: 'manual' or 'tdata'
   const [accountUploadMethod, setAccountUploadMethod] = useState('tdata');
   const [tdataFile, setTdataFile] = useState(null);
+  const [tdataUploadType, setTdataUploadType] = useState('folder'); // 'folder' or 'zip'
   const [uploading, setUploading] = useState(false);
   
   // Form states
@@ -123,12 +125,66 @@ const AIMessaging = () => {
     }
   };
   
+  // Convert folder FileList to ZIP blob
+  const convertFolderToZip = async (files) => {
+    const zip = new JSZip();
+    const tdataFolder = zip.folder('tdata');
+    
+    // Add all files to zip maintaining structure
+    for (const file of files) {
+      // Get relative path from webkitRelativePath
+      const relativePath = file.webkitRelativePath || file.name;
+      // Remove the first folder name (usually the selected folder name)
+      const pathParts = relativePath.split('/');
+      const zipPath = pathParts.slice(1).join('/');
+      
+      if (zipPath) {
+        tdataFolder.file(zipPath, file);
+      }
+    }
+    
+    // Generate zip blob
+    return await zip.generateAsync({ type: 'blob' });
+  };
+  
+  // Handle folder selection
+  const handleFolderSelect = async (e) => {
+    const files = Array.from(e.target.files);
+    
+    if (files.length === 0) {
+      return;
+    }
+    
+    console.log(`📁 Selected ${files.length} files from folder`);
+    
+    // Convert folder to ZIP
+    try {
+      const zipBlob = await convertFolderToZip(files);
+      // Create File object from Blob
+      const zipFile = new File([zipBlob], 'tdata.zip', { type: 'application/zip' });
+      setTdataFile(zipFile);
+      console.log('✅ Folder converted to ZIP');
+    } catch (error) {
+      console.error('Failed to convert folder to ZIP:', error);
+      alert('Ошибка конвертации папки в ZIP');
+    }
+  };
+  
+  // Handle ZIP file selection
+  const handleZipSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setTdataFile(file);
+      console.log('📦 ZIP file selected:', file.name);
+    }
+  };
+  
   // Upload tdata and create account
   const handleUploadTdata = async (e) => {
     e.preventDefault();
     
     if (!tdataFile) {
-      alert('Выберите tdata zip файл');
+      alert(tdataUploadType === 'folder' ? 'Выберите папку tdata' : 'Выберите tdata zip файл');
       return;
     }
     
@@ -610,15 +666,67 @@ const AIMessaging = () => {
                   />
                 </div>
                 
+                {/* Upload type selector */}
+                <div className="upload-type-selector">
+                  <label>
+                    <input
+                      type="radio"
+                      name="upload-type"
+                      value="folder"
+                      checked={tdataUploadType === 'folder'}
+                      onChange={() => {
+                        setTdataUploadType('folder');
+                        setTdataFile(null);
+                      }}
+                    />
+                    📁 Папка tdata (рекомендуется)
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="upload-type"
+                      value="zip"
+                      checked={tdataUploadType === 'zip'}
+                      onChange={() => {
+                        setTdataUploadType('zip');
+                        setTdataFile(null);
+                      }}
+                    />
+                    📦 ZIP архив
+                  </label>
+                </div>
+                
                 <div className="form-group">
-                  <label>tdata архив (zip) *</label>
-                  <input
-                    type="file"
-                    accept=".zip"
-                    onChange={e => setTdataFile(e.target.files[0])}
-                    required
-                  />
-                  <small>📁 Загрузите tdata папку запакованную в ZIP. Система автоматически извлечет API ID, Hash и номер телефона.</small>
+                  {tdataUploadType === 'folder' ? (
+                    <>
+                      <label>Выберите папку tdata *</label>
+                      <input
+                        type="file"
+                        webkitdirectory=""
+                        directory=""
+                        multiple
+                        onChange={handleFolderSelect}
+                        required
+                      />
+                      <small>📁 Выберите папку tdata напрямую. Система автоматически упакует её и извлечет все данные.</small>
+                    </>
+                  ) : (
+                    <>
+                      <label>tdata архив (zip) *</label>
+                      <input
+                        type="file"
+                        accept=".zip"
+                        onChange={handleZipSelect}
+                        required
+                      />
+                      <small>📦 Загрузите tdata папку запакованную в ZIP.</small>
+                    </>
+                  )}
+                  {tdataFile && (
+                    <div className="file-selected">
+                      ✅ Выбрано: {tdataFile.name} ({(tdataFile.size / 1024 / 1024).toFixed(2)} MB)
+                    </div>
+                  )}
                 </div>
                 
                 <div className="form-group">
@@ -633,13 +741,18 @@ const AIMessaging = () => {
                 </div>
                 
                 <div className="help-box">
-                  <strong>💡 Как получить tdata:</strong>
-                  <ol>
-                    <li>Откройте Telegram Desktop</li>
-                    <li>Найдите папку tdata (обычно в %APPDATA%\Telegram Desktop\tdata)</li>
-                    <li>Заархивируйте папку tdata в zip файл</li>
-                    <li>Загрузите zip файл здесь</li>
-                  </ol>
+                  <strong>💡 Где найти tdata:</strong>
+                  <ul>
+                    <li><strong>Windows:</strong> %APPDATA%\Telegram Desktop\tdata</li>
+                    <li><strong>macOS:</strong> ~/Library/Application Support/Telegram Desktop/tdata</li>
+                    <li><strong>Linux:</strong> ~/.local/share/TelegramDesktop/tdata</li>
+                  </ul>
+                  <p style="margin-top: 8px;">
+                    {tdataUploadType === 'folder' 
+                      ? '✨ Просто выберите папку tdata - не нужно архивировать!'
+                      : '📦 Заархивируйте папку tdata в ZIP перед загрузкой'
+                    }
+                  </p>
                 </div>
                 
                 <div className="modal-actions">
