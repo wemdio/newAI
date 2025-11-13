@@ -91,7 +91,7 @@ function App() {
         window.location.hostname === 'telegram-scanner.ru' ||
         window.location.hostname.includes('twc1.net')
       )
-        ? 'https://wemdio-newai-9587.twc1.net/api'
+        ? 'https://wemdio-newai-89bf.twc1.net/api'
         : 'http://localhost:3000/api';
 
       // Call backend to create/find user
