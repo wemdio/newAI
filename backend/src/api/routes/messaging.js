@@ -161,7 +161,20 @@ router.post('/accounts/upload-tdata', upload.single('tdata'), async (req, res) =
     // Check if Python script exists
     try {
       await fs.access(pythonScript);
+      logger.info('Python script found, attempting to execute');
     } catch (error) {
+      // List directory contents for debugging
+      try {
+        const files = await fs.readdir(path.join(process.cwd(), 'python-service'));
+        logger.error('Python script not found. Directory contents:', { 
+          path: path.join(process.cwd(), 'python-service'),
+          files 
+        });
+      } catch (dirError) {
+        logger.error('Python script not found and cannot list directory', { 
+          error: dirError.message 
+        });
+      }
       throw new Error(`Python script not found: ${pythonScript}`);
     }
     

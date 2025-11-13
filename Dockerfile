@@ -32,6 +32,12 @@ RUN npm install --production
 # Copy backend source code
 COPY backend/ ./
 
+# Verify Python script was copied and set execute permissions
+RUN ls -la python-service/ || echo "python-service directory not found" \
+    && test -f python-service/tdata_converter.py && echo "✓ tdata_converter.py found" || echo "✗ tdata_converter.py NOT FOUND" \
+    && chmod +x python-service/tdata_converter.py \
+    && ls -la python-service/tdata_converter.py
+
 # Create sessions directory with proper permissions
 RUN mkdir -p /tmp/sessions && chmod 777 /tmp/sessions
 
