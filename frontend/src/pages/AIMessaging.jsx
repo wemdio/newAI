@@ -56,13 +56,27 @@ const AIMessaging = () => {
       // Generate new UUID for this user
       userId = crypto.randomUUID();
       localStorage.setItem('user_id', userId);
+      console.log('🆔 New user ID generated:', userId);
       
-      // Create user in database
+      // Create user in database (async)
       axios.post(`${apiUrl}/auth/create-user`, { user_id: userId })
-        .catch(err => console.warn('Failed to create user:', err));
+        .then(res => console.log('✅ User created in database:', res.data))
+        .catch(err => console.error('❌ Failed to create user:', err));
     }
     
     return userId;
+  };
+  
+  // Ensure user exists in database before using
+  const ensureUserExists = async () => {
+    const userId = getUserId();
+    try {
+      await axios.post(`${apiUrl}/auth/create-user`, { user_id: userId });
+      return userId;
+    } catch (err) {
+      console.error('Failed to ensure user exists:', err);
+      return userId;
+    }
   };
   
   // Load all data
@@ -70,10 +84,12 @@ const AIMessaging = () => {
     try {
       setLoading(true);
       const userId = getUserId();
+      console.log('📥 Loading data for user:', userId);
       const headers = { 'x-user-id': userId };
       
       // Load accounts
       const accountsRes = await axios.get(`${apiUrl}/messaging/accounts`, { headers });
+      console.log('📋 Accounts loaded:', accountsRes.data.accounts?.length || 0, 'accounts');
       setAccounts(accountsRes.data.accounts || []);
       
       // Load campaigns
@@ -101,7 +117,14 @@ const AIMessaging = () => {
   };
   
   useEffect(() => {
-    loadData();
+    // Ensure user exists before loading data
+    const initializeAndLoad = async () => {
+      await ensureUserExists();
+      await loadData();
+    };
+    
+    initializeAndLoad();
+    
     // Refresh every 30 seconds
     const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
@@ -574,16 +597,26 @@ const AIMessaging = () => {
                 
                 setUploading(true);
                 try {
+                  const userId = getUserId();
+                  console.log('📤 Importing session for user:', userId);
+                  
                   const accountName = newAccount.account_name || 'Imported Account';
                   const response = await axios.post(
-                    'https://wemdio-newai-f239.twc1.net/api/messaging/accounts/import-session',
+                    `${apiUrl}/messaging/accounts/import-session`,
                     {
                       account_name: accountName,
                       session_string: sessionString.trim(),
                       api_id: newAccount.api_id || '',
                       api_hash: newAccount.api_hash || ''
+                    },
+                    {
+                      headers: {
+                        'x-user-id': userId
+                      }
                     }
                   );
+                  
+                  console.log('✅ Session imported successfully:', response.data);
                   
                   if (response.data.success) {
                     alert('✅ Аккаунт успешно добавлен!');
