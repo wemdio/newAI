@@ -166,6 +166,18 @@ router.post('/accounts/upload-tdata', upload.single('tdata'), async (req, res) =
       logger.info('No nested tdata folder found, using direct structure');
     }
     
+    // Log directory contents for debugging
+    try {
+      const tdataContents = await fs.readdir(tdataDir);
+      logger.info('tdata directory contents', { 
+        tdataDir,
+        files: tdataContents.slice(0, 10), // First 10 files
+        totalFiles: tdataContents.length
+      });
+    } catch (err) {
+      logger.error('Failed to read tdata directory', { error: err.message });
+    }
+    
     // Generate session filename
     const sessionName = `session_${tempId}`;
     const sessionPath = path.join(sessionsDir, sessionName);
@@ -200,13 +212,20 @@ router.post('/accounts/upload-tdata', upload.single('tdata'), async (req, res) =
     
     let result;
     try {
+      logger.info('Executing Python converter...', { tdataDir, sessionPath });
       const { stdout, stderr } = await execAsync(
         `xvfb-run -a python "${pythonScript}" "${tdataDir}" "${sessionPath}"`,
         { 
-          timeout: 60000, // 60 seconds
+          timeout: 120000, // 120 seconds (tdata conversion can be slow)
           maxBuffer: 10 * 1024 * 1024 // 10MB
         }
       );
+      
+      logger.info('Python converter finished', { 
+        stdoutLength: stdout?.length || 0,
+        stderrLength: stderr?.length || 0,
+        stderr: stderr || 'no stderr'
+      });
       
       // Parse JSON result from Python output
       const jsonMatch = stdout.match(/=== RESULT ===\s*(\{.*\})/s);
@@ -226,7 +245,14 @@ router.post('/accounts/upload-tdata', upload.single('tdata'), async (req, res) =
       });
       
     } catch (error) {
-      logger.error('Python conversion failed', { error: error.message });
+      logger.error('Python conversion failed', { 
+        error: error.message,
+        stdout: error.stdout || 'no stdout',
+        stderr: error.stderr || 'no stderr',
+        code: error.code,
+        killed: error.killed,
+        signal: error.signal
+      });
       throw new Error(`Conversion failed: ${error.message}`);
     }
     
