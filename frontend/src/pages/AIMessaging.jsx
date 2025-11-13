@@ -2,7 +2,16 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import './AIMessaging.css';
 
-const AIMessaging = () => {
+const AIMessaging = ({ session }) => {
+  // Verify session exists
+  if (!session?.user) {
+    return (
+      <div className="ai-messaging-loading">
+        <p>⚠️ Сессия не найдена. Пожалуйста, войдите в систему.</p>
+      </div>
+    );
+  }
+  
   // State management
   const [accounts, setAccounts] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
@@ -47,31 +56,25 @@ const AIMessaging = () => {
   
   const apiUrl = getApiUrl();
   
-  // Get user ID from session
+  // Get user ID from Supabase session
   const getUserId = () => {
-    // Get or create unique user ID for this browser/profile
-    let userId = localStorage.getItem('user_id');
-    
-    if (!userId) {
-      // Generate new UUID for this user
-      userId = crypto.randomUUID();
-      localStorage.setItem('user_id', userId);
-      console.log('🆔 New user ID generated:', userId);
-      
-      // Create user in database (async)
-      axios.post(`${apiUrl}/auth/create-user`, { user_id: userId })
-        .then(res => console.log('✅ User created in database:', res.data))
-        .catch(err => console.error('❌ Failed to create user:', err));
+    if (!session?.user?.id) {
+      console.error('❌ No session found!');
+      return null;
     }
-    
-    return userId;
+    return session.user.id;
   };
   
   // Ensure user exists in database before using
   const ensureUserExists = async () => {
     const userId = getUserId();
+    if (!userId) {
+      throw new Error('No user session');
+    }
+    
     try {
       await axios.post(`${apiUrl}/auth/create-user`, { user_id: userId });
+      console.log('✅ User verified in database:', userId);
       return userId;
     } catch (err) {
       console.error('Failed to ensure user exists:', err);
@@ -84,12 +87,10 @@ const AIMessaging = () => {
     try {
       setLoading(true);
       const userId = getUserId();
-      console.log('📥 Loading data for user:', userId);
       const headers = { 'x-user-id': userId };
       
       // Load accounts
       const accountsRes = await axios.get(`${apiUrl}/messaging/accounts`, { headers });
-      console.log('📋 Accounts loaded:', accountsRes.data.accounts?.length || 0, 'accounts');
       setAccounts(accountsRes.data.accounts || []);
       
       // Load campaigns
@@ -257,45 +258,13 @@ const AIMessaging = () => {
     );
   }
   
-  const handleSwitchProfile = () => {
-    if (confirm('Вы уверены, что хотите сменить профиль?\n\nВаши данные останутся в базе, вы сможете вернуться позже.')) {
-      const currentUserId = localStorage.getItem('user_id');
-      localStorage.removeItem('user_id');
-      alert(`Профиль изменён!\n\nПредыдущий ID: ${currentUserId?.substring(0, 8)}...\n\nПерезагрузите страницу для создания нового профиля.`);
-      window.location.reload();
-    }
-  };
-  
   return (
     <div className="ai-messaging">
       <div className="page-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <h1>🤖 AI Рассылки</h1>
-            <p className="subtitle">
-              Автоматическое общение с лидами через Telegram с использованием AI
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <span style={{ fontSize: '12px', color: '#666' }}>
-              ID: {getUserId().substring(0, 8)}...
-            </span>
-            <button 
-              onClick={handleSwitchProfile}
-              style={{
-                padding: '8px 16px',
-                backgroundColor: '#6c757d',
-                color: 'white',
-                border: 'none',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
-            >
-              🔄 Сменить профиль
-            </button>
-          </div>
-        </div>
+        <h1>🤖 AI Рассылки</h1>
+        <p className="subtitle">
+          Автоматическое общение с лидами через Telegram с использованием AI
+        </p>
       </div>
       
       {/* Stats Overview */}
@@ -598,8 +567,6 @@ const AIMessaging = () => {
                 setUploading(true);
                 try {
                   const userId = getUserId();
-                  console.log('📤 Importing session for user:', userId);
-                  
                   const accountName = newAccount.account_name || 'Imported Account';
                   const response = await axios.post(
                     `${apiUrl}/messaging/accounts/import-session`,
@@ -615,8 +582,6 @@ const AIMessaging = () => {
                       }
                     }
                   );
-                  
-                  console.log('✅ Session imported successfully:', response.data);
                   
                   if (response.data.success) {
                     alert('✅ Аккаунт успешно добавлен!');
