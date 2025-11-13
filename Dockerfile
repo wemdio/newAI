@@ -6,15 +6,21 @@ FROM node:20-alpine
 WORKDIR /app
 
 # Install Python and build dependencies for tdata conversion
+# Qt5 packages are needed for PyQt5 (required by opentele)
 RUN apk add --no-cache \
     python3 \
     py3-pip \
     py3-cryptography \
     gcc \
+    g++ \
     musl-dev \
     python3-dev \
     libffi-dev \
     openssl-dev \
+    qt5-qtbase-dev \
+    qt5-qttools-dev \
+    make \
+    cmake \
     && ln -sf /usr/bin/python3 /usr/bin/python \
     && python --version
 
