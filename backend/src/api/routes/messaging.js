@@ -151,15 +151,26 @@ router.post('/accounts/upload-tdata', upload.single('tdata'), async (req, res) =
     try {
       const stats = await fs.stat(nestedTdataPath);
       if (stats.isDirectory()) {
-        logger.info('Found nested tdata folder, moving contents up...');
         const files = await fs.readdir(nestedTdataPath);
-        for (const file of files) {
-          const oldPath = path.join(nestedTdataPath, file);
-          const newPath = path.join(tdataDir, file);
-          await fs.rename(oldPath, newPath);
+        logger.info('Found nested tdata folder', { 
+          nestedPath: nestedTdataPath,
+          filesInside: files.slice(0, 10),
+          totalFilesInside: files.length
+        });
+        
+        if (files.length > 0) {
+          logger.info('Moving nested contents up...');
+          for (const file of files) {
+            const oldPath = path.join(nestedTdataPath, file);
+            const newPath = path.join(tdataDir, file);
+            await fs.rename(oldPath, newPath);
+          }
+          await fs.rmdir(nestedTdataPath);
+          logger.info('Nested tdata folder contents moved successfully');
+        } else {
+          logger.warn('Nested tdata folder is empty, removing it');
+          await fs.rmdir(nestedTdataPath);
         }
-        await fs.rmdir(nestedTdataPath);
-        logger.info('Nested tdata folder contents moved successfully');
       }
     } catch (err) {
       // No nested tdata folder, that's fine
