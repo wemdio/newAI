@@ -14,7 +14,8 @@ RUN apk add --no-cache \
     python3-dev \
     libffi-dev \
     openssl-dev \
-    && ln -sf python3 /usr/bin/python
+    && ln -sf /usr/bin/python3 /usr/bin/python \
+    && python --version
 
 # Copy Python requirements
 COPY backend/python-service/requirements.txt ./python-service/

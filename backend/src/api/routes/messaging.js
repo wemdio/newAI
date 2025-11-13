@@ -151,13 +151,24 @@ router.post('/accounts/upload-tdata', upload.single('tdata'), async (req, res) =
     const sessionPath = path.join(sessionsDir, sessionName);
     
     // Run Python converter
-    logger.info('Converting tdata to session...', { sessionPath });
     const pythonScript = path.join(process.cwd(), 'python-service', 'tdata_converter.py');
+    logger.info('Converting tdata to session...', { 
+      sessionPath,
+      pythonScript,
+      cwd: process.cwd()
+    });
+    
+    // Check if Python script exists
+    try {
+      await fs.access(pythonScript);
+    } catch (error) {
+      throw new Error(`Python script not found: ${pythonScript}`);
+    }
     
     let result;
     try {
       const { stdout, stderr } = await execAsync(
-        `python3 "${pythonScript}" "${tdataDir}" "${sessionPath}"`,
+        `python "${pythonScript}" "${tdataDir}" "${sessionPath}"`,
         { 
           timeout: 60000, // 60 seconds
           maxBuffer: 10 * 1024 * 1024 // 10MB
