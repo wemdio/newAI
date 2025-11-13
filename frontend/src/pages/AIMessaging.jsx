@@ -702,8 +702,7 @@ const AIMessaging = () => {
                       <label>Выберите папку tdata *</label>
                       <input
                         type="file"
-                        webkitdirectory=""
-                        directory=""
+                        {...({ webkitdirectory: "true", directory: "true" })}
                         multiple
                         onChange={handleFolderSelect}
                         required
