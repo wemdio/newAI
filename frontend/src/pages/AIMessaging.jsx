@@ -49,7 +49,7 @@ const AIMessaging = () => {
     if (window.location.hostname === 'localhost') {
       return 'http://localhost:3000/api';
     }
-    return 'https://wemdio-newai-f239.twc1.net/api';
+    return 'https://wemdio-newai-6c8c.twc1.net/api';
   };
   
   const apiUrl = getApiUrl();
