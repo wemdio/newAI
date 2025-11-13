@@ -1,12 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import JSZip from 'jszip';
 import './AIMessaging.css';
 
 const AIMessaging = () => {
-  // Refs
-  const folderInputRef = useRef(null);
-  
   // State management
   const [accounts, setAccounts] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
@@ -21,10 +17,6 @@ const AIMessaging = () => {
   const [showConversationDetail, setShowConversationDetail] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState(null);
   
-  // Account upload method: 'manual', 'tdata', or 'session'
-  const [accountUploadMethod, setAccountUploadMethod] = useState('session');
-  const [tdataFile, setTdataFile] = useState(null);
-  const [tdataUploadType, setTdataUploadType] = useState('folder'); // 'folder' or 'zip'
   const [uploading, setUploading] = useState(false);
   const [sessionString, setSessionString] = useState('');
   
@@ -60,14 +52,6 @@ const AIMessaging = () => {
     // In production, get from session/auth
     return '00000000-0000-0000-0000-000000000001';
   };
-  
-  // Set folder input attributes via DOM (workaround for React limitation)
-  useEffect(() => {
-    if (folderInputRef.current) {
-      folderInputRef.current.setAttribute('webkitdirectory', '');
-      folderInputRef.current.setAttribute('directory', '');
-    }
-  }, [tdataUploadType]);
   
   // Load all data
   const loadData = async () => {
@@ -134,116 +118,6 @@ const AIMessaging = () => {
     } catch (error) {
       console.error('Failed to create account:', error);
       alert('Ошибка создания аккаунта: ' + error.response?.data?.error || error.message);
-    }
-  };
-  
-  // Convert folder FileList to ZIP blob
-  const convertFolderToZip = async (files) => {
-    const zip = new JSZip();
-    const tdataFolder = zip.folder('tdata');
-    
-    // Add all files to zip maintaining structure
-    for (const file of files) {
-      // Get relative path from webkitRelativePath
-      const relativePath = file.webkitRelativePath || file.name;
-      // Remove the first folder name (usually the selected folder name)
-      const pathParts = relativePath.split('/');
-      const zipPath = pathParts.slice(1).join('/');
-      
-      if (zipPath) {
-        tdataFolder.file(zipPath, file);
-      }
-    }
-    
-    // Generate zip blob
-    return await zip.generateAsync({ type: 'blob' });
-  };
-  
-  // Handle folder selection
-  const handleFolderSelect = async (e) => {
-    const files = Array.from(e.target.files);
-    
-    if (files.length === 0) {
-      return;
-    }
-    
-    console.log(`📁 Selected ${files.length} files from folder`);
-    
-    // Convert folder to ZIP
-    try {
-      const zipBlob = await convertFolderToZip(files);
-      // Create File object from Blob
-      const zipFile = new File([zipBlob], 'tdata.zip', { type: 'application/zip' });
-      setTdataFile(zipFile);
-      console.log('✅ Folder converted to ZIP');
-    } catch (error) {
-      console.error('Failed to convert folder to ZIP:', error);
-      alert('Ошибка конвертации папки в ZIP');
-    }
-  };
-  
-  // Handle ZIP file selection
-  const handleZipSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setTdataFile(file);
-      console.log('📦 ZIP file selected:', file.name);
-    }
-  };
-  
-  // Upload tdata and create account
-  const handleUploadTdata = async (e) => {
-    e.preventDefault();
-    
-    if (!tdataFile) {
-      alert(tdataUploadType === 'folder' ? 'Выберите папку tdata' : 'Выберите tdata zip файл');
-      return;
-    }
-    
-    if (!newAccount.account_name) {
-      alert('Введите название аккаунта');
-      return;
-    }
-    
-    setUploading(true);
-    
-    try {
-      const userId = getUserId();
-      const formData = new FormData();
-      formData.append('tdata', tdataFile);
-      formData.append('account_name', newAccount.account_name);
-      if (newAccount.proxy_url) {
-        formData.append('proxy_url', newAccount.proxy_url);
-      }
-      
-      const response = await axios.post(
-        `${apiUrl}/messaging/accounts/upload-tdata`, 
-        formData,
-        {
-          headers: { 
-            'x-user-id': userId,
-            'Content-Type': 'multipart/form-data'
-          }
-        }
-      );
-      
-      alert(`Аккаунт успешно добавлен!\nТелефон: ${response.data.phone}\nUsername: @${response.data.username || 'нет'}`);
-      setShowAddAccount(false);
-      setTdataFile(null);
-      setNewAccount({
-        account_name: '',
-        session_file: '',
-        api_id: '',
-        api_hash: '',
-        proxy_url: '',
-        phone_number: ''
-      });
-      loadData();
-    } catch (error) {
-      console.error('Failed to upload tdata:', error);
-      alert('Ошибка загрузки tdata: ' + (error.response?.data?.error || error.message));
-    } finally {
-      setUploading(false);
     }
   };
   
@@ -646,156 +520,8 @@ const AIMessaging = () => {
               <button className="close-btn" onClick={() => setShowAddAccount(false)}>×</button>
             </div>
             
-            {/* Method selector */}
-            <div className="method-selector">
-              <button
-                type="button"
-                className={`method-btn ${accountUploadMethod === 'session' ? 'active' : ''}`}
-                onClick={() => setAccountUploadMethod('session')}
-              >
-                🔑 Session String (магазин аккаунтов)
-              </button>
-              <button
-                type="button"
-                className={`method-btn ${accountUploadMethod === 'tdata' ? 'active' : ''}`}
-                onClick={() => setAccountUploadMethod('tdata')}
-              >
-                📦 Загрузить tdata
-              </button>
-              <button
-                type="button"
-                className={`method-btn ${accountUploadMethod === 'manual' ? 'active' : ''}`}
-                onClick={() => setAccountUploadMethod('manual')}
-              >
-                ⚙️ Вручную (session файл)
-              </button>
-            </div>
-            
-            {/* tdata Upload Form */}
-            {accountUploadMethod === 'tdata' && (
-              <form onSubmit={handleUploadTdata}>
-                <div className="form-group">
-                  <label>Название аккаунта *</label>
-                  <input
-                    type="text"
-                    value={newAccount.account_name}
-                    onChange={e => setNewAccount({...newAccount, account_name: e.target.value})}
-                    placeholder="Например: Мой аккаунт 1"
-                    required
-                  />
-                </div>
-                
-                {/* Upload type selector */}
-                <div className="upload-type-selector">
-                  <label>
-                    <input
-                      type="radio"
-                      name="upload-type"
-                      value="folder"
-                      checked={tdataUploadType === 'folder'}
-                      onChange={() => {
-                        setTdataUploadType('folder');
-                        setTdataFile(null);
-                      }}
-                    />
-                    📁 Папка tdata (рекомендуется)
-                  </label>
-                  <label>
-                    <input
-                      type="radio"
-                      name="upload-type"
-                      value="zip"
-                      checked={tdataUploadType === 'zip'}
-                      onChange={() => {
-                        setTdataUploadType('zip');
-                        setTdataFile(null);
-                      }}
-                    />
-                    📦 ZIP архив
-                  </label>
-                </div>
-                
-                <div className="form-group">
-                  {tdataUploadType === 'folder' ? (
-                    <>
-                      <label>Выберите папку tdata *</label>
-                      <input
-                        ref={folderInputRef}
-                        type="file"
-                        multiple
-                        onChange={handleFolderSelect}
-                        required
-                      />
-                      <small>📁 Выберите папку tdata напрямую. Система автоматически упакует её и извлечет все данные.</small>
-                    </>
-                  ) : (
-                    <>
-                      <label>tdata архив (zip) *</label>
-                      <input
-                        type="file"
-                        accept=".zip"
-                        onChange={handleZipSelect}
-                        required
-                      />
-                      <small>📦 Загрузите tdata папку запакованную в ZIP.</small>
-                    </>
-                  )}
-                  {tdataFile && (
-                    <div className="file-selected">
-                      ✅ Выбрано: {tdataFile.name} ({(tdataFile.size / 1024 / 1024).toFixed(2)} MB)
-                    </div>
-                  )}
-                </div>
-                
-                <div className="form-group">
-                  <label>Прокси (опционально)</label>
-                  <input
-                    type="text"
-                    value={newAccount.proxy_url}
-                    onChange={e => setNewAccount({...newAccount, proxy_url: e.target.value})}
-                    placeholder="socks5://user:pass@host:port"
-                  />
-                  <small>Опционально. Используйте если аккаунт требует прокси</small>
-                </div>
-                
-                <div className="help-box">
-                  <strong>💡 Где найти tdata:</strong>
-                  <ul>
-                    <li><strong>Windows:</strong> %APPDATA%\Telegram Desktop\tdata</li>
-                    <li><strong>macOS:</strong> ~/Library/Application Support/Telegram Desktop/tdata</li>
-                    <li><strong>Linux:</strong> ~/.local/share/TelegramDesktop/tdata</li>
-                  </ul>
-                  <p style={{ marginTop: '8px' }}>
-                    {tdataUploadType === 'folder' 
-                      ? '✨ Просто выберите папку tdata - не нужно архивировать!'
-                      : '📦 Заархивируйте папку tdata в ZIP перед загрузкой'
-                    }
-                  </p>
-                </div>
-                
-                <div className="modal-actions">
-                  <button 
-                    type="button" 
-                    className="btn btn-secondary" 
-                    onClick={() => setShowAddAccount(false)}
-                    disabled={uploading}
-                  >
-                    Отмена
-                  </button>
-                  <button 
-                    type="submit" 
-                    className="btn btn-primary"
-                    disabled={uploading}
-                  >
-                    {uploading ? '⏳ Загрузка...' : '📤 Загрузить tdata'}
-                  </button>
-                </div>
-              </form>
-            )}
-            
             {/* Session String Form */}
-            {accountUploadMethod === 'session' && (
-              <form onSubmit={async (e) => {
+            <form onSubmit={async (e) => {
                 e.preventDefault();
                 if (!sessionString.trim()) {
                   alert('Введите session string!');
@@ -893,88 +619,6 @@ const AIMessaging = () => {
                   </button>
                 </div>
               </form>
-            )}
-            
-            {/* Manual Form */}
-            {accountUploadMethod === 'manual' && (
-              <form onSubmit={handleCreateAccount}>
-                <div className="form-group">
-                  <label>Название аккаунта *</label>
-                  <input
-                    type="text"
-                    value={newAccount.account_name}
-                    onChange={e => setNewAccount({...newAccount, account_name: e.target.value})}
-                    placeholder="Например: Мой аккаунт 1"
-                    required
-                  />
-                </div>
-                
-                <div className="form-group">
-                  <label>Session файл *</label>
-                  <input
-                    type="text"
-                    value={newAccount.session_file}
-                    onChange={e => setNewAccount({...newAccount, session_file: e.target.value})}
-                    placeholder="session_name.session"
-                    required
-                  />
-                  <small>Загрузите session файл в backend/python-service/sessions/</small>
-                </div>
-                
-                <div className="form-row">
-                  <div className="form-group">
-                    <label>API ID *</label>
-                    <input
-                      type="number"
-                      value={newAccount.api_id}
-                      onChange={e => setNewAccount({...newAccount, api_id: e.target.value})}
-                      placeholder="1234567"
-                      required
-                    />
-                  </div>
-                  
-                  <div className="form-group">
-                    <label>API Hash *</label>
-                    <input
-                      type="text"
-                      value={newAccount.api_hash}
-                      onChange={e => setNewAccount({...newAccount, api_hash: e.target.value})}
-                      placeholder="abcdef123456..."
-                      required
-                    />
-                  </div>
-                </div>
-                
-                <div className="form-group">
-                  <label>Прокси (опционально)</label>
-                  <input
-                    type="text"
-                    value={newAccount.proxy_url}
-                    onChange={e => setNewAccount({...newAccount, proxy_url: e.target.value})}
-                    placeholder="socks5://user:pass@host:port"
-                  />
-                </div>
-                
-                <div className="form-group">
-                  <label>Телефон (опционально)</label>
-                  <input
-                    type="text"
-                    value={newAccount.phone_number}
-                    onChange={e => setNewAccount({...newAccount, phone_number: e.target.value})}
-                    placeholder="+1234567890"
-                  />
-                </div>
-                
-                <div className="modal-actions">
-                  <button type="button" className="btn btn-secondary" onClick={() => setShowAddAccount(false)}>
-                    Отмена
-                  </button>
-                  <button type="submit" className="btn btn-primary">
-                    Добавить
-                  </button>
-                </div>
-              </form>
-            )}
           </div>
         </div>
       )}
