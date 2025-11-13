@@ -1,11 +1,10 @@
-# Backend Dockerfile for Timeweb Cloud
-# This builds the Node.js backend with Python support for tdata conversion
-
+# Use official Node.js LTS image
 FROM node:20-alpine
 
+# Set working directory
 WORKDIR /app
 
-# Install Python and build dependencies for tdata conversion
+# Install Python and required packages for tdata conversion
 RUN apk add --no-cache \
     python3 \
     py3-pip \
@@ -27,26 +26,26 @@ RUN pip3 install --no-cache-dir --break-system-packages -r python-service/requir
 # Copy backend package files
 COPY backend/package*.json ./
 
-# Install Node dependencies  
+# Install Node dependencies
 RUN npm install --production
 
-# Copy all backend source code
+# Copy backend source code
 COPY backend/ ./
 
-# Verify Python script exists and set permissions
-RUN ls -la python-service/ \
+# Verify Python script was copied and set execute permissions
+RUN ls -la python-service/ || echo "python-service directory not found" \
     && test -f python-service/tdata_converter.py && echo "✓ tdata_converter.py found" || echo "✗ tdata_converter.py NOT FOUND" \
-    && chmod +x python-service/tdata_converter.py
+    && chmod +x python-service/tdata_converter.py \
+    && ls -la python-service/tdata_converter.py
 
 # Create sessions directory with proper permissions
 RUN mkdir -p /tmp/sessions && chmod 777 /tmp/sessions
 
-# Expose application port
+# Expose port
 EXPOSE 3000
 
-# Set production environment
+# Set environment
 ENV NODE_ENV=production
 
 # Start the application
 CMD ["node", "src/index.js"]
-
