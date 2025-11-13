@@ -298,5 +298,79 @@ router.post('/link-telegram', asyncHandler(async (req, res) => {
   }
 }));
 
+/**
+ * POST /api/auth/create-user
+ * Create or verify user exists in user_config
+ * Simple endpoint for localStorage-based user management
+ */
+router.post('/create-user', asyncHandler(async (req, res) => {
+  const { user_id } = req.body;
+  
+  if (!user_id) {
+    return res.status(400).json({
+      error: 'Bad Request',
+      message: 'user_id is required'
+    });
+  }
+  
+  logger.info('Creating/verifying user', { userId: user_id });
+  
+  const supabase = getSupabase();
+  
+  try {
+    // Check if user already exists
+    const { data: existingUser, error: fetchError } = await supabase
+      .from('user_config')
+      .select('user_id')
+      .eq('user_id', user_id)
+      .single();
+    
+    if (existingUser) {
+      logger.info('User already exists', { userId: user_id });
+      return res.json({
+        success: true,
+        message: 'User already exists',
+        user_id: user_id
+      });
+    }
+    
+    // Create new user
+    const { data: newUser, error: createError } = await supabase
+      .from('user_config')
+      .insert({
+        user_id: user_id,
+        lead_prompt: 'Default lead detection prompt',
+        telegram_channel_id: 'not_configured',
+        is_active: true
+      })
+      .select()
+      .single();
+    
+    if (createError) {
+      throw createError;
+    }
+    
+    logger.info('New user created', { userId: user_id });
+    
+    return res.json({
+      success: true,
+      message: 'User created successfully',
+      user_id: user_id,
+      isNewUser: true
+    });
+    
+  } catch (error) {
+    logger.error('Failed to create user', {
+      error: error.message,
+      userId: user_id
+    });
+    
+    return res.status(500).json({
+      error: 'Internal Server Error',
+      message: 'Failed to create user'
+    });
+  }
+}));
+
 export default router;
 

@@ -49,8 +49,20 @@ const AIMessaging = () => {
   
   // Get user ID from session
   const getUserId = () => {
-    // In production, get from session/auth
-    return '00000000-0000-0000-0000-000000000001';
+    // Get or create unique user ID for this browser/profile
+    let userId = localStorage.getItem('user_id');
+    
+    if (!userId) {
+      // Generate new UUID for this user
+      userId = crypto.randomUUID();
+      localStorage.setItem('user_id', userId);
+      
+      // Create user in database
+      axios.post(`${apiUrl}/auth/create-user`, { user_id: userId })
+        .catch(err => console.warn('Failed to create user:', err));
+    }
+    
+    return userId;
   };
   
   // Load all data
@@ -222,13 +234,45 @@ const AIMessaging = () => {
     );
   }
   
+  const handleSwitchProfile = () => {
+    if (confirm('Вы уверены, что хотите сменить профиль?\n\nВаши данные останутся в базе, вы сможете вернуться позже.')) {
+      const currentUserId = localStorage.getItem('user_id');
+      localStorage.removeItem('user_id');
+      alert(`Профиль изменён!\n\nПредыдущий ID: ${currentUserId?.substring(0, 8)}...\n\nПерезагрузите страницу для создания нового профиля.`);
+      window.location.reload();
+    }
+  };
+  
   return (
     <div className="ai-messaging">
       <div className="page-header">
-        <h1>🤖 AI Рассылки</h1>
-        <p className="subtitle">
-          Автоматическое общение с лидами через Telegram с использованием AI
-        </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1>🤖 AI Рассылки</h1>
+            <p className="subtitle">
+              Автоматическое общение с лидами через Telegram с использованием AI
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+            <span style={{ fontSize: '12px', color: '#666' }}>
+              ID: {getUserId().substring(0, 8)}...
+            </span>
+            <button 
+              onClick={handleSwitchProfile}
+              style={{
+                padding: '8px 16px',
+                backgroundColor: '#6c757d',
+                color: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                fontSize: '14px'
+              }}
+            >
+              🔄 Сменить профиль
+            </button>
+          </div>
+        </div>
       </div>
       
       {/* Stats Overview */}
