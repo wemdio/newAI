@@ -1,28 +1,27 @@
 # Backend Dockerfile for Timeweb Cloud
 # This builds the Node.js backend with Python support for tdata conversion
+# Using Debian-based image for pre-built PyQt5 packages (Alpine compilation requires too much memory)
 
-FROM node:20-alpine
+FROM node:20-slim
 
 WORKDIR /app
 
-# Install Python and build dependencies for tdata conversion
-# Qt5 packages are needed for PyQt5 (required by opentele)
-RUN apk add --no-cache \
+# Install Python and dependencies for tdata conversion
+# PyQt5 is pre-built on Debian, avoiding memory-intensive compilation
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
-    py3-pip \
-    py3-cryptography \
+    python3-pip \
+    python3-dev \
+    python3-pyqt5 \
     gcc \
     g++ \
-    musl-dev \
-    python3-dev \
+    libssl-dev \
     libffi-dev \
-    openssl-dev \
-    qt5-qtbase-dev \
-    qt5-qttools-dev \
-    make \
-    cmake \
+    build-essential \
     && ln -sf /usr/bin/python3 /usr/bin/python \
-    && python --version
+    && python --version \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy Python requirements
 COPY backend/python-service/requirements.txt ./python-service/
