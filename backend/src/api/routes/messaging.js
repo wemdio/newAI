@@ -328,8 +328,15 @@ router.post('/accounts/upload-tdata', upload.single('tdata'), async (req, res) =
  */
 router.post('/accounts/import-session', async (req, res) => {
   try {
-    const userId = req.user?.id || '00000000-0000-0000-0000-000000000001';
+    const userId = req.headers['x-user-id'];
     const { account_name, session_string, api_id, api_hash } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User ID is required in x-user-id header' 
+      });
+    }
     
     if (!session_string) {
       return res.status(400).json({ 
