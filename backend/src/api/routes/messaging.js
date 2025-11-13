@@ -181,7 +181,7 @@ router.post('/accounts/upload-tdata', upload.single('tdata'), async (req, res) =
     let result;
     try {
       const { stdout, stderr } = await execAsync(
-        `python "${pythonScript}" "${tdataDir}" "${sessionPath}"`,
+        `xvfb-run -a python "${pythonScript}" "${tdataDir}" "${sessionPath}"`,
         { 
           timeout: 60000, // 60 seconds
           maxBuffer: 10 * 1024 * 1024 // 10MB
