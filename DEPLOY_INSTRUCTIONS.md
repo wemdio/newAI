@@ -137,3 +137,5 @@ python main.py
 - Проверьте `SUPABASE_DB_PASSWORD` в .env
 - Убедитесь что проект активен в Supabase
 
+
+

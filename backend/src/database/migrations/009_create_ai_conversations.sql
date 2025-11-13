@@ -40,3 +40,5 @@ COMMENT ON COLUMN ai_conversations.conversation_history IS 'Array of messages (J
 COMMENT ON COLUMN ai_conversations.status IS 'Conversation status: active, waiting, hot_lead, stopped, completed';
 COMMENT ON COLUMN ai_conversations.messages_count IS 'Total messages exchanged';
 
+
+

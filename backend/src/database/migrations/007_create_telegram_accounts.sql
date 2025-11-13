@@ -39,3 +39,5 @@ COMMENT ON COLUMN telegram_accounts.status IS 'Current status: active, paused, b
 COMMENT ON COLUMN telegram_accounts.messages_sent_today IS 'Counter for daily message limit';
 COMMENT ON COLUMN telegram_accounts.is_available IS 'Whether account is available for rotation';
 
+
+

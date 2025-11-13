@@ -8,8 +8,13 @@ import logger from '../../utils/logger.js';
 import multer from 'multer';
 import path from 'path';
 import { promises as fs } from 'fs';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import { randomUUID } from 'crypto';
+import AdmZip from 'adm-zip';
 
 const router = express.Router();
+const execAsync = promisify(exec);
 
 // Configure multer for tdata upload (use memory storage to avoid permission issues)
 const upload = multer({ 
@@ -96,6 +101,143 @@ router.post('/accounts', async (req, res) => {
   } catch (error) {
     logger.error('Failed to create account', { error: error.message });
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/messaging/accounts/upload-tdata
+ * Upload and convert Telegram Desktop tdata to Telethon session
+ */
+router.post('/accounts/upload-tdata', upload.single('tdata'), async (req, res) => {
+  let tempDir = null;
+  
+  try {
+    const userId = req.headers['x-user-id'];
+    const { account_name, proxy_url } = req.body;
+    
+    if (!userId || !account_name) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'User ID and account name required' 
+      });
+    }
+    
+    if (!req.file) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'No tdata zip file uploaded' 
+      });
+    }
+    
+    logger.info('Processing tdata upload', { userId, filename: req.file.originalname });
+    
+    // Create temporary directory
+    const tempId = randomUUID();
+    tempDir = path.join('/tmp', `tdata_${tempId}`);
+    const tdataDir = path.join(tempDir, 'tdata');
+    const sessionsDir = path.join(process.cwd(), 'python-service', 'sessions');
+    
+    await fs.mkdir(tempDir, { recursive: true });
+    await fs.mkdir(tdataDir, { recursive: true });
+    await fs.mkdir(sessionsDir, { recursive: true });
+    
+    // Extract zip file
+    logger.info('Extracting tdata zip...', { tempDir });
+    const zip = new AdmZip(req.file.buffer);
+    zip.extractAllTo(tdataDir, true);
+    
+    // Generate session filename
+    const sessionName = `session_${tempId}`;
+    const sessionPath = path.join(sessionsDir, sessionName);
+    
+    // Run Python converter
+    logger.info('Converting tdata to session...', { sessionPath });
+    const pythonScript = path.join(process.cwd(), 'python-service', 'tdata_converter.py');
+    
+    let result;
+    try {
+      const { stdout, stderr } = await execAsync(
+        `python3 "${pythonScript}" "${tdataDir}" "${sessionPath}"`,
+        { 
+          timeout: 60000, // 60 seconds
+          maxBuffer: 10 * 1024 * 1024 // 10MB
+        }
+      );
+      
+      // Parse JSON result from Python output
+      const jsonMatch = stdout.match(/=== RESULT ===\s*(\{.*\})/s);
+      if (!jsonMatch) {
+        throw new Error('Failed to parse Python output: ' + stdout);
+      }
+      
+      result = JSON.parse(jsonMatch[1]);
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Conversion failed');
+      }
+      
+      logger.info('Conversion successful', { 
+        phone: result.phone, 
+        username: result.username 
+      });
+      
+    } catch (error) {
+      logger.error('Python conversion failed', { error: error.message });
+      throw new Error(`Conversion failed: ${error.message}`);
+    }
+    
+    // Save to database
+    const supabase = getSupabase();
+    const { data: account, error: dbError } = await supabase
+      .from('telegram_accounts')
+      .insert({
+        user_id: userId,
+        account_name,
+        session_file: `${sessionName}.session`,
+        api_id: result.api_id,
+        api_hash: result.api_hash,
+        proxy_url: proxy_url || null,
+        phone_number: result.phone,
+        status: 'active',
+        is_available: true
+      })
+      .select()
+      .single();
+    
+    if (dbError) throw dbError;
+    
+    logger.info('Account created from tdata', { 
+      userId, 
+      accountId: account.id,
+      phone: result.phone 
+    });
+    
+    // Cleanup temp directory
+    await fs.rm(tempDir, { recursive: true, force: true });
+    
+    res.json({ 
+      success: true, 
+      account: account,
+      phone: result.phone,
+      username: result.username
+    });
+    
+  } catch (error) {
+    logger.error('Failed to upload tdata', { error: error.message });
+    
+    // Cleanup temp directory on error
+    if (tempDir) {
+      try {
+        await fs.rm(tempDir, { recursive: true, force: true });
+      } catch (cleanupError) {
+        logger.error('Failed to cleanup temp directory', { error: cleanupError.message });
+      }
+    }
+    
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
   }
 });
 

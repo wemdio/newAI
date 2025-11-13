@@ -17,6 +17,11 @@ const AIMessaging = () => {
   const [showConversationDetail, setShowConversationDetail] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState(null);
   
+  // Account upload method: 'manual' or 'tdata'
+  const [accountUploadMethod, setAccountUploadMethod] = useState('tdata');
+  const [tdataFile, setTdataFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  
   // Form states
   const [newAccount, setNewAccount] = useState({
     account_name: '',
@@ -92,7 +97,7 @@ const AIMessaging = () => {
     return () => clearInterval(interval);
   }, []);
   
-  // Create account
+  // Create account (manual)
   const handleCreateAccount = async (e) => {
     e.preventDefault();
     try {
@@ -115,6 +120,62 @@ const AIMessaging = () => {
     } catch (error) {
       console.error('Failed to create account:', error);
       alert('Ошибка создания аккаунта: ' + error.response?.data?.error || error.message);
+    }
+  };
+  
+  // Upload tdata and create account
+  const handleUploadTdata = async (e) => {
+    e.preventDefault();
+    
+    if (!tdataFile) {
+      alert('Выберите tdata zip файл');
+      return;
+    }
+    
+    if (!newAccount.account_name) {
+      alert('Введите название аккаунта');
+      return;
+    }
+    
+    setUploading(true);
+    
+    try {
+      const userId = getUserId();
+      const formData = new FormData();
+      formData.append('tdata', tdataFile);
+      formData.append('account_name', newAccount.account_name);
+      if (newAccount.proxy_url) {
+        formData.append('proxy_url', newAccount.proxy_url);
+      }
+      
+      const response = await axios.post(
+        `${apiUrl}/messaging/accounts/upload-tdata`, 
+        formData,
+        {
+          headers: { 
+            'x-user-id': userId,
+            'Content-Type': 'multipart/form-data'
+          }
+        }
+      );
+      
+      alert(`Аккаунт успешно добавлен!\nТелефон: ${response.data.phone}\nUsername: @${response.data.username || 'нет'}`);
+      setShowAddAccount(false);
+      setTdataFile(null);
+      setNewAccount({
+        account_name: '',
+        session_file: '',
+        api_id: '',
+        api_hash: '',
+        proxy_url: '',
+        phone_number: ''
+      });
+      loadData();
+    } catch (error) {
+      console.error('Failed to upload tdata:', error);
+      alert('Ошибка загрузки tdata: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setUploading(false);
     }
   };
   
@@ -517,83 +578,170 @@ const AIMessaging = () => {
               <button className="close-btn" onClick={() => setShowAddAccount(false)}>×</button>
             </div>
             
-            <form onSubmit={handleCreateAccount}>
-              <div className="form-group">
-                <label>Название аккаунта *</label>
-                <input
-                  type="text"
-                  value={newAccount.account_name}
-                  onChange={e => setNewAccount({...newAccount, account_name: e.target.value})}
-                  placeholder="Например: Мой аккаунт 1"
-                  required
-                />
-              </div>
-              
-              <div className="form-group">
-                <label>Session файл *</label>
-                <input
-                  type="text"
-                  value={newAccount.session_file}
-                  onChange={e => setNewAccount({...newAccount, session_file: e.target.value})}
-                  placeholder="session_name.session"
-                  required
-                />
-                <small>Загрузите session файл в backend/python-service/sessions/</small>
-              </div>
-              
-              <div className="form-row">
+            {/* Method selector */}
+            <div className="method-selector">
+              <button
+                type="button"
+                className={`method-btn ${accountUploadMethod === 'tdata' ? 'active' : ''}`}
+                onClick={() => setAccountUploadMethod('tdata')}
+              >
+                📦 Загрузить tdata (рекомендуется)
+              </button>
+              <button
+                type="button"
+                className={`method-btn ${accountUploadMethod === 'manual' ? 'active' : ''}`}
+                onClick={() => setAccountUploadMethod('manual')}
+              >
+                ⚙️ Вручную (session файл)
+              </button>
+            </div>
+            
+            {/* tdata Upload Form */}
+            {accountUploadMethod === 'tdata' && (
+              <form onSubmit={handleUploadTdata}>
                 <div className="form-group">
-                  <label>API ID *</label>
+                  <label>Название аккаунта *</label>
                   <input
-                    type="number"
-                    value={newAccount.api_id}
-                    onChange={e => setNewAccount({...newAccount, api_id: e.target.value})}
-                    placeholder="1234567"
+                    type="text"
+                    value={newAccount.account_name}
+                    onChange={e => setNewAccount({...newAccount, account_name: e.target.value})}
+                    placeholder="Например: Мой аккаунт 1"
                     required
                   />
                 </div>
                 
                 <div className="form-group">
-                  <label>API Hash *</label>
+                  <label>tdata архив (zip) *</label>
+                  <input
+                    type="file"
+                    accept=".zip"
+                    onChange={e => setTdataFile(e.target.files[0])}
+                    required
+                  />
+                  <small>📁 Загрузите tdata папку запакованную в ZIP. Система автоматически извлечет API ID, Hash и номер телефона.</small>
+                </div>
+                
+                <div className="form-group">
+                  <label>Прокси (опционально)</label>
                   <input
                     type="text"
-                    value={newAccount.api_hash}
-                    onChange={e => setNewAccount({...newAccount, api_hash: e.target.value})}
-                    placeholder="abcdef123456..."
+                    value={newAccount.proxy_url}
+                    onChange={e => setNewAccount({...newAccount, proxy_url: e.target.value})}
+                    placeholder="socks5://user:pass@host:port"
+                  />
+                  <small>Опционально. Используйте если аккаунт требует прокси</small>
+                </div>
+                
+                <div className="help-box">
+                  <strong>💡 Как получить tdata:</strong>
+                  <ol>
+                    <li>Откройте Telegram Desktop</li>
+                    <li>Найдите папку tdata (обычно в %APPDATA%\Telegram Desktop\tdata)</li>
+                    <li>Заархивируйте папку tdata в zip файл</li>
+                    <li>Загрузите zip файл здесь</li>
+                  </ol>
+                </div>
+                
+                <div className="modal-actions">
+                  <button 
+                    type="button" 
+                    className="btn btn-secondary" 
+                    onClick={() => setShowAddAccount(false)}
+                    disabled={uploading}
+                  >
+                    Отмена
+                  </button>
+                  <button 
+                    type="submit" 
+                    className="btn btn-primary"
+                    disabled={uploading}
+                  >
+                    {uploading ? '⏳ Загрузка...' : '📤 Загрузить tdata'}
+                  </button>
+                </div>
+              </form>
+            )}
+            
+            {/* Manual Form */}
+            {accountUploadMethod === 'manual' && (
+              <form onSubmit={handleCreateAccount}>
+                <div className="form-group">
+                  <label>Название аккаунта *</label>
+                  <input
+                    type="text"
+                    value={newAccount.account_name}
+                    onChange={e => setNewAccount({...newAccount, account_name: e.target.value})}
+                    placeholder="Например: Мой аккаунт 1"
                     required
                   />
                 </div>
-              </div>
-              
-              <div className="form-group">
-                <label>Прокси (опционально)</label>
-                <input
-                  type="text"
-                  value={newAccount.proxy_url}
-                  onChange={e => setNewAccount({...newAccount, proxy_url: e.target.value})}
-                  placeholder="socks5://user:pass@host:port"
-                />
-              </div>
-              
-              <div className="form-group">
-                <label>Телефон (опционально)</label>
-                <input
-                  type="text"
-                  value={newAccount.phone_number}
-                  onChange={e => setNewAccount({...newAccount, phone_number: e.target.value})}
-                  placeholder="+1234567890"
-                />
-              </div>
-              
-              <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowAddAccount(false)}>
-                  Отмена
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Добавить
-                </button>
-              </div>
-            </form>
+                
+                <div className="form-group">
+                  <label>Session файл *</label>
+                  <input
+                    type="text"
+                    value={newAccount.session_file}
+                    onChange={e => setNewAccount({...newAccount, session_file: e.target.value})}
+                    placeholder="session_name.session"
+                    required
+                  />
+                  <small>Загрузите session файл в backend/python-service/sessions/</small>
+                </div>
+                
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>API ID *</label>
+                    <input
+                      type="number"
+                      value={newAccount.api_id}
+                      onChange={e => setNewAccount({...newAccount, api_id: e.target.value})}
+                      placeholder="1234567"
+                      required
+                    />
+                  </div>
+                  
+                  <div className="form-group">
+                    <label>API Hash *</label>
+                    <input
+                      type="text"
+                      value={newAccount.api_hash}
+                      onChange={e => setNewAccount({...newAccount, api_hash: e.target.value})}
+                      placeholder="abcdef123456..."
+                      required
+                    />
+                  </div>
+                </div>
+                
+                <div className="form-group">
+                  <label>Прокси (опционально)</label>
+                  <input
+                    type="text"
+                    value={newAccount.proxy_url}
+                    onChange={e => setNewAccount({...newAccount, proxy_url: e.target.value})}
+                    placeholder="socks5://user:pass@host:port"
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label>Телефон (опционально)</label>
+                  <input
+                    type="text"
+                    value={newAccount.phone_number}
+                    onChange={e => setNewAccount({...newAccount, phone_number: e.target.value})}
+                    placeholder="+1234567890"
+                  />
+                </div>
+                
+                <div className="modal-actions">
+                  <button type="button" className="btn btn-secondary" onClick={() => setShowAddAccount(false)}>
+                    Отмена
+                  </button>
+                  <button type="submit" className="btn btn-primary">
+                    Добавить
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}

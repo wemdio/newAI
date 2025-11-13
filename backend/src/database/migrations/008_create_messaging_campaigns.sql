@@ -36,3 +36,5 @@ COMMENT ON COLUMN messaging_campaigns.status IS 'Campaign status: draft, running
 COMMENT ON COLUMN messaging_campaigns.leads_contacted IS 'Total leads contacted in this campaign';
 COMMENT ON COLUMN messaging_campaigns.hot_leads_found IS 'Total hot leads identified';
 
+
+

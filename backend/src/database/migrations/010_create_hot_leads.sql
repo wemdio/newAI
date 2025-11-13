@@ -38,3 +38,5 @@ COMMENT ON COLUMN hot_leads.posted_to_channel IS 'Whether posted to Telegram not
 COMMENT ON COLUMN hot_leads.assigned_to_manager IS 'Sales manager assigned to this lead';
 COMMENT ON COLUMN hot_leads.notes IS 'Additional notes about the lead';
 
+
+
