@@ -362,37 +362,34 @@ router.post('/accounts/import-session', async (req, res) => {
     await fs.mkdir(sessionsDir, { recursive: true });
     const sessionPath = path.join(sessionsDir, `${sessionName}.session`);
     
-    // Decode hex string to binary and save as session file
-    // Session string format: hex-encoded SQLite database
+    // Clean and validate session string
+    // Format: Telethon StringSession (hex:dc_id)
     let cleanSessionString;
     try {
-      // Remove any whitespace/newlines and other non-hex characters
-      cleanSessionString = session_string.replace(/[^0-9a-fA-F]/g, '');
+      // Remove only whitespace/newlines, keep hex and colon
+      cleanSessionString = session_string.replace(/\s+/g, '').trim();
       
-      // Validate it's valid hex (even length)
+      // Validate it's not empty
       if (cleanSessionString.length === 0) {
         throw new Error('Session string is empty after cleaning');
       }
-      if (cleanSessionString.length % 2 !== 0) {
-        throw new Error('Session string has odd length (invalid hex)');
+      
+      // Validate format (should be hex:number or just hex)
+      if (!cleanSessionString.match(/^[0-9a-fA-F]+(:[0-9]+)?$/)) {
+        throw new Error('Invalid session string format. Expected format: hex or hex:dc_id');
       }
       
-      // Convert hex to buffer
-      const sessionBuffer = Buffer.from(cleanSessionString, 'hex');
-      
-      logger.info('Decoded session string', { 
+      logger.info('Session string validated', { 
         originalLength: session_string.length,
         cleanedLength: cleanSessionString.length,
-        bufferLength: sessionBuffer.length
+        format: cleanSessionString.includes(':') ? 'StringSession (hex:dc)' : 'raw hex'
       });
       
-      // Save as .session file
-      await fs.writeFile(sessionPath, sessionBuffer);
-      logger.info('Session file created', { sessionPath });
+      // Note: We don't create session file here, Python Worker will use StringSession directly
       
     } catch (decodeError) {
-      logger.error('Failed to decode session string', { error: decodeError.message });
-      throw new Error('Invalid session string format. Expected hex-encoded string.');
+      logger.error('Failed to validate session string', { error: decodeError.message });
+      throw new Error('Invalid session string format. Expected Telethon StringSession format (hex or hex:dc_id)');
     }
     
     // Save to database (including session_string for Python Worker)

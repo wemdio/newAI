@@ -1,5 +1,6 @@
 """Telethon Client Manager - Handles Telegram connections and messaging"""
 from telethon import TelegramClient, events
+from telethon.sessions import StringSession
 from telethon.errors import (
     FloodWaitError, 
     UserBannedInChannelError,
@@ -38,38 +39,12 @@ class TelethonManager:
             # Create sessions directory if it doesn't exist
             os.makedirs('sessions', exist_ok=True)
             
-            # If session file doesn't exist but we have session_string, create it
-            if not os.path.exists(f"{session_file}.session") and account.get('session_string'):
-                print(f"🔧 Creating session file from database for {account['account_name']}")
-                try:
-                    # Clean session string: remove all whitespace, newlines, and non-hex characters
-                    import re
-                    session_string = account['session_string']
-                    
-                    # Remove all whitespace and newlines
-                    session_string = re.sub(r'\s+', '', session_string)
-                    
-                    # Validate it's only hex characters
-                    if not re.match(r'^[0-9a-fA-F]+$', session_string):
-                        print(f"❌ Invalid session_string: contains non-hex characters")
-                        print(f"   First 100 chars: {session_string[:100]}")
-                        return False
-                    
-                    print(f"   Session string length: {len(session_string)} chars")
-                    
-                    # Decode hex string to binary
-                    session_bytes = bytes.fromhex(session_string)
-                    
-                    # Write to session file
-                    with open(f"{session_file}.session", 'wb') as f:
-                        f.write(session_bytes)
-                    
-                    print(f"✅ Session file created: {session_file}.session ({len(session_bytes)} bytes)")
-                except Exception as e:
-                    print(f"❌ Failed to create session file: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    return False
+            # Check if we have session_string (Telethon StringSession format)
+            session_string_data = account.get('session_string')
+            if session_string_data and not os.path.exists(f"{session_file}.session"):
+                print(f"🔧 Detected StringSession format for {account['account_name']}")
+                # Use StringSession directly - Telethon will handle the format
+                session_file = StringSession(session_string_data.strip())
             
             # Parse proxy if provided
             proxy = self._parse_proxy(account.get('proxy_url'))
