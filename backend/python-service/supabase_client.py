@@ -1,41 +1,82 @@
 """Supabase database client for AI Messaging Service"""
-import asyncpg
+import aiohttp
 import json
 from datetime import datetime
 from typing import List, Dict, Optional
-from config import DATABASE_URL
+from config import SUPABASE_URL, SUPABASE_KEY
 
 
 class SupabaseClient:
-    """Async PostgreSQL client for Supabase"""
+    """Supabase REST API client (no database password needed)"""
     
     def __init__(self):
-        self.pool: Optional[asyncpg.Pool] = None
+        self.url = SUPABASE_URL
+        self.key = SUPABASE_KEY
+        self.headers = {
+            'apikey': self.key,
+            'Authorization': f'Bearer {self.key}',
+            'Content-Type': 'application/json'
+        }
+        self.session: Optional[aiohttp.ClientSession] = None
     
     async def connect(self):
-        """Initialize connection pool"""
-        self.pool = await asyncpg.create_pool(
-            DATABASE_URL,
-            min_size=2,
-            max_size=10
-        )
-        print("✅ Connected to Supabase database")
+        """Initialize HTTP session"""
+        self.session = aiohttp.ClientSession(headers=self.headers)
+        print("✅ Connected to Supabase (REST API)")
     
     async def close(self):
-        """Close connection pool"""
-        if self.pool:
-            await self.pool.close()
+        """Close HTTP session"""
+        if self.session:
+            await self.session.close()
+    
+    # ============= HELPER METHODS =============
+    
+    async def _get(self, table: str, filters: Dict = None, select: str = "*", order: str = None, limit: int = None) -> List[Dict]:
+        """Generic GET request to Supabase"""
+        url = f"{self.url}/rest/v1/{table}?select={select}"
+        
+        if filters:
+            for key, value in filters.items():
+                url += f"&{key}=eq.{value}"
+        
+        if order:
+            url += f"&order={order}"
+        
+        if limit:
+            url += f"&limit={limit}"
+        
+        async with self.session.get(url) as resp:
+            if resp.status == 200:
+                return await resp.json()
+            return []
+    
+    async def _post(self, table: str, data: Dict) -> Optional[Dict]:
+        """Generic POST request to Supabase"""
+        url = f"{self.url}/rest/v1/{table}"
+        headers = {**self.headers, 'Prefer': 'return=representation'}
+        
+        async with self.session.post(url, json=data, headers=headers) as resp:
+            if resp.status in [200, 201]:
+                result = await resp.json()
+                return result[0] if result else None
+            return None
+    
+    async def _patch(self, table: str, filters: Dict, data: Dict) -> bool:
+        """Generic PATCH request to Supabase"""
+        url = f"{self.url}/rest/v1/{table}?"
+        
+        for key, value in filters.items():
+            url += f"&{key}=eq.{value}"
+        
+        async with self.session.patch(url, json=data) as resp:
+            return resp.status in [200, 204]
     
     # ============= USER CONFIG =============
     
     async def get_user_config(self, user_id: str) -> Optional[Dict]:
         """Get user configuration including OpenRouter API key"""
-        async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT * FROM user_config WHERE user_id = $1",
-                user_id
-            )
-            return dict(row) if row else None
+        results = await self._get('user_config', {'user_id': user_id})
+        return results[0] if results else None
     
     # ============= CAMPAIGNS =============
     

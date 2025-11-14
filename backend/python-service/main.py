@@ -9,8 +9,8 @@ from datetime import datetime
 from typing import List
 
 # Import our modules
-from config import LOG_LEVEL
-from supabase_client import SupabaseClient
+from config import LOG_LEVEL, SUPABASE_URL, SUPABASE_KEY
+from supabase_client_rest import SupabaseClient
 from safety_manager import SafetyManager
 from ai_communicator import AICommunicator
 from telethon_client import TelethonManager
@@ -38,8 +38,8 @@ class AIMessagingService:
             # Initialize components
             print("🔧 Initializing components...")
             
-            # Connect to Supabase
-            self.supabase = SupabaseClient()
+            # Connect to Supabase (REST API)
+            self.supabase = SupabaseClient(SUPABASE_URL, SUPABASE_KEY)
             await self.supabase.connect()
             
             # Initialize managers

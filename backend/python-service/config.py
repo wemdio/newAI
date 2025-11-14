@@ -4,23 +4,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Supabase Configuration
+# Supabase Configuration (REST API - no database password needed!)
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_KEY = os.getenv('SUPABASE_ANON_KEY')
-SUPABASE_DB_PASSWORD = os.getenv('SUPABASE_DB_PASSWORD')
 
-# Parse database connection from Supabase URL
-# Format: https://xxxxx.supabase.co -> postgres://postgres:[PASSWORD]@db.xxxxx.supabase.co:5432/postgres
-def get_database_url():
-    if not SUPABASE_URL or not SUPABASE_DB_PASSWORD:
-        raise ValueError("SUPABASE_URL and SUPABASE_DB_PASSWORD must be set")
-    
-    # Extract project reference from URL
-    project_ref = SUPABASE_URL.replace('https://', '').replace('.supabase.co', '')
-    db_url = f"postgresql://postgres:{SUPABASE_DB_PASSWORD}@db.{project_ref}.supabase.co:5432/postgres"
-    return db_url
-
-DATABASE_URL = get_database_url()
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY must be set")
 
 # OpenRouter Configuration (Claude)
 # NOTE: API key is now user-specific and loaded from database (user_config table)
