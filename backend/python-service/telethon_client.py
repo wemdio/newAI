@@ -39,12 +39,79 @@ class TelethonManager:
             # Create sessions directory if it doesn't exist
             os.makedirs('sessions', exist_ok=True)
             
-            # Check if we have session_string (Telethon StringSession format)
+            # Check if we have session_string
             session_string_data = account.get('session_string')
-            if session_string_data and not os.path.exists(f"{session_file}.session"):
-                print(f"🔧 Detected StringSession format for {account['account_name']}")
-                # Use StringSession directly - Telethon will handle the format
-                session_file = StringSession(session_string_data.strip())
+            if session_string_data:
+                print(f"🔧 Processing session_string for {account['account_name']}")
+                
+                # Check format: hex:dc_id or pure Telethon StringSession
+                session_str = session_string_data.strip()
+                
+                # If it contains ':' it's likely hex:dc format from account shop
+                # We need to create a session file from it
+                if ':' in session_str and not os.path.exists(f"{session_file}.session"):
+                    try:
+                        print(f"   Detected hex:dc format, creating session file")
+                        # Split hex and dc_id
+                        hex_part, dc_str = session_str.rsplit(':', 1)
+                        dc_id = int(dc_str)
+                        
+                        # Decode hex auth_key
+                        auth_key_bytes = bytes.fromhex(hex_part)
+                        
+                        print(f"   Auth key: {len(auth_key_bytes)} bytes, DC: {dc_id}")
+                        
+                        # Create StringSession from auth_key
+                        # We'll use empty StringSession and manually set auth_key
+                        # Actually, let's just use the file-based approach
+                        # Create a minimal SQLite session file with this auth_key
+                        import sqlite3
+                        
+                        session_path = f"{session_file}.session"
+                        conn = sqlite3.connect(session_path)
+                        conn.execute('''CREATE TABLE sessions (
+                            dc_id INTEGER PRIMARY KEY,
+                            server_address TEXT,
+                            port INTEGER,
+                            auth_key BLOB
+                        )''')
+                        conn.execute('''CREATE TABLE version (version INTEGER PRIMARY KEY)''')
+                        conn.execute('INSERT INTO version VALUES (8)')
+                        
+                        # Insert auth_key with DC info
+                        # We need to map DC ID to server address
+                        dc_map = {
+                            1: ('149.154.175.53', 443),
+                            2: ('149.154.167.51', 443),
+                            3: ('149.154.175.100', 443),
+                            4: ('149.154.167.91', 443),
+                            5: ('91.108.56.130', 443)
+                        }
+                        
+                        server_addr, port = dc_map.get(dc_id, ('149.154.175.53', 443))
+                        
+                        conn.execute(
+                            'INSERT INTO sessions VALUES (?, ?, ?, ?)',
+                            (dc_id, server_addr, port, auth_key_bytes)
+                        )
+                        conn.commit()
+                        conn.close()
+                        
+                        print(f"   ✅ Created session file from hex:dc format")
+                        
+                    except Exception as e:
+                        print(f"   ❌ Failed to convert hex:dc to session: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        return False
+                elif not ':' in session_str:
+                    # Pure Telethon StringSession format
+                    print(f"   Detected Telethon StringSession format")
+                    try:
+                        session_file = StringSession(session_str)
+                    except Exception as e:
+                        print(f"   ❌ Invalid StringSession format: {e}")
+                        return False
             
             # Parse proxy if provided
             proxy = self._parse_proxy(account.get('proxy_url'))
