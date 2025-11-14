@@ -16,10 +16,10 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 # Each user provides their own OpenRouter API key in the app settings
 CLAUDE_MODEL = 'anthropic/claude-3.5-sonnet'
 
-# Safety Limits (Anti-ban)
-MAX_MESSAGES_PER_DAY = int(os.getenv('MAX_MESSAGES_PER_DAY', '25'))
-MESSAGE_DELAY_MIN = int(os.getenv('MESSAGE_DELAY_MIN', '30'))  # seconds
-MESSAGE_DELAY_MAX = int(os.getenv('MESSAGE_DELAY_MAX', '120'))  # seconds
+# Safety Limits (Anti-ban) - Conservative settings
+MAX_MESSAGES_PER_DAY = int(os.getenv('MAX_MESSAGES_PER_DAY', '15'))  # Reduced for safety
+MESSAGE_DELAY_MIN = int(os.getenv('MESSAGE_DELAY_MIN', '60'))  # seconds (1 min)
+MESSAGE_DELAY_MAX = int(os.getenv('MESSAGE_DELAY_MAX', '180'))  # seconds (3 min)
 ACCOUNT_SWITCH_DELAY = int(os.getenv('ACCOUNT_SWITCH_DELAY', '300'))  # seconds (5 min)
 
 # Daily reset hour (UTC)
