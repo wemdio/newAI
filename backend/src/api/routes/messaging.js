@@ -364,15 +364,25 @@ router.post('/accounts/import-session', async (req, res) => {
     
     // Decode hex string to binary and save as session file
     // Session string format: hex-encoded SQLite database
+    let cleanSessionString;
     try {
-      // Remove any whitespace/newlines
-      const cleanSessionString = session_string.replace(/\s/g, '');
+      // Remove any whitespace/newlines and other non-hex characters
+      cleanSessionString = session_string.replace(/[^0-9a-fA-F]/g, '');
+      
+      // Validate it's valid hex (even length)
+      if (cleanSessionString.length === 0) {
+        throw new Error('Session string is empty after cleaning');
+      }
+      if (cleanSessionString.length % 2 !== 0) {
+        throw new Error('Session string has odd length (invalid hex)');
+      }
       
       // Convert hex to buffer
       const sessionBuffer = Buffer.from(cleanSessionString, 'hex');
       
       logger.info('Decoded session string', { 
-        originalLength: cleanSessionString.length,
+        originalLength: session_string.length,
+        cleanedLength: cleanSessionString.length,
         bufferLength: sessionBuffer.length
       });
       
@@ -393,7 +403,7 @@ router.post('/accounts/import-session', async (req, res) => {
         user_id: userId,
         account_name: account_name || 'Imported Account',
         session_file: sessionName,
-        session_string: session_string.replace(/\s/g, ''), // Store hex string for worker
+        session_string: cleanSessionString, // Store cleaned hex string for worker
         api_id: parseInt(finalApiId),
         api_hash: finalApiHash,
         phone_number: null, // Will be filled when session is used
