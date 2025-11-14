@@ -167,6 +167,7 @@ class SupabaseClient:
         
         # Build URL for debugging
         # Note: For boolean fields in Supabase REST API, use 'is.true' not 'eq.true'
+        # Select all fields including session_string for worker to recreate session files
         url = f"{self.url}/rest/v1/telegram_accounts?select=*"
         url += f"&user_id=eq.{user_id}"
         url += f"&status=eq.active"
@@ -181,7 +182,8 @@ class SupabaseClient:
                 accounts = await resp.json()
                 print(f"🔍 DEBUG: Found {len(accounts)} accounts")
                 if accounts:
-                    print(f"🔍 DEBUG: First account: {accounts[0].get('account_name')} (is_available={accounts[0].get('is_available')})")
+                    has_session_string = bool(accounts[0].get('session_string'))
+                    print(f"🔍 DEBUG: First account: {accounts[0].get('account_name')} (is_available={accounts[0].get('is_available')}, has_session_string={has_session_string})")
                 return accounts
             else:
                 error_text = await resp.text()

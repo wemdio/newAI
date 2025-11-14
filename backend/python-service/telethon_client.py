@@ -9,6 +9,7 @@ from telethon.errors import (
 from urllib.parse import urlparse
 from typing import Dict, Optional, Callable
 import asyncio
+import os
 
 
 class TelethonManager:
@@ -34,6 +35,23 @@ class TelethonManager:
         session_file = f"sessions/{account['session_file']}"
         
         try:
+            # Create sessions directory if it doesn't exist
+            os.makedirs('sessions', exist_ok=True)
+            
+            # If session file doesn't exist but we have session_string, create it
+            if not os.path.exists(f"{session_file}.session") and account.get('session_string'):
+                print(f"🔧 Creating session file from database for {account['account_name']}")
+                try:
+                    # Decode hex string to binary
+                    session_bytes = bytes.fromhex(account['session_string'])
+                    # Write to session file
+                    with open(f"{session_file}.session", 'wb') as f:
+                        f.write(session_bytes)
+                    print(f"✅ Session file created: {session_file}.session")
+                except Exception as e:
+                    print(f"❌ Failed to create session file: {e}")
+                    return False
+            
             # Parse proxy if provided
             proxy = self._parse_proxy(account.get('proxy_url'))
             

@@ -385,7 +385,7 @@ router.post('/accounts/import-session', async (req, res) => {
       throw new Error('Invalid session string format. Expected hex-encoded string.');
     }
     
-    // Save to database
+    // Save to database (including session_string for Python Worker)
     const supabase = getSupabase();
     const { data: account, error: dbError } = await supabase
       .from('telegram_accounts')
@@ -393,6 +393,7 @@ router.post('/accounts/import-session', async (req, res) => {
         user_id: userId,
         account_name: account_name || 'Imported Account',
         session_file: sessionName,
+        session_string: session_string.replace(/\s/g, ''), // Store hex string for worker
         api_id: parseInt(finalApiId),
         api_hash: finalApiHash,
         phone_number: null, // Will be filled when session is used
