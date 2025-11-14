@@ -214,6 +214,26 @@ const AIMessaging = ({ session }) => {
       alert('Ошибка: ' + error.response?.data?.error || error.message);
     }
   };
+
+  // Delete campaign
+  const handleDeleteCampaign = async (campaignId) => {
+    if (!window.confirm('Вы уверены, что хотите удалить эту кампанию? Это действие нельзя отменить.')) {
+      return;
+    }
+    
+    try {
+      const userId = getUserId();
+      await axios.delete(`${apiUrl}/messaging/campaigns/${campaignId}`, {
+        headers: { 'x-user-id': userId }
+      });
+      
+      alert('Кампания удалена');
+      loadData();
+    } catch (error) {
+      console.error('Failed to delete campaign:', error);
+      alert('Ошибка удаления: ' + error.response?.data?.error || error.message);
+    }
+  };
   
   // View conversation
   const viewConversation = async (conversationId) => {
@@ -412,6 +432,15 @@ const AIMessaging = ({ session }) => {
                         onClick={() => handlePauseCampaign(campaign.id)}
                       >
                         Приостановить
+                      </button>
+                    )}
+                    {(campaign.status === 'draft' || campaign.status === 'paused' || campaign.status === 'stopped') && (
+                      <button 
+                        className="btn btn-danger" 
+                        onClick={() => handleDeleteCampaign(campaign.id)}
+                        title="Удалить кампанию"
+                      >
+                        🗑️ Удалить
                       </button>
                     )}
                   </div>
