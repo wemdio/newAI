@@ -94,13 +94,21 @@ class SupabaseClient:
     # ============= LEADS =============
     
     async def get_uncontacted_leads(self, user_id: str) -> List[Dict]:
-        """Get uncontacted leads - fetches detected_leads with is_contacted=false"""
+        """Get uncontacted leads - fetches detected_leads with is_contacted=false (last 24h only)"""
         try:
-            # Get uncontacted detected_leads for this user
+            # Calculate timestamp for 24 hours ago
+            from datetime import timedelta
+            twenty_four_hours_ago = (datetime.utcnow() - timedelta(hours=24)).isoformat()
+            
+            print(f"🔍 Fetching uncontacted leads for user {user_id}")
+            print(f"   ⏰ From: {twenty_four_hours_ago} (last 24 hours)")
+            
+            # Get uncontacted detected_leads for this user (last 24 hours only)
             url = f"{self.url}/rest/v1/detected_leads"
             url += f"?select=id,message_id,confidence_score,reasoning,matched_criteria,detected_at"
             url += f"&user_id=eq.{user_id}"
             url += f"&is_contacted=eq.false"
+            url += f"&detected_at=gte.{twenty_four_hours_ago}"  # Only last 24 hours
             url += f"&order=detected_at.desc"
             url += f"&limit=100"
             
