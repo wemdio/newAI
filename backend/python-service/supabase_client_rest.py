@@ -94,10 +94,58 @@ class SupabaseClient:
     # ============= LEADS =============
     
     async def get_uncontacted_leads(self, user_id: str) -> List[Dict]:
-        """Get uncontacted leads"""
-        # Note: Complex joins are not supported directly in REST API
-        # This is a simplified version
-        return []
+        """Get uncontacted leads - fetches detected_leads with is_contacted=false"""
+        try:
+            # Get uncontacted detected_leads for this user
+            url = f"{self.url}/rest/v1/detected_leads"
+            url += f"?select=id,message_id,confidence_score,reasoning,matched_criteria,detected_at"
+            url += f"&user_id=eq.{user_id}"
+            url += f"&is_contacted=eq.false"
+            url += f"&order=detected_at.desc"
+            url += f"&limit=100"
+            
+            async with self.session.get(url) as resp:
+                if resp.status != 200:
+                    print(f"⚠️ Failed to get uncontacted leads: {resp.status}")
+                    return []
+                
+                detected_leads = await resp.json()
+                
+                if not detected_leads:
+                    return []
+                
+                # Get associated messages for each lead
+                result = []
+                for lead in detected_leads:
+                    # Get message details
+                    msg_url = f"{self.url}/rest/v1/messages"
+                    msg_url += f"?select=username,user_id,message,chat_name,message_time"
+                    msg_url += f"&id=eq.{lead['message_id']}"
+                    
+                    async with self.session.get(msg_url) as msg_resp:
+                        if msg_resp.status == 200:
+                            messages = await msg_resp.json()
+                            if messages:
+                                message = messages[0]
+                                # Combine lead and message data
+                                result.append({
+                                    'lead_id': lead['id'],
+                                    'message_id': lead['message_id'],
+                                    'confidence_score': lead['confidence_score'],
+                                    'reasoning': lead['reasoning'],
+                                    'matched_criteria': lead['matched_criteria'],
+                                    'username': message.get('username'),
+                                    'telegram_user_id': message.get('user_id'),
+                                    'message': message.get('message'),
+                                    'chat_name': message.get('chat_name'),
+                                    'message_time': message.get('message_time')
+                                })
+                
+                return result
+                
+        except Exception as e:
+            print(f"❌ Error getting uncontacted leads: {e}")
+            return []
     
     async def mark_lead_contacted(self, lead_id: int):
         """Mark lead as contacted"""
