@@ -162,17 +162,36 @@ class SupabaseClient:
     # ============= ACCOUNTS =============
     
     async def get_accounts_for_user(self, user_id: str) -> List[Dict]:
-        """Get available accounts"""
+        """Get available accounts with full statistics for smart rotation"""
         return await self._get(
             'telegram_accounts',
             {'user_id': user_id, 'status': 'active', 'is_available': True},
-            order='last_used_at.asc.nullsfirst'
+            select='*',  # Get all fields including total_messages_sent, reliability_score, created_at
+            order='reliability_score.desc,total_messages_sent.desc'  # Smart rotation order
         )
     
     async def update_account_usage(self, account_id: str):
-        """Update account usage"""
-        # Note: REST API can't increment, need to use RPC or get-then-update
+        """Update account usage and increment counters"""
+        # Get current values first (REST API limitation)
+        accounts = await self._get('telegram_accounts', {'id': account_id})
+        if not accounts:
+            return False
+        
+        account = accounts[0]
+        
+        # Increment counters
+        messages_today = account.get('messages_sent_today', 0) + 1
+        total_sent = account.get('total_messages_sent', 0) + 1
+        reliability = account.get('reliability_score', 50)
+        
+        # Increase reliability slightly with each successful message (max 100)
+        if reliability < 100:
+            reliability = min(100, reliability + 1)
+        
         return await self._patch('telegram_accounts', {'id': account_id}, {
+            'messages_sent_today': messages_today,
+            'total_messages_sent': total_sent,
+            'reliability_score': reliability,
             'last_used_at': datetime.utcnow().isoformat(),
             'updated_at': datetime.utcnow().isoformat()
         })
