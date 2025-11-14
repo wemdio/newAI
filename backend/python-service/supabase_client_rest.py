@@ -166,10 +166,11 @@ class SupabaseClient:
         print(f"🔍 DEBUG: Fetching accounts for user_id={user_id}")
         
         # Build URL for debugging
+        # Note: For boolean fields in Supabase REST API, use 'is.true' not 'eq.true'
         url = f"{self.url}/rest/v1/telegram_accounts?select=*"
         url += f"&user_id=eq.{user_id}"
         url += f"&status=eq.active"
-        url += f"&is_available=eq.true"
+        url += f"&is_available=is.true"  # Fixed: use 'is.true' for boolean
         url += f"&order=last_used_at.asc.nullsfirst"  # Simplify sorting for debugging
         
         print(f"🔍 DEBUG: Request URL: {url}")
