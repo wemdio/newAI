@@ -396,7 +396,8 @@ router.post('/accounts/import-session', async (req, res) => {
         api_id: parseInt(finalApiId),
         api_hash: finalApiHash,
         phone_number: null, // Will be filled when session is used
-        status: 'active'
+        status: 'active',
+        is_available: true // Make account available for Python Worker
       })
       .select()
       .single();
