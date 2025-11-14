@@ -572,9 +572,7 @@ const AIMessaging = ({ session }) => {
                     `${apiUrl}/messaging/accounts/import-session`,
                     {
                       account_name: accountName,
-                      session_string: sessionString.trim(),
-                      api_id: newAccount.api_id || '',
-                      api_hash: newAccount.api_hash || ''
+                      session_string: sessionString.trim()
                     },
                     {
                       headers: {
@@ -632,26 +630,7 @@ const AIMessaging = ({ session }) => {
                     style={{ fontFamily: 'monospace', fontSize: '12px' }}
                     required
                   />
-                </div>
-                
-                <div className="form-group">
-                  <label>API ID (опционально)</label>
-                  <input
-                    type="text"
-                    placeholder="Если известен"
-                    value={newAccount.api_id}
-                    onChange={e => setNewAccount({...newAccount, api_id: e.target.value})}
-                  />
-                </div>
-                
-                <div className="form-group">
-                  <label>API Hash (опционально)</label>
-                  <input
-                    type="text"
-                    placeholder="Если известен"
-                    value={newAccount.api_hash}
-                    onChange={e => setNewAccount({...newAccount, api_hash: e.target.value})}
-                  />
+                  <small>🔐 API credentials будут использованы автоматически</small>
                 </div>
                 
                 <div className="form-actions">

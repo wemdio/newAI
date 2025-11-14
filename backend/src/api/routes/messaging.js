@@ -345,7 +345,16 @@ router.post('/accounts/import-session', async (req, res) => {
       });
     }
     
-    logger.info('Importing session string', { userId, accountNameLength: account_name?.length || 0 });
+    // Use default Telegram API credentials if not provided
+    // These are public Telegram Desktop credentials
+    const finalApiId = api_id || '2496';
+    const finalApiHash = api_hash || '8da85b0d5bfe62527e5b244c209159c3';
+    
+    logger.info('Importing session string', { 
+      userId, 
+      accountNameLength: account_name?.length || 0,
+      usingDefaultCredentials: !api_id 
+    });
     
     // Generate session filename
     const sessionName = `imported_${Date.now()}`;
@@ -384,8 +393,8 @@ router.post('/accounts/import-session', async (req, res) => {
         user_id: userId,
         account_name: account_name || 'Imported Account',
         session_file: sessionName,
-        api_id: api_id || null,
-        api_hash: api_hash || null,
+        api_id: parseInt(finalApiId),
+        api_hash: finalApiHash,
         phone_number: null, // Will be filled when session is used
         status: 'active'
       })
