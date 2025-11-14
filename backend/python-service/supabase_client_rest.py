@@ -163,12 +163,29 @@ class SupabaseClient:
     
     async def get_accounts_for_user(self, user_id: str) -> List[Dict]:
         """Get available accounts with full statistics for smart rotation"""
-        return await self._get(
-            'telegram_accounts',
-            {'user_id': user_id, 'status': 'active', 'is_available': True},
-            select='*',  # Get all fields including total_messages_sent, reliability_score, created_at
-            order='reliability_score.desc,total_messages_sent.desc'  # Smart rotation order
-        )
+        print(f"🔍 DEBUG: Fetching accounts for user_id={user_id}")
+        
+        # Build URL for debugging
+        url = f"{self.url}/rest/v1/telegram_accounts?select=*"
+        url += f"&user_id=eq.{user_id}"
+        url += f"&status=eq.active"
+        url += f"&is_available=eq.true"
+        url += f"&order=last_used_at.asc.nullsfirst"  # Simplify sorting for debugging
+        
+        print(f"🔍 DEBUG: Request URL: {url}")
+        
+        async with self.session.get(url) as resp:
+            print(f"🔍 DEBUG: Response status: {resp.status}")
+            if resp.status == 200:
+                accounts = await resp.json()
+                print(f"🔍 DEBUG: Found {len(accounts)} accounts")
+                if accounts:
+                    print(f"🔍 DEBUG: First account: {accounts[0].get('account_name')} (is_available={accounts[0].get('is_available')})")
+                return accounts
+            else:
+                error_text = await resp.text()
+                print(f"❌ DEBUG: Error response: {error_text}")
+                return []
     
     async def update_account_usage(self, account_id: str):
         """Update account usage and increment counters"""
