@@ -118,17 +118,33 @@ const AIMessaging = ({ session }) => {
   };
   
   useEffect(() => {
+    let isMounted = true;
+    
     // Ensure user exists before loading data
     const initializeAndLoad = async () => {
-      await ensureUserExists();
-      await loadData();
+      if (!isMounted) return;
+      
+      try {
+        await ensureUserExists();
+        await loadData();
+      } catch (error) {
+        console.error('Failed to initialize:', error);
+      }
     };
     
     initializeAndLoad();
     
-    // Refresh every 30 seconds
-    const interval = setInterval(loadData, 30000);
-    return () => clearInterval(interval);
+    // Refresh every 60 seconds (increased from 30 to reduce load)
+    const interval = setInterval(() => {
+      if (isMounted) {
+        loadData().catch(err => console.error('Auto-refresh failed:', err));
+      }
+    }, 60000);
+    
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
   
   // Create account (manual)
