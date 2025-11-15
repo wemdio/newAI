@@ -27,3 +27,4 @@ COMMENT ON COLUMN telegram_accounts.ban_count IS 'Number of times account receiv
 COMMENT ON COLUMN telegram_accounts.reliability_score IS 'Reliability score (0-100): higher = more reliable';
 COMMENT ON COLUMN telegram_accounts.last_ban_at IS 'Timestamp of last FloodWait/ban';
 
+

@@ -24,3 +24,4 @@ RUN mkdir -p sessions logs
 # Run the service
 CMD ["python", "-u", "main.py"]
 
+

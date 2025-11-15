@@ -10,3 +10,4 @@ COMMENT ON COLUMN telegram_accounts.api_id IS 'Telegram API ID (optional for ses
 COMMENT ON COLUMN telegram_accounts.api_hash IS 'Telegram API Hash (optional for session imports, can be extracted later)';
 
 
+

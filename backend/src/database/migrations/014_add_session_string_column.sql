@@ -8,3 +8,4 @@ ADD COLUMN IF NOT EXISTS session_string TEXT;
 
 COMMENT ON COLUMN telegram_accounts.session_string IS 'Hex-encoded Telethon session data (optional, for worker recreation)';
 
+

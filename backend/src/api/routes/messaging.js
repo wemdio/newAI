@@ -689,6 +689,35 @@ router.post('/campaigns/:id/stop', async (req, res) => {
 });
 
 /**
+ * POST /api/messaging/campaigns/:id/resume
+ * Resume paused campaign
+ */
+router.post('/campaigns/:id/resume', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    const { id } = req.params;
+
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from('messaging_campaigns')
+      .update({ status: 'running' })
+      .eq('id', id)
+      .eq('user_id', userId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    logger.info('Resumed campaign', { userId, campaignId: id });
+    res.json({ success: true, campaign: data });
+
+  } catch (error) {
+    logger.error('Failed to resume campaign', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
  * DELETE /api/messaging/campaigns/:id
  * Delete campaign
  */

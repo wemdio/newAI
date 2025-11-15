@@ -215,6 +215,22 @@ const AIMessaging = ({ session }) => {
     }
   };
 
+  // Resume campaign
+  const handleResumeCampaign = async (campaignId) => {
+    try {
+      const userId = getUserId();
+      await axios.post(`${apiUrl}/messaging/campaigns/${campaignId}/resume`, {}, {
+        headers: { 'x-user-id': userId }
+      });
+      
+      alert('Кампания возобновлена');
+      loadData();
+    } catch (error) {
+      console.error('Failed to resume campaign:', error);
+      alert('Ошибка: ' + error.response?.data?.error || error.message);
+    }
+  };
+
   // Delete campaign
   const handleDeleteCampaign = async (campaignId) => {
     if (!window.confirm('Вы уверены, что хотите удалить эту кампанию? Это действие нельзя отменить.')) {
@@ -432,6 +448,14 @@ const AIMessaging = ({ session }) => {
                         onClick={() => handlePauseCampaign(campaign.id)}
                       >
                         Приостановить
+                      </button>
+                    )}
+                    {campaign.status === 'paused' && (
+                      <button 
+                        className="btn btn-success" 
+                        onClick={() => handleResumeCampaign(campaign.id)}
+                      >
+                        ▶️ Возобновить
                       </button>
                     )}
                     {(campaign.status === 'draft' || campaign.status === 'paused' || campaign.status === 'stopped') && (

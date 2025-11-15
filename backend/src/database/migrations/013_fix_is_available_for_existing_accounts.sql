@@ -11,3 +11,4 @@ WHERE status = 'active'
 -- Add comment to column for clarity
 COMMENT ON COLUMN telegram_accounts.is_available IS 'Whether account is available for use by Python Worker (not banned, not in cooldown)';
 
+
