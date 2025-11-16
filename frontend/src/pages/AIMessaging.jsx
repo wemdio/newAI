@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import supabase from '../supabaseClient';
 import './AIMessaging.css';
@@ -8,39 +8,7 @@ const AIMessaging = () => {
   const [session, setSession] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   
-  // Initialize session
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setSessionLoading(false);
-    });
-    
-    // Subscribe to auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-    
-    return () => subscription.unsubscribe();
-  }, []);
-  
-  // Verify session exists
-  if (sessionLoading) {
-    return (
-      <div className="ai-messaging-loading">
-        <p>Загрузка...</p>
-      </div>
-    );
-  }
-  
-  if (!session?.user) {
-    return (
-      <div className="ai-messaging-loading">
-        <p>⚠️ Сессия не найдена. Пожалуйста, войдите в систему.</p>
-      </div>
-    );
-  }
-  
-  // State management
+  // State management - MUST be before any conditional returns!
   const [accounts, setAccounts] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
   const [conversations, setConversations] = useState([]);
@@ -75,6 +43,38 @@ const AIMessaging = () => {
     hot_lead_criteria: '',
     target_channel_id: ''
   });
+  
+  // Initialize session
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setSessionLoading(false);
+    });
+    
+    // Subscribe to auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    
+    return () => subscription.unsubscribe();
+  }, []);
+  
+  // Verify session exists - AFTER all hooks
+  if (sessionLoading) {
+    return (
+      <div className="ai-messaging-loading">
+        <p>Загрузка...</p>
+      </div>
+    );
+  }
+  
+  if (!session?.user) {
+    return (
+      <div className="ai-messaging-loading">
+        <p>⚠️ Сессия не найдена. Пожалуйста, войдите в систему.</p>
+      </div>
+    );
+  }
   
   // API base URL
   const getApiUrl = () => {
@@ -148,6 +148,9 @@ const AIMessaging = () => {
   };
   
   useEffect(() => {
+    // Only load data when session is ready
+    if (!session?.user || sessionLoading) return;
+    
     let isMounted = true;
     
     // Ensure user exists before loading data
@@ -176,7 +179,7 @@ const AIMessaging = () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [session, sessionLoading]);
   
   // Create account (manual)
   const handleCreateAccount = async (e) => {
