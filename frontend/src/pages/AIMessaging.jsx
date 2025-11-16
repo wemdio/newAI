@@ -44,6 +44,8 @@ const AIMessaging = () => {
     target_channel_id: ''
   });
   
+  // ALL HOOKS MUST BE AT THE TOP - BEFORE ANY CONDITIONAL RETURNS!
+  
   // Initialize session
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -59,99 +61,80 @@ const AIMessaging = () => {
     return () => subscription.unsubscribe();
   }, []);
   
-  // Verify session exists - AFTER all hooks
-  if (sessionLoading) {
-    return (
-      <div className="ai-messaging-loading">
-        <p>Загрузка...</p>
-      </div>
-    );
-  }
-  
-  if (!session?.user) {
-    return (
-      <div className="ai-messaging-loading">
-        <p>Сессия не найдена. Пожалуйста, войдите в систему.</p>
-      </div>
-    );
-  }
-  
-  // API base URL
-  const getApiUrl = () => {
-    if (window.location.hostname === 'localhost') {
-      return 'http://localhost:3000/api';
-    }
-    return 'https://wemdio-newai-f239.twc1.net/api';
-  };
-  
-  const apiUrl = getApiUrl();
-  
-  // Get user ID from Supabase session
-  const getUserId = () => {
-    if (!session?.user?.id) {
-      console.error('❌ No session found!');
-      return null;
-    }
-    return session.user.id;
-  };
-  
-  // Ensure user exists in database before using
-  const ensureUserExists = async () => {
-    const userId = getUserId();
-    if (!userId) {
-      throw new Error('No user session');
-    }
-    
-    try {
-      await axios.post(`${apiUrl}/auth/create-user`, { user_id: userId });
-      console.log('✅ User verified in database:', userId);
-      return userId;
-    } catch (err) {
-      console.error('Failed to ensure user exists:', err);
-      return userId;
-    }
-  };
-  
-  // Load all data
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const userId = getUserId();
-      const headers = { 'x-user-id': userId };
-      
-      // Load accounts
-      const accountsRes = await axios.get(`${apiUrl}/messaging/accounts`, { headers });
-      setAccounts(accountsRes.data.accounts || []);
-      
-      // Load campaigns
-      const campaignsRes = await axios.get(`${apiUrl}/messaging/campaigns`, { headers });
-      setCampaigns(campaignsRes.data.campaigns || []);
-      
-      // Load conversations
-      const conversationsRes = await axios.get(`${apiUrl}/messaging/conversations`, { headers });
-      setConversations(conversationsRes.data.conversations || []);
-      
-      // Load hot leads
-      const hotLeadsRes = await axios.get(`${apiUrl}/messaging/hot-leads`, { headers });
-      setHotLeads(hotLeadsRes.data.hot_leads || []);
-      
-      // Load stats
-      const statsRes = await axios.get(`${apiUrl}/messaging/stats`, { headers });
-      setStats(statsRes.data.stats);
-      
-    } catch (error) {
-      console.error('Failed to load data:', error);
-      alert('Ошибка загрузки данных. Проверьте консоль.');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
+  // Load data when session is ready
   useEffect(() => {
     // Only load data when session is ready
     if (!session?.user || sessionLoading) return;
     
     let isMounted = true;
+    
+    // Helper functions
+    const getApiUrl = () => {
+      if (window.location.hostname === 'localhost') {
+        return 'http://localhost:3000/api';
+      }
+      return 'https://wemdio-newai-f239.twc1.net/api';
+    };
+    
+    const apiUrl = getApiUrl();
+    
+    const getUserId = () => {
+      if (!session?.user?.id) {
+        console.error('❌ No session found!');
+        return null;
+      }
+      return session.user.id;
+    };
+    
+    const ensureUserExists = async () => {
+      const userId = getUserId();
+      if (!userId) {
+        throw new Error('No user session');
+      }
+      
+      try {
+        await axios.post(`${apiUrl}/auth/create-user`, { user_id: userId });
+        console.log('✅ User verified in database:', userId);
+        return userId;
+      } catch (err) {
+        console.error('Failed to ensure user exists:', err);
+        return userId;
+      }
+    };
+    
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const userId = getUserId();
+        const headers = { 'x-user-id': userId };
+        
+        // Load accounts
+        const accountsRes = await axios.get(`${apiUrl}/messaging/accounts`, { headers });
+        setAccounts(accountsRes.data.accounts || []);
+        
+        // Load campaigns
+        const campaignsRes = await axios.get(`${apiUrl}/messaging/campaigns`, { headers });
+        setCampaigns(campaignsRes.data.campaigns || []);
+        
+        // Load conversations
+        const conversationsRes = await axios.get(`${apiUrl}/messaging/conversations`, { headers });
+        setConversations(conversationsRes.data.conversations || []);
+        
+        // Load hot leads
+        const hotLeadsRes = await axios.get(`${apiUrl}/messaging/hot-leads`, { headers });
+        setHotLeads(hotLeadsRes.data.hot_leads || []);
+        
+        // Load stats
+        const statsRes = await axios.get(`${apiUrl}/messaging/stats`, { headers });
+        setStats(statsRes.data.stats);
+        
+      } catch (error) {
+        console.error('Failed to load data:', error);
+        alert('Ошибка загрузки данных. Проверьте консоль.');
+      } finally {
+        setLoading(false);
+      }
+    };
     
     // Ensure user exists before loading data
     const initializeAndLoad = async () => {
@@ -180,6 +163,41 @@ const AIMessaging = () => {
       clearInterval(interval);
     };
   }, [session, sessionLoading]);
+  
+  // NOW we can do conditional returns - AFTER all hooks
+  if (sessionLoading) {
+    return (
+      <div className="ai-messaging-loading">
+        <p>Загрузка...</p>
+      </div>
+    );
+  }
+  
+  if (!session?.user) {
+    return (
+      <div className="ai-messaging-loading">
+        <p>Сессия не найдена. Пожалуйста, войдите в систему.</p>
+      </div>
+    );
+  }
+  
+  // Helper functions for component (used in handlers)
+  const getApiUrl = () => {
+    if (window.location.hostname === 'localhost') {
+      return 'http://localhost:3000/api';
+    }
+    return 'https://wemdio-newai-f239.twc1.net/api';
+  };
+  
+  const apiUrl = getApiUrl();
+  
+  const getUserId = () => {
+    if (!session?.user?.id) {
+      console.error('❌ No session found!');
+      return null;
+    }
+    return session.user.id;
+  };
   
   // Create account (manual)
   const handleCreateAccount = async (e) => {
