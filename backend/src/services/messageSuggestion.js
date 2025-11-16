@@ -25,8 +25,14 @@ export const generateMessageSuggestion = async (lead, analysis, messagePrompt, a
 - Следуй инструкциям пользователя
 - Ответ должен быть готовым шаблоном сообщения`;
 
+    // Auto-replace placeholders in user prompt
+    const processedPrompt = messagePrompt
+      .replace(/\[название чата\]/gi, lead.chat_name || 'этом чате')
+      .replace(/\[имя\]/gi, lead.first_name || 'друг')
+      .replace(/\[username\]/gi, lead.username ? '@' + lead.username : 'вы');
+    
     const userPrompt = `ИНСТРУКЦИИ ПОЛЬЗОВАТЕЛЯ:
-${messagePrompt}
+${processedPrompt}
 
 ИНФОРМАЦИЯ О ЛИДЕ:
 Имя: ${lead.first_name || ''} ${lead.last_name || ''}
