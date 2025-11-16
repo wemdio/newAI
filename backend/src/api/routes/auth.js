@@ -181,6 +181,24 @@ router.post('/telegram', asyncHandler(async (req, res) => {
       email: email
     });
     
+    // Create user_config entry for new user
+    const { error: configError } = await supabase
+      .from('user_config')
+      .insert({
+        user_id: newUser.user.id,
+        lead_prompt: 'Identify potential customers asking for services or products. Look for people who are actively searching for solutions or expressing needs that could be met with a product or service.',
+        telegram_channel_id: 'not_configured',
+        is_active: false
+      });
+    
+    if (configError) {
+      logger.error('Failed to create user_config', {
+        error: configError.message,
+        userId: newUser.user.id
+      });
+      // Don't fail the registration, just log the error
+    }
+    
     return res.json({
       success: true,
       user: {
