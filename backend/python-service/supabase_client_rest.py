@@ -238,6 +238,25 @@ class SupabaseClient:
     
     # ============= CONVERSATIONS =============
     
+    async def check_existing_conversation(self, campaign_id: str, peer_user_id: int) -> bool:
+        """Check if conversation already exists with this user in this campaign"""
+        try:
+            url = f"{self.url}/rest/v1/ai_conversations"
+            url += f"?select=id"
+            url += f"&campaign_id=eq.{campaign_id}"
+            url += f"&peer_user_id=eq.{peer_user_id}"
+            url += f"&status=in.(active,waiting,hot_lead)"  # Any active conversation
+            url += f"&limit=1"
+            
+            async with self.session.get(url) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return len(data) > 0
+                return False
+        except Exception as e:
+            print(f"⚠️ Error checking existing conversation: {e}")
+            return False  # On error, assume no conversation (safer to message)
+    
     async def create_conversation(
         self, 
         campaign_id: str, 

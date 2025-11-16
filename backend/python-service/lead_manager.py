@@ -109,6 +109,22 @@ class LeadManager:
         print(f"      🎯 Confidence: {lead['confidence_score']}%")
         
         try:
+            # Get Telegram user ID first
+            user_info = await self.telethon.get_user_info(account_id, username)
+            telegram_user_id = user_info['id'] if user_info else 0
+            
+            # Check if we already have an active conversation with this user in this campaign
+            existing_conversation = await self.supabase.check_existing_conversation(
+                campaign_id=campaign_id,
+                peer_user_id=telegram_user_id
+            )
+            
+            if existing_conversation:
+                print(f"      ⏭️ Skipping - already have active conversation with this user")
+                # Still mark as contacted to avoid processing again
+                await self.supabase.mark_lead_contacted(lead_id)
+                return True  # Not an error, just skip
+            
             # Generate first message using AI
             first_message = await self.ai.generate_first_message(lead)
             
@@ -124,10 +140,6 @@ class LeadManager:
             if not success:
                 print(f"      ❌ Failed to send message")
                 return False
-            
-            # Get Telegram user ID
-            user_info = await self.telethon.get_user_info(account_id, username)
-            telegram_user_id = user_info['id'] if user_info else 0
             
             # Create conversation record
             conversation_id = await self.supabase.create_conversation(
