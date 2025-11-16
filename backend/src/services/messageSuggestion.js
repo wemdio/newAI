@@ -28,6 +28,7 @@ export const generateMessageSuggestion = async (lead, analysis, messagePrompt, a
     // Auto-replace placeholders in user prompt
     const processedPrompt = messagePrompt
       .replace(/\[название чата\]/gi, lead.chat_name || 'этом чате')
+      .replace(/\[чат\]/gi, lead.chat_name || 'чате')
       .replace(/\[имя\]/gi, lead.first_name || 'друг')
       .replace(/\[username\]/gi, lead.username ? '@' + lead.username : 'вы');
     
