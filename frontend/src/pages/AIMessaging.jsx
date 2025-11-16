@@ -1,9 +1,37 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
+import supabase from '../supabaseClient';
 import './AIMessaging.css';
 
-const AIMessaging = ({ session }) => {
+const AIMessaging = () => {
+  // Get session directly from Supabase to avoid rerenders from parent
+  const [session, setSession] = useState(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
+  
+  // Initialize session
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setSessionLoading(false);
+    });
+    
+    // Subscribe to auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    
+    return () => subscription.unsubscribe();
+  }, []);
+  
   // Verify session exists
+  if (sessionLoading) {
+    return (
+      <div className="ai-messaging-loading">
+        <p>Загрузка...</p>
+      </div>
+    );
+  }
+  
   if (!session?.user) {
     return (
       <div className="ai-messaging-loading">
@@ -24,7 +52,9 @@ const AIMessaging = ({ session }) => {
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
   const [showConversationDetail, setShowConversationDetail] = useState(false);
+  const [showEditCampaign, setShowEditCampaign] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState(null);
+  const [editingCampaign, setEditingCampaign] = useState(null);
   
   const [uploading, setUploading] = useState(false);
   const [sessionString, setSessionString] = useState('');
@@ -134,12 +164,13 @@ const AIMessaging = ({ session }) => {
     
     initializeAndLoad();
     
-    // Refresh every 60 seconds (increased from 30 to reduce load)
+    // Refresh every 5 minutes (300 seconds) to reduce page reloads
+    // User can manually refresh if needed
     const interval = setInterval(() => {
       if (isMounted) {
         loadData().catch(err => console.error('Auto-refresh failed:', err));
       }
-    }, 60000);
+    }, 300000);
     
     return () => {
       isMounted = false;
@@ -244,6 +275,37 @@ const AIMessaging = ({ session }) => {
     } catch (error) {
       console.error('Failed to resume campaign:', error);
       alert('Ошибка: ' + error.response?.data?.error || error.message);
+    }
+  };
+  
+  // Open edit campaign modal
+  const openEditCampaign = (campaign) => {
+    setEditingCampaign({
+      id: campaign.id,
+      name: campaign.name,
+      communication_prompt: campaign.communication_prompt,
+      hot_lead_criteria: campaign.hot_lead_criteria,
+      target_channel_id: campaign.target_channel_id || ''
+    });
+    setShowEditCampaign(true);
+  };
+  
+  // Update campaign
+  const handleUpdateCampaign = async (e) => {
+    e.preventDefault();
+    try {
+      const userId = getUserId();
+      await axios.put(`${apiUrl}/messaging/campaigns/${editingCampaign.id}`, editingCampaign, {
+        headers: { 'x-user-id': userId }
+      });
+      
+      alert('Кампания обновлена!');
+      setShowEditCampaign(false);
+      setEditingCampaign(null);
+      loadData();
+    } catch (error) {
+      console.error('Failed to update campaign:', error);
+      alert('Ошибка обновления: ' + error.response?.data?.error || error.message);
     }
   };
 
@@ -474,6 +536,13 @@ const AIMessaging = ({ session }) => {
                         ▶️ Возобновить
                       </button>
                     )}
+                    <button 
+                      className="btn btn-primary" 
+                      onClick={() => openEditCampaign(campaign)}
+                      title="Редактировать промпты"
+                    >
+                      ✏️ Изменить
+                    </button>
                     {(campaign.status === 'draft' || campaign.status === 'paused' || campaign.status === 'stopped') && (
                       <button 
                         className="btn btn-danger" 
@@ -775,6 +844,75 @@ const AIMessaging = ({ session }) => {
                 </button>
                 <button type="submit" className="btn btn-primary">
                   Создать
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      
+      {/* Edit Campaign Modal */}
+      {showEditCampaign && editingCampaign && (
+        <div className="modal-overlay" onClick={() => setShowEditCampaign(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>✏️ Редактировать кампанию</h2>
+              <button className="close-btn" onClick={() => setShowEditCampaign(false)}>×</button>
+            </div>
+            
+            <form onSubmit={handleUpdateCampaign}>
+              <div className="form-group">
+                <label>Название кампании *</label>
+                <input
+                  type="text"
+                  value={editingCampaign.name}
+                  onChange={e => setEditingCampaign({...editingCampaign, name: e.target.value})}
+                  placeholder="Например: Весенняя рассылка 2025"
+                  required
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Промпт для общения *</label>
+                <textarea
+                  rows="6"
+                  value={editingCampaign.communication_prompt}
+                  onChange={e => setEditingCampaign({...editingCampaign, communication_prompt: e.target.value})}
+                  placeholder="Например: Ты менеджер по продажам. Веди диалог естественно..."
+                  required
+                />
+                <small>Изменения применятся к новым диалогам</small>
+              </div>
+              
+              <div className="form-group">
+                <label>Критерии горячего лида *</label>
+                <textarea
+                  rows="4"
+                  value={editingCampaign.hot_lead_criteria}
+                  onChange={e => setEditingCampaign({...editingCampaign, hot_lead_criteria: e.target.value})}
+                  placeholder="Например: Лид горячий если он указал бюджет, спросил цены..."
+                  required
+                />
+                <small>Изменения применятся к новым сообщениям</small>
+              </div>
+              
+              <div className="form-group">
+                <label>Telegram канал для уведомлений (опционально)</label>
+                <input
+                  type="text"
+                  value={editingCampaign.target_channel_id}
+                  onChange={e => setEditingCampaign({...editingCampaign, target_channel_id: e.target.value})}
+                  placeholder="-100123456789"
+                />
+                <small>ID канала куда постить горячие лиды</small>
+              </div>
+              
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditCampaign(false)}>
+                  Отмена
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  💾 Сохранить
                 </button>
               </div>
             </form>
