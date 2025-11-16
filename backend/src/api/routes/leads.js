@@ -40,7 +40,11 @@ router.get('/', authenticateUser, asyncHandler(async (req, res) => {
     leadStatus: lead_status || null
   };
   
+  logger.info('GET /api/leads request', { userId: req.userId, filters });
+  
   const leads = await getDetectedLeads(req.userId, filters);
+  
+  logger.info('GET /api/leads response', { userId: req.userId, leadsCount: leads.length });
   
   res.json({
     success: true,

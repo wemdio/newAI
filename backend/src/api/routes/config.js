@@ -16,14 +16,19 @@ const router = express.Router();
  * Get user configuration
  */
 router.get('/', authenticateUser, asyncHandler(async (req, res) => {
+  logger.info('GET /api/config request', { userId: req.userId });
+  
   const config = await getUserConfig(req.userId);
   
   if (!config) {
+    logger.warn('Config not found', { userId: req.userId });
     return res.status(404).json({
       error: 'Configuration not found',
       message: 'No configuration exists for this user'
     });
   }
+  
+  logger.info('Config found', { userId: req.userId, configId: config.id });
   
   // Don't send API key in response (security)
   const safeConfig = {
