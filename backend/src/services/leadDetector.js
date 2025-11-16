@@ -78,17 +78,31 @@ export const saveDetectedLead = async (userId, message, analysis) => {
     // Calculate message hash for deduplication
     const messageText = message.message || '';
     const messageHash = crypto.createHash('sha256').update(messageText).digest('hex');
-    const senderId = message.from_user_id || message.sender_id || message.from_id || 'unknown';
+    
+    // Use username as sender identifier (this is the actual field in messages table)
+    // Fallback to message_hash if no username
+    const senderId = message.username || messageHash;
     
     // Check for duplicates in the last 7 days
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const { data: existingLeads, error: checkError } = await supabase
+    
+    // Build duplicate check query
+    let duplicateQuery = supabase
       .from('detected_leads')
-      .select('id, detected_at')
+      .select('id, detected_at, sender_id')
       .eq('user_id', userId)
-      .eq('sender_id', String(senderId))
-      .gte('detected_at', sevenDaysAgo.toISOString())
-      .limit(1);
+      .gte('detected_at', sevenDaysAgo.toISOString());
+    
+    // If we have a username, check by username
+    // Otherwise, check by message_hash to avoid exact duplicate messages
+    if (message.username) {
+      duplicateQuery = duplicateQuery.eq('sender_id', String(senderId));
+    } else {
+      // No username - check if we've seen this exact message before
+      duplicateQuery = duplicateQuery.eq('message_hash', messageHash);
+    }
+    
+    const { data: existingLeads, error: checkError } = await duplicateQuery.limit(1);
     
     if (checkError) {
       logger.warn('Failed to check for duplicates, proceeding with save', {
@@ -99,10 +113,11 @@ export const saveDetectedLead = async (userId, message, analysis) => {
     if (existingLeads && existingLeads.length > 0) {
       logger.info('Duplicate lead detected - skipping save', {
         userId,
-        senderId,
+        senderId: message.username ? senderId : 'no_username',
         messageId: message.id,
         existingLeadId: existingLeads[0].id,
-        lastDetected: existingLeads[0].detected_at
+        lastDetected: existingLeads[0].detected_at,
+        checkType: message.username ? 'by_username' : 'by_message_hash'
       });
       return null; // Skip duplicate
     }
