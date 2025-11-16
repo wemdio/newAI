@@ -5,20 +5,24 @@ import supabase from '../supabaseClient';
 const getApiBaseUrl = () => {
   // If VITE_API_URL is set during build, use it
   if (import.meta.env.VITE_API_URL) {
+    console.log('Using VITE_API_URL:', import.meta.env.VITE_API_URL);
     return import.meta.env.VITE_API_URL;
   }
   
   // Production domain
   if (window.location.hostname === 'telegram-scanner.ru') {
+    console.log('Detected telegram-scanner.ru domain');
     return 'https://wemdio-newai-f239.twc1.net/api';
   }
   
   // Timeweb Cloud fallback (*.twc1.net)
   if (window.location.hostname.includes('twc1.net')) {
+    console.log('Detected twc1.net domain, using hardcoded API URL');
     return 'https://wemdio-newai-f239.twc1.net/api';
   }
   
   // Default to localhost for local development
+  console.log('Using localhost API URL');
   return 'http://localhost:3000/api';
 };
 
