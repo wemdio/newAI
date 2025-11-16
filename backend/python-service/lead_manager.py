@@ -111,6 +111,13 @@ class LeadManager:
         try:
             # Get Telegram user ID first
             user_info = await self.telethon.get_user_info(account_id, username)
+            
+            # Skip if it's a channel or group
+            if user_info is False:
+                print(f"      ⏭️ Skipping - @{username} is a channel/group, not a user")
+                await self.supabase.mark_lead_contacted(lead_id)
+                return True  # Not an error, just skip
+            
             telegram_user_id = user_info['id'] if user_info else 0
             
             # Check if we already have an active conversation with this user in this campaign

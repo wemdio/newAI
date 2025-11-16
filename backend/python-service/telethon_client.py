@@ -2,7 +2,9 @@
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
 from telethon.errors import (
-    FloodWaitError, 
+    FloodWaitError,
+    PeerFloodError,
+    ChatWriteForbiddenError,
     UserBannedInChannelError,
     AuthKeyUnregisteredError,
     SessionPasswordNeededError
@@ -219,19 +221,34 @@ class TelethonManager:
             return True
             
         except FloodWaitError as e:
-            # Telegram rate limit
+            # Telegram rate limit - specific time
             print(f"🚫 FloodWait for {e.seconds}s")
             await self.safety.handle_flood_wait(account_id, e.seconds)
             return False
             
+        except PeerFloodError:
+            # Too many messages sent - ban for several hours
+            print(f"🚫🚫 PeerFlood detected - account banned for spam!")
+            print(f"   Account {account_id} will be paused for 24 hours")
+            # Pause for 24 hours (86400 seconds)
+            await self.safety.handle_flood_wait(account_id, 86400)
+            return False
+            
+        except ChatWriteForbiddenError:
+            # Can't write to this user/chat (probably a channel or bot)
+            print(f"⚠️ Cannot write to @{username} - might be a channel or restricted")
+            return False
+            
         except UserBannedInChannelError:
-            # Account banned
-            print(f"🔒 Account {account_id} banned")
+            # Account permanently banned
+            print(f"🔒 Account {account_id} permanently banned")
             await self.safety.handle_account_ban(account_id)
             return False
             
         except Exception as e:
             print(f"❌ Error sending message: {e}")
+            import traceback
+            traceback.print_exc()
             return False
     
     async def _setup_message_listener(self, account_id: str, client: TelegramClient):
@@ -265,7 +282,7 @@ class TelethonManager:
             username: Target username
         
         Returns:
-            User info dict or None
+            User info dict or None, or False if it's a channel
         """
         client = self.clients.get(account_id)
         if not client:
@@ -273,11 +290,18 @@ class TelethonManager:
         
         try:
             entity = await client.get_entity(username)
+            
+            # Check if it's a channel/group (not a user)
+            if hasattr(entity, 'broadcast') or hasattr(entity, 'megagroup'):
+                print(f"⚠️ @{username} is a channel/group, not a user")
+                return False
+            
+            # It's a user - return info
             return {
                 'id': entity.id,
-                'username': entity.username,
-                'first_name': entity.first_name,
-                'last_name': entity.last_name,
+                'username': getattr(entity, 'username', None),
+                'first_name': getattr(entity, 'first_name', ''),
+                'last_name': getattr(entity, 'last_name', ''),
                 'phone': getattr(entity, 'phone', None)
             }
         except Exception as e:
