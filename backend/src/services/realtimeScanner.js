@@ -152,6 +152,15 @@ const processMessagesForUser = async (messages, userConfig) => {
           match.analysis
         );
 
+        // Skip if duplicate (savedLead will be null)
+        if (!savedLead) {
+          logger.info('Skipped duplicate lead in realtime scanner', {
+            userId,
+            messageId: match.message.id
+          });
+          continue;
+        }
+
         logger.info('Lead detected and saved', {
           userId,
           leadId: savedLead.id,

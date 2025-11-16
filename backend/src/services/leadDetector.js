@@ -68,11 +68,44 @@ export const fetchRecentMessages = async (options = {}) => {
  * @param {string} userId - User ID
  * @param {object} message - Original message
  * @param {object} analysis - AI analysis result
- * @returns {object} Saved lead
+ * @returns {object} Saved lead or null if duplicate
  */
 export const saveDetectedLead = async (userId, message, analysis) => {
   try {
     const supabase = getSupabase();
+    const crypto = await import('crypto');
+    
+    // Calculate message hash for deduplication
+    const messageText = message.message || '';
+    const messageHash = crypto.createHash('sha256').update(messageText).digest('hex');
+    const senderId = message.from_user_id || message.sender_id || message.from_id || 'unknown';
+    
+    // Check for duplicates in the last 7 days
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const { data: existingLeads, error: checkError } = await supabase
+      .from('detected_leads')
+      .select('id, detected_at')
+      .eq('user_id', userId)
+      .eq('sender_id', String(senderId))
+      .gte('detected_at', sevenDaysAgo.toISOString())
+      .limit(1);
+    
+    if (checkError) {
+      logger.warn('Failed to check for duplicates, proceeding with save', {
+        error: checkError.message
+      });
+    }
+    
+    if (existingLeads && existingLeads.length > 0) {
+      logger.info('Duplicate lead detected - skipping save', {
+        userId,
+        senderId,
+        messageId: message.id,
+        existingLeadId: existingLeads[0].id,
+        lastDetected: existingLeads[0].detected_at
+      });
+      return null; // Skip duplicate
+    }
     
     const leadData = {
       user_id: userId,
@@ -81,7 +114,9 @@ export const saveDetectedLead = async (userId, message, analysis) => {
       reasoning: analysis.aiResponse.reasoning,
       matched_criteria: analysis.aiResponse.matched_criteria,
       posted_to_telegram: false,
-      is_contacted: false
+      is_contacted: false,
+      message_hash: messageHash,
+      sender_id: String(senderId)
     };
     
     const { data, error } = await supabase
@@ -96,6 +131,7 @@ export const saveDetectedLead = async (userId, message, analysis) => {
       leadId: data.id,
       messageId: message.id,
       userId,
+      senderId,
       confidence: analysis.aiResponse.confidence_score
     });
     
@@ -213,6 +249,15 @@ export const detectLeads = async (userId, userConfig, options = {}) => {
     for (const match of analysisResult.matches) {
       try {
         const savedLead = await saveDetectedLead(userId, match.message, match.analysis);
+        
+        // Skip if duplicate (savedLead will be null)
+        if (!savedLead) {
+          logger.info('Skipped duplicate lead', {
+            messageId: match.message.id,
+            userId
+          });
+          continue;
+        }
         
         results.leads.push({
           detectedLeadId: savedLead.id,
