@@ -1,22 +1,25 @@
-# Backend Dockerfile for Node.js API
-FROM node:20-alpine
+# Python Worker for AI Messaging Service
+FROM python:3.11-slim
 
 WORKDIR /app
 
-# Copy package files
-COPY backend/package.json backend/package-lock.json* ./
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    libssl-dev \
+    libffi-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install dependencies
-RUN npm install --production
+# Copy Python service
+COPY backend/python-service/ ./
 
-# Copy backend source code
-COPY backend/ ./
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Expose API port
-EXPOSE 3000
+# Create directories
+RUN mkdir -p sessions logs
 
-# Set production environment
-ENV NODE_ENV=production
-
-# Start the server
-CMD ["npm", "start"]
+# Run the service
+CMD ["python", "-u", "main.py"]
