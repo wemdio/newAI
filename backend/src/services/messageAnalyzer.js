@@ -329,9 +329,9 @@ ${JSON.stringify(messagesArray, null, 2)}
     
     // Calculate cost
     const actualTokens = response.usage || {
-      prompt_tokens: inputTokens,
+      prompt_tokens: estimatedInputTokens,
       completion_tokens: estimatedOutputTokens,
-      total_tokens: inputTokens + estimatedOutputTokens
+      total_tokens: estimatedInputTokens + estimatedOutputTokens
     };
     const totalCost = calculateCost(actualTokens.total_tokens, model);
     const costPerMessage = totalCost / batchSize;
@@ -365,9 +365,10 @@ ${JSON.stringify(messagesArray, null, 2)}
       const validation = validateAIResponse(aiResult);
       logValidationResult(validation, message.id);
       
+      // FIXED: validateAIResponse returns { valid, reason, validations }, NOT { isValid, data }!
       const result = {
-        isMatch: validation.data.is_match,
-        aiResponse: validation.data,
+        isMatch: aiResult.is_match && aiResult.confidence_score >= 60,
+        aiResponse: aiResult,
         metadata: {
           duration: duration / batchSize, // Average duration per message
           cost: costPerMessage,
@@ -377,7 +378,7 @@ ${JSON.stringify(messagesArray, null, 2)}
             total: actualTokens.total_tokens / batchSize
           },
           model,
-          validationPassed: validation.isValid
+          validationPassed: validation.valid
         }
       };
       
