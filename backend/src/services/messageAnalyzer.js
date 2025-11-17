@@ -208,13 +208,13 @@ ${JSON.stringify(messagesArray, null, 2)}
   ... (${batchSize} объектов)
 ]`;
 
-    // Estimate tokens
-    const inputTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt);
-    const estimatedOutputTokens = batchSize * 100; // ~100 tokens per result
-    
-    // Make API call
+    // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
     const model = process.env.AI_MODEL || 'google/gemini-2.0-flash-001';
+    
+    // Estimate tokens
+    const estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt);
+    const estimatedOutputTokens = batchSize * 100; // ~100 tokens per result
     
     logger.info('Making batch OpenRouter API call', {
       batchSize,
