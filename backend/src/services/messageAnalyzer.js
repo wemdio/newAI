@@ -261,9 +261,19 @@ ${JSON.stringify(messagesArray, null, 2)}
       contentPreview: content.substring(0, 200)
     });
     
+    // Strip markdown code blocks (Gemini wraps JSON in ```json ... ```)
+    let cleanContent = content.trim();
+    if (cleanContent.startsWith('```json')) {
+      cleanContent = cleanContent.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+      logger.info('Stripped markdown json block from response');
+    } else if (cleanContent.startsWith('```')) {
+      cleanContent = cleanContent.replace(/^```\n?/, '').replace(/\n?```$/, '');
+      logger.info('Stripped markdown code block from response');
+    }
+    
     let batchResults;
     try {
-      const parsed = JSON.parse(content);
+      const parsed = JSON.parse(cleanContent);
       
       logger.info('Parsed batch response structure', {
         batchSize,
