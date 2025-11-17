@@ -1,18 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import supabase from '../supabaseClient';
 import './AIMessaging.css';
 
-const AIMessaging = ({ session }) => {
-  // Verify session exists
-  if (!session?.user) {
-    return (
-      <div className="ai-messaging-loading">
-        <p>⚠️ Сессия не найдена. Пожалуйста, войдите в систему.</p>
-      </div>
-    );
-  }
+const AIMessaging = () => {
+  // Get session directly from Supabase to avoid rerenders from parent
+  const [session, setSession] = useState(null);
+  const [sessionLoading, setSessionLoading] = useState(true);
   
-  // State management
+  // State management - MUST be before any conditional returns!
   const [accounts, setAccounts] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
   const [conversations, setConversations] = useState([]);
@@ -24,7 +20,9 @@ const AIMessaging = ({ session }) => {
   const [showAddAccount, setShowAddAccount] = useState(false);
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
   const [showConversationDetail, setShowConversationDetail] = useState(false);
+  const [showEditCampaign, setShowEditCampaign] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState(null);
+  const [editingCampaign, setEditingCampaign] = useState(null);
   
   const [uploading, setUploading] = useState(false);
   const [sessionString, setSessionString] = useState('');
@@ -46,79 +44,97 @@ const AIMessaging = ({ session }) => {
     target_channel_id: ''
   });
   
-  // API base URL
-  const getApiUrl = () => {
-    if (window.location.hostname === 'localhost') {
-      return 'http://localhost:3000/api';
-    }
-    return 'https://wemdio-newai-f239.twc1.net/api';
-  };
+  // ALL HOOKS MUST BE AT THE TOP - BEFORE ANY CONDITIONAL RETURNS!
   
-  const apiUrl = getApiUrl();
-  
-  // Get user ID from Supabase session
-  const getUserId = () => {
-    if (!session?.user?.id) {
-      console.error('❌ No session found!');
-      return null;
-    }
-    return session.user.id;
-  };
-  
-  // Ensure user exists in database before using
-  const ensureUserExists = async () => {
-    const userId = getUserId();
-    if (!userId) {
-      throw new Error('No user session');
-    }
-    
-    try {
-      await axios.post(`${apiUrl}/auth/create-user`, { user_id: userId });
-      console.log('✅ User verified in database:', userId);
-      return userId;
-    } catch (err) {
-      console.error('Failed to ensure user exists:', err);
-      return userId;
-    }
-  };
-  
-  // Load all data
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      const userId = getUserId();
-      const headers = { 'x-user-id': userId };
-      
-      // Load accounts
-      const accountsRes = await axios.get(`${apiUrl}/messaging/accounts`, { headers });
-      setAccounts(accountsRes.data.accounts || []);
-      
-      // Load campaigns
-      const campaignsRes = await axios.get(`${apiUrl}/messaging/campaigns`, { headers });
-      setCampaigns(campaignsRes.data.campaigns || []);
-      
-      // Load conversations
-      const conversationsRes = await axios.get(`${apiUrl}/messaging/conversations`, { headers });
-      setConversations(conversationsRes.data.conversations || []);
-      
-      // Load hot leads
-      const hotLeadsRes = await axios.get(`${apiUrl}/messaging/hot-leads`, { headers });
-      setHotLeads(hotLeadsRes.data.hot_leads || []);
-      
-      // Load stats
-      const statsRes = await axios.get(`${apiUrl}/messaging/stats`, { headers });
-      setStats(statsRes.data.stats);
-      
-    } catch (error) {
-      console.error('Failed to load data:', error);
-      alert('Ошибка загрузки данных. Проверьте консоль.');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
+  // Initialize session
   useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setSessionLoading(false);
+    });
+    
+    // Subscribe to auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    
+    return () => subscription.unsubscribe();
+  }, []);
+  
+  // Load data when session is ready
+  useEffect(() => {
+    // Only load data when session is ready
+    if (!session?.user || sessionLoading) return;
+    
     let isMounted = true;
+    
+    // Helper functions
+    const getApiUrl = () => {
+      if (window.location.hostname === 'localhost') {
+        return 'http://localhost:3000/api';
+      }
+      return 'https://wemdio-newai-f239.twc1.net/api';
+    };
+    
+    const apiUrl = getApiUrl();
+    
+    const getUserId = () => {
+      if (!session?.user?.id) {
+        console.error('❌ No session found!');
+        return null;
+      }
+      return session.user.id;
+    };
+    
+    const ensureUserExists = async () => {
+      const userId = getUserId();
+      if (!userId) {
+        throw new Error('No user session');
+      }
+      
+      try {
+        await axios.post(`${apiUrl}/auth/create-user`, { user_id: userId });
+        console.log('✅ User verified in database:', userId);
+        return userId;
+      } catch (err) {
+        console.error('Failed to ensure user exists:', err);
+        return userId;
+      }
+    };
+    
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        const userId = getUserId();
+        const headers = { 'x-user-id': userId };
+        
+        // Load accounts
+        const accountsRes = await axios.get(`${apiUrl}/messaging/accounts`, { headers });
+        setAccounts(accountsRes.data.accounts || []);
+        
+        // Load campaigns
+        const campaignsRes = await axios.get(`${apiUrl}/messaging/campaigns`, { headers });
+        setCampaigns(campaignsRes.data.campaigns || []);
+        
+        // Load conversations
+        const conversationsRes = await axios.get(`${apiUrl}/messaging/conversations`, { headers });
+        setConversations(conversationsRes.data.conversations || []);
+        
+        // Load hot leads
+        const hotLeadsRes = await axios.get(`${apiUrl}/messaging/hot-leads`, { headers });
+        setHotLeads(hotLeadsRes.data.hot_leads || []);
+        
+        // Load stats
+        const statsRes = await axios.get(`${apiUrl}/messaging/stats`, { headers });
+        setStats(statsRes.data.stats);
+        
+      } catch (error) {
+        console.error('Failed to load data:', error);
+        alert('Ошибка загрузки данных. Проверьте консоль.');
+      } finally {
+        setLoading(false);
+      }
+    };
     
     // Ensure user exists before loading data
     const initializeAndLoad = async () => {
@@ -134,18 +150,54 @@ const AIMessaging = ({ session }) => {
     
     initializeAndLoad();
     
-    // Refresh every 60 seconds (increased from 30 to reduce load)
+    // Refresh every 5 minutes (300 seconds) to reduce page reloads
+    // User can manually refresh if needed
     const interval = setInterval(() => {
       if (isMounted) {
         loadData().catch(err => console.error('Auto-refresh failed:', err));
       }
-    }, 60000);
+    }, 300000);
     
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, []);
+  }, [session, sessionLoading]);
+  
+  // NOW we can do conditional returns - AFTER all hooks
+  if (sessionLoading) {
+    return (
+      <div className="ai-messaging-loading">
+        <p>Загрузка...</p>
+      </div>
+    );
+  }
+  
+  if (!session?.user) {
+    return (
+      <div className="ai-messaging-loading">
+        <p>Сессия не найдена. Пожалуйста, войдите в систему.</p>
+      </div>
+    );
+  }
+  
+  // Helper functions for component (used in handlers)
+  const getApiUrl = () => {
+    if (window.location.hostname === 'localhost') {
+      return 'http://localhost:3000/api';
+    }
+    return 'https://wemdio-newai-f239.twc1.net/api';
+  };
+  
+  const apiUrl = getApiUrl();
+  
+  const getUserId = () => {
+    if (!session?.user?.id) {
+      console.error('❌ No session found!');
+      return null;
+    }
+    return session.user.id;
+  };
   
   // Create account (manual)
   const handleCreateAccount = async (e) => {
@@ -246,6 +298,37 @@ const AIMessaging = ({ session }) => {
       alert('Ошибка: ' + error.response?.data?.error || error.message);
     }
   };
+  
+  // Open edit campaign modal
+  const openEditCampaign = (campaign) => {
+    setEditingCampaign({
+      id: campaign.id,
+      name: campaign.name,
+      communication_prompt: campaign.communication_prompt,
+      hot_lead_criteria: campaign.hot_lead_criteria,
+      target_channel_id: campaign.target_channel_id || ''
+    });
+    setShowEditCampaign(true);
+  };
+  
+  // Update campaign
+  const handleUpdateCampaign = async (e) => {
+    e.preventDefault();
+    try {
+      const userId = getUserId();
+      await axios.put(`${apiUrl}/messaging/campaigns/${editingCampaign.id}`, editingCampaign, {
+        headers: { 'x-user-id': userId }
+      });
+      
+      alert('Кампания обновлена!');
+      setShowEditCampaign(false);
+      setEditingCampaign(null);
+      loadData();
+    } catch (error) {
+      console.error('Failed to update campaign:', error);
+      alert('Ошибка обновления: ' + error.response?.data?.error || error.message);
+    }
+  };
 
   // Delete campaign
   const handleDeleteCampaign = async (campaignId) => {
@@ -313,7 +396,7 @@ const AIMessaging = ({ session }) => {
   return (
     <div className="ai-messaging">
       <div className="page-header">
-        <h1>🤖 AI Рассылки</h1>
+        <h1>AI Рассылки</h1>
         <p className="subtitle">
           Автоматическое общение с лидами через Telegram с использованием AI
         </p>
@@ -323,7 +406,6 @@ const AIMessaging = ({ session }) => {
       {stats && (
         <div className="stats-overview">
           <div className="stat-card">
-            <div className="stat-icon">📊</div>
             <div className="stat-content">
               <div className="stat-label">Кампании</div>
               <div className="stat-value">{stats.campaigns.total}</div>
@@ -332,7 +414,6 @@ const AIMessaging = ({ session }) => {
           </div>
           
           <div className="stat-card">
-            <div className="stat-icon">👥</div>
             <div className="stat-content">
               <div className="stat-label">Аккаунты</div>
               <div className="stat-value">{stats.accounts.total}</div>
@@ -341,7 +422,6 @@ const AIMessaging = ({ session }) => {
           </div>
           
           <div className="stat-card">
-            <div className="stat-icon">💬</div>
             <div className="stat-content">
               <div className="stat-label">Диалоги</div>
               <div className="stat-value">{stats.conversations.total}</div>
@@ -350,7 +430,6 @@ const AIMessaging = ({ session }) => {
           </div>
           
           <div className="stat-card hot">
-            <div className="stat-icon">🔥</div>
             <div className="stat-content">
               <div className="stat-label">Горячие лиды</div>
               <div className="stat-value">{stats.campaigns.total_hot_leads}</div>
@@ -363,7 +442,7 @@ const AIMessaging = ({ session }) => {
       {/* Telegram Accounts Section */}
       <section className="section accounts-section">
         <div className="section-header">
-          <h2>📱 Telegram Аккаунты</h2>
+          <h2>Telegram Аккаунты</h2>
           <button className="btn btn-primary" onClick={() => setShowAddAccount(true)}>
             + Добавить аккаунт
           </button>
@@ -371,7 +450,7 @@ const AIMessaging = ({ session }) => {
         
         {accounts.length === 0 ? (
           <div className="empty-state">
-            <p>😔 Нет аккаунтов</p>
+            <p>Нет аккаунтов</p>
             <p className="hint">Добавьте Telegram аккаунты для рассылки</p>
           </div>
         ) : (
@@ -381,9 +460,9 @@ const AIMessaging = ({ session }) => {
                 <div className="account-header">
                   <h3>{account.account_name}</h3>
                   <span className={`status-badge ${account.status}`}>
-                    {account.status === 'active' ? '✅ Активен' : 
-                     account.status === 'paused' ? '⏸️ Пауза' :
-                     account.status === 'banned' ? '🔒 Забанен' : '❌ Ошибка'}
+                    {account.status === 'active' ? 'Активен' : 
+                     account.status === 'paused' ? 'Пауза' :
+                     account.status === 'banned' ? 'Забанен' : 'Ошибка'}
                   </span>
                 </div>
                 
@@ -394,7 +473,7 @@ const AIMessaging = ({ session }) => {
                   </div>
                   <div className="info-row">
                     <span className="label">Прокси:</span>
-                    <span className="value">{account.proxy_url ? '✅ Есть' : '❌ Нет'}</span>
+                    <span className="value">{account.proxy_url ? 'Есть' : 'Нет'}</span>
                   </div>
                   <div className="info-row">
                     <span className="label">Сообщений сегодня:</span>
@@ -425,7 +504,7 @@ const AIMessaging = ({ session }) => {
       {/* Campaigns Section */}
       <section className="section campaigns-section">
         <div className="section-header">
-          <h2>🎯 Кампании</h2>
+          <h2>Кампании</h2>
           <button className="btn btn-primary" onClick={() => setShowCreateCampaign(true)}>
             + Создать кампанию
           </button>
@@ -433,7 +512,7 @@ const AIMessaging = ({ session }) => {
         
         {campaigns.length === 0 ? (
           <div className="empty-state">
-            <p>😔 Нет кампаний</p>
+            <p>Нет кампаний</p>
             <p className="hint">Создайте кампанию для автоматической рассылки</p>
           </div>
         ) : (
@@ -444,9 +523,9 @@ const AIMessaging = ({ session }) => {
                   <div>
                     <h3>{campaign.name}</h3>
                     <span className={`status-badge ${campaign.status}`}>
-                      {campaign.status === 'running' ? '🟢 Запущена' :
-                       campaign.status === 'paused' ? '⏸️ Приостановлена' :
-                       campaign.status === 'stopped' ? '⏹️ Остановлена' : '📝 Черновик'}
+                      {campaign.status === 'running' ? 'Запущена' :
+                       campaign.status === 'paused' ? 'Приостановлена' :
+                       campaign.status === 'stopped' ? 'Остановлена' : 'Черновик'}
                     </span>
                   </div>
                   <div className="campaign-actions">
@@ -471,16 +550,23 @@ const AIMessaging = ({ session }) => {
                         className="btn btn-success" 
                         onClick={() => handleResumeCampaign(campaign.id)}
                       >
-                        ▶️ Возобновить
+                        Возобновить
                       </button>
                     )}
+                    <button 
+                      className="btn btn-primary" 
+                      onClick={() => openEditCampaign(campaign)}
+                      title="Редактировать промпты"
+                    >
+                      Изменить
+                    </button>
                     {(campaign.status === 'draft' || campaign.status === 'paused' || campaign.status === 'stopped') && (
                       <button 
                         className="btn btn-danger" 
                         onClick={() => handleDeleteCampaign(campaign.id)}
                         title="Удалить кампанию"
                       >
-                        🗑️ Удалить
+                        Удалить
                       </button>
                     )}
                   </div>
@@ -523,7 +609,7 @@ const AIMessaging = ({ session }) => {
       {/* Conversations Section */}
       <section className="section conversations-section">
         <div className="section-header">
-          <h2>💬 Активные диалоги</h2>
+          <h2>Активные диалоги</h2>
           <span className="count-badge">{conversations.length}</span>
         </div>
         
@@ -539,9 +625,9 @@ const AIMessaging = ({ session }) => {
                   <div>
                     <strong>@{conv.peer_username || conv.peer_user_id}</strong>
                     <span className={`status-badge ${conv.status}`}>
-                      {conv.status === 'active' ? '🟢' :
-                       conv.status === 'hot_lead' ? '🔥' :
-                       conv.status === 'waiting' ? '⏳' : '⏹️'}
+                      {conv.status === 'active' ? 'Активен' :
+                       conv.status === 'hot_lead' ? 'Горячий' :
+                       conv.status === 'waiting' ? 'Ожидание' : 'Завершен'}
                     </span>
                   </div>
                   <span className="conv-account">
@@ -569,7 +655,7 @@ const AIMessaging = ({ session }) => {
       {/* Hot Leads Section */}
       <section className="section hot-leads-section">
         <div className="section-header">
-          <h2>🔥 Горячие лиды</h2>
+          <h2>Горячие лиды</h2>
           <span className="count-badge hot">{hotLeads.length}</span>
         </div>
         
@@ -603,7 +689,7 @@ const AIMessaging = ({ session }) => {
                     {(lead.conversation_history || []).map((msg, idx) => (
                       <div key={idx} className={`message ${msg.role}`}>
                         <div className="message-role">
-                          {msg.role === 'user' ? '👤 Лид' : '🤖 Мы'}
+                          {msg.role === 'user' ? 'Лид' : 'Мы'}
                         </div>
                         <div className="message-content">{msg.content}</div>
                       </div>
@@ -651,7 +737,7 @@ const AIMessaging = ({ session }) => {
                   );
                   
                   if (response.data.success) {
-                    alert('✅ Аккаунт успешно добавлен!');
+                    alert('Аккаунт успешно добавлен!');
                     setShowAddAccount(false);
                     setSessionString('');
                     setNewAccount({
@@ -672,7 +758,7 @@ const AIMessaging = ({ session }) => {
                 }
               }}>
                 <div className="help-box">
-                  💡 <strong>Session String</strong> - это зашифрованные данные сессии Telegram.<br/>
+                  <strong>Session String</strong> - это зашифрованные данные сессии Telegram.<br/>
                   Обычно выдается магазинами аккаунтов как длинная hex-строка.<br/>
                   <br/>
                   <strong>Пример:</strong> 838bbfe1808a243cecf7155620941acc2107...
@@ -699,13 +785,13 @@ const AIMessaging = ({ session }) => {
                     style={{ fontFamily: 'monospace', fontSize: '12px' }}
                     required
                   />
-                  <small>🔐 API credentials будут использованы автоматически</small>
+                  <small>API credentials будут использованы автоматически</small>
                 </div>
                 
                 <div className="form-actions">
                   <button type="button" onClick={() => setShowAddAccount(false)}>Отмена</button>
                   <button type="submit" className="primary" disabled={uploading}>
-                    {uploading ? '⏳ Импорт...' : '✅ Импортировать Session'}
+                    {uploading ? 'Импорт...' : 'Импортировать Session'}
                   </button>
                 </div>
               </form>
@@ -782,6 +868,75 @@ const AIMessaging = ({ session }) => {
         </div>
       )}
       
+      {/* Edit Campaign Modal */}
+      {showEditCampaign && editingCampaign && (
+        <div className="modal-overlay" onClick={() => setShowEditCampaign(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Редактировать кампанию</h2>
+              <button className="close-btn" onClick={() => setShowEditCampaign(false)}>×</button>
+            </div>
+            
+            <form onSubmit={handleUpdateCampaign}>
+              <div className="form-group">
+                <label>Название кампании *</label>
+                <input
+                  type="text"
+                  value={editingCampaign.name}
+                  onChange={e => setEditingCampaign({...editingCampaign, name: e.target.value})}
+                  placeholder="Например: Весенняя рассылка 2025"
+                  required
+                />
+              </div>
+              
+              <div className="form-group">
+                <label>Промпт для общения *</label>
+                <textarea
+                  rows="6"
+                  value={editingCampaign.communication_prompt}
+                  onChange={e => setEditingCampaign({...editingCampaign, communication_prompt: e.target.value})}
+                  placeholder="Например: Ты менеджер по продажам. Веди диалог естественно..."
+                  required
+                />
+                <small>Изменения применятся к новым диалогам</small>
+              </div>
+              
+              <div className="form-group">
+                <label>Критерии горячего лида *</label>
+                <textarea
+                  rows="4"
+                  value={editingCampaign.hot_lead_criteria}
+                  onChange={e => setEditingCampaign({...editingCampaign, hot_lead_criteria: e.target.value})}
+                  placeholder="Например: Лид горячий если он указал бюджет, спросил цены..."
+                  required
+                />
+                <small>Изменения применятся к новым сообщениям</small>
+              </div>
+              
+              <div className="form-group">
+                <label>Telegram канал для уведомлений (опционально)</label>
+                <input
+                  type="text"
+                  value={editingCampaign.target_channel_id}
+                  onChange={e => setEditingCampaign({...editingCampaign, target_channel_id: e.target.value})}
+                  placeholder="-100123456789"
+                />
+                <small>ID канала куда постить горячие лиды</small>
+              </div>
+              
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditCampaign(false)}>
+                  Отмена
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Сохранить
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      
       {/* Conversation Detail Modal */}
       {showConversationDetail && selectedConversation && (
         <div className="modal-overlay" onClick={() => setShowConversationDetail(false)}>
@@ -803,7 +958,7 @@ const AIMessaging = ({ session }) => {
                   <div key={idx} className={`message ${msg.role}`}>
                     <div className="message-header">
                       <span className="message-role">
-                        {msg.role === 'user' ? '👤 Лид' : '🤖 Мы'}
+                        {msg.role === 'user' ? 'Лид' : 'Мы'}
                       </span>
                       <span className="message-time">
                         {new Date(msg.timestamp).toLocaleString('ru')}

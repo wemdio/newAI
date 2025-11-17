@@ -264,7 +264,7 @@ function App() {
             <Routes>
               <Route path="/" element={<Leads />} />
               <Route path="/config" element={<Configuration />} />
-              <Route path="/messaging" element={<AIMessaging session={session} />} />
+              <Route path="/messaging" element={<AIMessaging />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
