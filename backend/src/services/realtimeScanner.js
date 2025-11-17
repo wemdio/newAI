@@ -105,7 +105,9 @@ const processMessagesForUser = async (messages, userConfig) => {
         userConfig.openrouter_api_key,
         {
           maxConcurrent: 3,
-          stopOnError: false
+          stopOnError: false,
+          useBatchApi: process.env.USE_BATCH_API !== 'false', // Enable by default
+          batchSize: parseInt(process.env.BATCH_SIZE || '5', 10) // 5 messages per API call
         }
       );
       
