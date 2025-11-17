@@ -192,20 +192,29 @@ ${JSON.stringify(messagesArray, null, 2)}
 
 ВАЖНО:
 1. Проанализируй КАЖДОЕ сообщение ОТДЕЛЬНО (не смешивай контекст!)
-2. Верни массив из ${batchSize} JSON объектов
+2. Верни ТОЛЬКО МАССИВ из ${batchSize} JSON объектов (без дополнительного текста!)
 3. Порядок результатов должен соответствовать порядку сообщений
 4. Каждый результат должен содержать: id, is_match, confidence_score, reasoning, matched_criteria
 
-ФОРМАТ ОТВЕТА:
+КРИТИЧЕСКИ ВАЖНО: Ответ должен начинаться с [ и заканчиваться ] - это должен быть чистый JSON массив!
+
+ФОРМАТ ОТВЕТА (ТОЛЬКО ЭТОТ JSON МАССИВ, БЕЗ ТЕКСТА):
 [
   {
     "id": "message_id_1",
     "is_match": boolean,
     "confidence_score": 0-100,
-    "reasoning": "краткое объяснение",
+    "reasoning": "краткое объяснение на русском",
     "matched_criteria": ["критерий1", "критерий2"]
   },
-  ... (${batchSize} объектов)
+  {
+    "id": "message_id_2",
+    "is_match": boolean,
+    "confidence_score": 0-100,
+    "reasoning": "краткое объяснение на русском",
+    "matched_criteria": []
+  }
+  ... (всего ${batchSize} объектов)
 ]`;
 
     // Get OpenRouter client and model
@@ -233,7 +242,7 @@ ${JSON.stringify(messagesArray, null, 2)}
         temperature: 0,
         top_p: 1,
         seed: 12345,
-        response_format: { type: 'json_object' },
+        // Don't use response_format for arrays - Gemini returns plain JSON array
         max_tokens: 2000 // Increased for batch
       });
     }, 3, 1000);
@@ -246,18 +255,65 @@ ${JSON.stringify(messagesArray, null, 2)}
       throw new AIServiceError('Empty response from AI');
     }
     
+    logger.info('Raw batch response received', {
+      batchSize,
+      contentLength: content.length,
+      contentPreview: content.substring(0, 200)
+    });
+    
     let batchResults;
     try {
       const parsed = JSON.parse(content);
-      // Handle both array and object with array
-      batchResults = Array.isArray(parsed) ? parsed : (parsed.results || parsed.analyses || []);
+      
+      logger.info('Parsed batch response structure', {
+        batchSize,
+        parsedType: typeof parsed,
+        isArray: Array.isArray(parsed),
+        keys: typeof parsed === 'object' ? Object.keys(parsed) : 'N/A'
+      });
+      
+      // Handle different response formats
+      if (Array.isArray(parsed)) {
+        batchResults = parsed;
+      } else if (parsed.results && Array.isArray(parsed.results)) {
+        batchResults = parsed.results;
+      } else if (parsed.analyses && Array.isArray(parsed.analyses)) {
+        batchResults = parsed.analyses;
+      } else if (parsed.messages && Array.isArray(parsed.messages)) {
+        batchResults = parsed.messages;
+      } else {
+        // Maybe it's a single-level object with numbered keys?
+        const keys = Object.keys(parsed).filter(k => !isNaN(k)).sort((a, b) => a - b);
+        if (keys.length > 0) {
+          batchResults = keys.map(k => parsed[k]);
+        } else {
+          throw new AIServiceError(
+            `Unexpected response format. Keys: ${Object.keys(parsed).join(', ')}`
+          );
+        }
+      }
     } catch (parseError) {
+      logger.error('Failed to parse batch response', {
+        error: parseError.message,
+        contentPreview: content.substring(0, 500)
+      });
       throw new AIServiceError(`Failed to parse batch response: ${parseError.message}`);
     }
     
-    if (!Array.isArray(batchResults) || batchResults.length !== batchSize) {
+    if (!Array.isArray(batchResults)) {
       throw new AIServiceError(
-        `Expected ${batchSize} results, got ${batchResults?.length || 0}`
+        `batchResults is not an array. Type: ${typeof batchResults}`
+      );
+    }
+    
+    if (batchResults.length !== batchSize) {
+      logger.warn('Batch size mismatch', {
+        expected: batchSize,
+        received: batchResults.length,
+        results: batchResults
+      });
+      throw new AIServiceError(
+        `Expected ${batchSize} results, got ${batchResults.length}`
       );
     }
     
@@ -275,6 +331,16 @@ ${JSON.stringify(messagesArray, null, 2)}
     for (let i = 0; i < messages.length; i++) {
       const message = messages[i];
       const aiResult = batchResults[i];
+      
+      // Check if result exists
+      if (!aiResult) {
+        logger.error('Missing batch result', {
+          messageId: message.id,
+          position: i,
+          totalResults: batchResults.length
+        });
+        throw new AIServiceError(`Missing result for message at position ${i}`);
+      }
       
       // Validate result has correct ID
       if (aiResult.id !== message.id.toString()) {
