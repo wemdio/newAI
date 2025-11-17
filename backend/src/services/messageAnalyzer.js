@@ -333,7 +333,8 @@ ${JSON.stringify(messagesArray, null, 2)}
       completion_tokens: estimatedOutputTokens,
       total_tokens: estimatedInputTokens + estimatedOutputTokens
     };
-    const totalCost = calculateCost(actualTokens.total_tokens, model);
+    // FIXED: calculateCost expects (inputTokens, outputTokens, model), not (totalTokens, model)
+    const totalCost = calculateCost(actualTokens.prompt_tokens, actualTokens.completion_tokens, model);
     const costPerMessage = totalCost / batchSize;
     
     // Process and validate each result
