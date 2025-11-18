@@ -21,8 +21,10 @@ const AIMessaging = () => {
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
   const [showConversationDetail, setShowConversationDetail] = useState(false);
   const [showEditCampaign, setShowEditCampaign] = useState(false);
+  const [showEditAccount, setShowEditAccount] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [editingCampaign, setEditingCampaign] = useState(null);
+  const [editingAccount, setEditingAccount] = useState(null);
   
   const [uploading, setUploading] = useState(false);
   const [sessionString, setSessionString] = useState('');
@@ -366,6 +368,41 @@ const AIMessaging = () => {
     }
   };
   
+  // Edit account proxy
+  const handleEditAccount = (account) => {
+    setEditingAccount({
+      id: account.id,
+      account_name: account.account_name,
+      proxy_url: account.proxy_url || ''
+    });
+    setShowEditAccount(true);
+  };
+  
+  // Update account proxy
+  const handleUpdateAccount = async (e) => {
+    e.preventDefault();
+    try {
+      const userId = getUserId();
+      await axios.put(
+        `${apiUrl}/messaging/accounts/${editingAccount.id}`,
+        {
+          proxy_url: editingAccount.proxy_url || null
+        },
+        {
+          headers: { 'x-user-id': userId }
+        }
+      );
+      
+      alert('Прокси обновлен! Перезапустите Python Worker чтобы применить изменения.');
+      setShowEditAccount(false);
+      setEditingAccount(null);
+      loadData();
+    } catch (error) {
+      console.error('Failed to update account:', error);
+      alert('Ошибка обновления: ' + (error.response?.data?.error || error.message));
+    }
+  };
+  
   // Delete account
   const handleDeleteAccount = async (accountId) => {
     if (!window.confirm('Удалить аккаунт?')) return;
@@ -488,6 +525,12 @@ const AIMessaging = () => {
                 </div>
                 
                 <div className="account-actions">
+                  <button 
+                    className="btn btn-small btn-secondary" 
+                    onClick={() => handleEditAccount(account)}
+                  >
+                    Редактировать
+                  </button>
                   <button 
                     className="btn btn-small btn-danger" 
                     onClick={() => handleDeleteAccount(account.id)}
@@ -727,7 +770,8 @@ const AIMessaging = () => {
                     `${apiUrl}/messaging/accounts/import-session`,
                     {
                       account_name: accountName,
-                      session_string: sessionString.trim()
+                      session_string: sessionString.trim(),
+                      proxy_url: newAccount.proxy_url || null
                     },
                     {
                       headers: {
@@ -786,6 +830,17 @@ const AIMessaging = () => {
                     required
                   />
                   <small>API credentials будут использованы автоматически</small>
+                </div>
+                
+                <div className="form-group">
+                  <label>Proxy URL (опционально)</label>
+                  <input
+                    type="text"
+                    placeholder="socks5://user:pass@1.2.3.4:1080"
+                    value={newAccount.proxy_url}
+                    onChange={e => setNewAccount({...newAccount, proxy_url: e.target.value})}
+                  />
+                  <small>Формат: protocol://username:password@host:port (socks5, socks4, http)</small>
                 </div>
                 
                 <div className="form-actions">
@@ -926,6 +981,54 @@ const AIMessaging = () => {
               
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowEditCampaign(false)}>
+                  Отмена
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Сохранить
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      
+      {/* Edit Account Modal */}
+      {showEditAccount && editingAccount && (
+        <div className="modal-overlay" onClick={() => setShowEditAccount(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Редактировать аккаунт</h2>
+              <button className="close-btn" onClick={() => setShowEditAccount(false)}>×</button>
+            </div>
+            
+            <form onSubmit={handleUpdateAccount}>
+              <div className="form-group">
+                <label>Название аккаунта</label>
+                <input
+                  type="text"
+                  value={editingAccount.account_name}
+                  disabled
+                  style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
+                />
+                <small>Название нельзя изменить</small>
+              </div>
+              
+              <div className="form-group">
+                <label>Proxy URL</label>
+                <input
+                  type="text"
+                  placeholder="socks5://user:pass@1.2.3.4:1080"
+                  value={editingAccount.proxy_url}
+                  onChange={e => setEditingAccount({...editingAccount, proxy_url: e.target.value})}
+                />
+                <small>Формат: protocol://username:password@host:port (socks5, socks4, http)</small>
+                <small style={{ display: 'block', marginTop: '5px', color: '#ff6b6b' }}>
+                  ⚠️ После изменения прокси нужно перезапустить Python Worker
+                </small>
+              </div>
+              
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditAccount(false)}>
                   Отмена
                 </button>
                 <button type="submit" className="btn btn-primary">
