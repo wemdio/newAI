@@ -13,6 +13,8 @@ from urllib.parse import urlparse
 from typing import Dict, Optional, Callable
 import asyncio
 import os
+import socks
+import socket
 
 
 class TelethonManager:
@@ -118,6 +120,19 @@ class TelethonManager:
             # Parse proxy if provided
             proxy = self._parse_proxy(account.get('proxy_url'))
             
+            # Check proxy connection if proxy is configured
+            if proxy:
+                proxy_works = await self._check_proxy(proxy)
+                if not proxy_works:
+                    print(f"❌ Proxy verification failed for account {account['account_name']}")
+                    print(f"   Cannot connect to Telegram through proxy: {account.get('proxy_url')}")
+                    # Mark account as error in database
+                    await self.supabase.mark_account_error(
+                        account_id,
+                        f"Proxy connection failed: {account.get('proxy_url')}"
+                    )
+                    return False
+            
             # Create client
             client = TelegramClient(
                 session_file,
@@ -196,6 +211,71 @@ class TelethonManager:
         except Exception as e:
             print(f"⚠️ Error parsing proxy URL: {e}")
             return None
+    
+    async def _check_proxy(self, proxy_dict: Dict) -> bool:
+        """
+        Check if proxy is working by attempting to connect to Telegram servers
+        
+        Args:
+            proxy_dict: Parsed proxy dictionary
+        
+        Returns:
+            True if proxy works, False otherwise
+        """
+        if not proxy_dict:
+            return True  # No proxy means direct connection
+        
+        print(f"🔍 Testing proxy connection: {proxy_dict['addr']}:{proxy_dict['port']}")
+        
+        try:
+            # Map proxy type to PySocks constants
+            proxy_type_map = {
+                'socks5': socks.SOCKS5,
+                'socks4': socks.SOCKS4,
+                'http': socks.HTTP
+            }
+            
+            proxy_type = proxy_type_map.get(proxy_dict['proxy_type'])
+            if not proxy_type:
+                print(f"❌ Unsupported proxy type for testing: {proxy_dict['proxy_type']}")
+                return False
+            
+            # Test connection to Telegram server (DC1)
+            telegram_host = '149.154.175.53'
+            telegram_port = 443
+            timeout = 10
+            
+            # Create socket with proxy
+            sock = socks.socksocket()
+            sock.set_proxy(
+                proxy_type=proxy_type,
+                addr=proxy_dict['addr'],
+                port=proxy_dict['port'],
+                username=proxy_dict.get('username'),
+                password=proxy_dict.get('password')
+            )
+            sock.settimeout(timeout)
+            
+            # Try to connect
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: sock.connect((telegram_host, telegram_port))
+            )
+            sock.close()
+            
+            print(f"✅ Proxy connection successful")
+            return True
+            
+        except socks.ProxyConnectionError as e:
+            print(f"❌ Proxy connection failed: {e}")
+            return False
+        except socket.timeout:
+            print(f"❌ Proxy connection timeout")
+            return False
+        except Exception as e:
+            print(f"❌ Proxy test failed: {e}")
+            return False
     
     async def send_message(self, account_id: str, username: str, message: str) -> bool:
         """

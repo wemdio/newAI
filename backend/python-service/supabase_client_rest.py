@@ -229,6 +229,15 @@ class SupabaseClient:
             'updated_at': datetime.utcnow().isoformat()
         })
     
+    async def mark_account_error(self, account_id: str, error_reason: str = 'Connection error'):
+        """Mark account as having an error (e.g., proxy failure)"""
+        print(f"⚠️ Marking account {account_id} as error: {error_reason}")
+        return await self._patch('telegram_accounts', {'id': account_id}, {
+            'status': 'error',
+            'is_available': False,
+            'updated_at': datetime.utcnow().isoformat()
+        })
+    
     async def pause_account(self, account_id: str, duration_seconds: int):
         """Pause account temporarily"""
         return await self._patch('telegram_accounts', {'id': account_id}, {

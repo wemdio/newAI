@@ -329,7 +329,7 @@ router.post('/accounts/upload-tdata', upload.single('tdata'), async (req, res) =
 router.post('/accounts/import-session', async (req, res) => {
   try {
     const userId = req.headers['x-user-id'];
-    const { account_name, session_string, api_id, api_hash } = req.body;
+    const { account_name, session_string, api_id, api_hash, proxy_url } = req.body;
     
     if (!userId) {
       return res.status(400).json({ 
@@ -353,7 +353,8 @@ router.post('/accounts/import-session', async (req, res) => {
     logger.info('Importing session string', { 
       userId, 
       accountNameLength: account_name?.length || 0,
-      usingDefaultCredentials: !api_id 
+      usingDefaultCredentials: !api_id,
+      hasProxy: !!proxy_url
     });
     
     // Generate session filename
@@ -403,6 +404,7 @@ router.post('/accounts/import-session', async (req, res) => {
         session_string: cleanSessionString, // Store cleaned hex string for worker
         api_id: parseInt(finalApiId),
         api_hash: finalApiHash,
+        proxy_url: proxy_url || null, // Optional proxy
         phone_number: null, // Will be filled when session is used
         status: 'active',
         is_available: true // Make account available for Python Worker
