@@ -333,8 +333,9 @@ ${JSON.stringify(messagesArray, null, 2)}
       completion_tokens: estimatedOutputTokens,
       total_tokens: estimatedInputTokens + estimatedOutputTokens
     };
-    // FIXED: calculateCost expects (inputTokens, outputTokens, model), not (totalTokens, model)
-    const totalCost = calculateCost(actualTokens.prompt_tokens, actualTokens.completion_tokens, model);
+    // FIXED: calculateCost returns an object with totalCost property
+    const costInfo = calculateCost(actualTokens.prompt_tokens, actualTokens.completion_tokens, model);
+    const totalCost = costInfo.totalCost;
     const costPerMessage = totalCost / batchSize;
     
     // Process and validate each result
@@ -388,10 +389,10 @@ ${JSON.stringify(messagesArray, null, 2)}
         messageId: message.id,
         isMatch: result.isMatch,
         confidence: result.aiResponse.confidence_score,
-        validationPassed: validation.isValid,
+        validationPassed: validation.valid,
         meetsThreshold: result.aiResponse.confidence_score >= 60,
         duration: Math.round(duration / batchSize),
-        cost: costPerMessage.toFixed(6)
+        cost: costPerMessage
       });
       
       results.push(result);
@@ -400,8 +401,8 @@ ${JSON.stringify(messagesArray, null, 2)}
     logger.info('Batch analysis complete', {
       batchSize,
       totalDuration: duration,
-      totalCost: totalCost.toFixed(6),
-      avgCostPerMessage: costPerMessage.toFixed(6),
+      totalCost: typeof totalCost === 'number' ? totalCost.toFixed(6) : '0.000000',
+      avgCostPerMessage: typeof costPerMessage === 'number' ? costPerMessage.toFixed(6) : '0.000000',
       matches: results.filter(r => r.isMatch).length
     });
     
