@@ -252,8 +252,8 @@ export const formatLeadMessage = (lead, analysis, messageSuggestion = null) => {
   if (messageSuggestion) {
     message += `
 
-💡 *Подсказка для первого сообщения*
-\`${escapeMarkdown(messageSuggestion)}\``;
+💡 *Подсказка для первого сообщения:*
+_${escapeMarkdown(messageSuggestion)}_`;
   }
 
   message += `
