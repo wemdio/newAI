@@ -53,7 +53,8 @@ export const generateMessageSuggestion = async (lead, analysis, messagePrompt, a
 - Будь конкретным и персонализированным
 - Используй информацию о лиде
 - Следуй инструкциям пользователя
-- Ответ должен быть готовым шаблоном сообщения`;
+- Ответ должен быть готовым шаблоном сообщения
+- ОБЯЗАТЕЛЬНО выведи готовый текст подсказки в ответе, не только в размышлениях`;
 
     // Auto-replace placeholders in user prompt
     const processedPrompt = messagePrompt
@@ -94,7 +95,7 @@ ${lead.message}
     // Get OpenRouter client
     const client = getOpenRouter(apiKey);
     // Use Gemini 3 Pro for high-quality suggestions
-    // With increased max_tokens (500) and reasoning filter, it works reliably
+    // With increased max_tokens (1500) to allow room for reasoning + content and reasoning filter, it works reliably
     const model = process.env.MESSAGE_SUGGESTION_MODEL || 'google/gemini-3-pro-preview';
 
     logger.info('🚀 Starting OpenRouter API call for suggestion', {
@@ -103,7 +104,7 @@ ${lead.message}
       systemPromptLength: systemPrompt.length,
       userPromptLength: userPrompt.length,
       temperature: 0.7,
-      max_tokens: 500
+      max_tokens: 1500
     });
 
     // Make API call
@@ -118,7 +119,7 @@ ${lead.message}
             { role: 'user', content: userPrompt }
           ],
           temperature: 0.7, // More creative for message generation
-          max_tokens: 500 // Increased for better completion
+          max_tokens: 1500 // Increased to allow room for reasoning + actual content
         });
         logger.info('✅ OpenRouter API call completed', { 
           leadId: lead.id, 
