@@ -1,6 +1,7 @@
 """AI Communicator - Handles conversation with leads using Gemini 3 Pro Preview"""
 import aiohttp
 import json
+import re
 from typing import List, Dict, Tuple
 from config import AI_MODEL
 
@@ -15,6 +16,39 @@ class AICommunicator:
         
         if not self.openrouter_api_key:
             raise ValueError("OpenRouter API key is required for user")
+    
+    def _filter_reasoning(self, response: str) -> str:
+        """
+        Remove AI's internal thinking/reasoning patterns from response
+        This prevents reasoning artifacts from being sent to leads
+        
+        Args:
+            response: Raw AI response
+            
+        Returns:
+            Cleaned response without reasoning patterns
+        """
+        if not response:
+            return response
+        
+        # Common reasoning patterns to remove
+        reasoning_patterns = [
+            r'Thinking:.*?(?=\n\n|\Z)',
+            r'Reasoning:.*?(?=\n\n|\Z)',
+            r'Let me think.*?(?=\n\n|\Z)',
+            r'Analysis:.*?(?=\n\n|\Z)',
+            r'\[REASONING\].*?\[/REASONING\]',
+            r'<thinking>.*?</thinking>',
+        ]
+        
+        cleaned = response
+        for pattern in reasoning_patterns:
+            cleaned = re.sub(pattern, '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+        
+        # Remove multiple blank lines
+        cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
+        
+        return cleaned.strip()
     
     async def generate_first_message(self, lead_info: Dict) -> str:
         """
@@ -51,6 +85,7 @@ class AICommunicator:
 4. Предложи помощь или начни диалог ненавязчиво
 5. НЕ упоминай что ты AI или бот
 6. Пиши на том же языке что и исходное сообщение
+7. ОБЯЗАТЕЛЬНО выведи готовый текст сообщения в ответе
 
 Напиши только текст сообщения, без дополнительных пояснений.
 """
@@ -90,6 +125,7 @@ class AICommunicator:
 2. Отвечай коротко и по делу (2-4 предложения)
 3. Задавай уточняющие вопросы если нужно
 4. Если лид показывает явный интерес и соответствует критериям горячего лида - добавь в САМОМ КОНЦЕ своего ответа маркер: [HOT_LEAD]
+5. ОБЯЗАТЕЛЬНО выведи готовый текст ответа в сообщении
 
 ВАЖНО:
 - Маркер [HOT_LEAD] добавляй ТОЛЬКО если лид действительно соответствует всем критериям
@@ -164,7 +200,7 @@ class AICommunicator:
             'model': AI_MODEL,
             'messages': messages,
             'temperature': 0.7,
-            'max_tokens': 500  # Keep responses concise
+            'max_tokens': 2500  # Increased to allow room for reasoning + actual content
         }
         
         async with aiohttp.ClientSession() as session:
@@ -172,7 +208,15 @@ class AICommunicator:
                 if resp.status == 200:
                     data = await resp.json()
                     response_text = data['choices'][0]['message']['content']
-                    return response_text
+                    
+                    # Filter out reasoning patterns before returning
+                    cleaned_response = self._filter_reasoning(response_text)
+                    
+                    # Log if reasoning was filtered
+                    if len(cleaned_response) < len(response_text):
+                        print(f"⚠️ Filtered out {len(response_text) - len(cleaned_response)} chars of reasoning")
+                    
+                    return cleaned_response
                 else:
                     error_text = await resp.text()
                     raise Exception(f"OpenRouter API error {resp.status}: {error_text}")
