@@ -63,7 +63,7 @@ ${lead.message}
 
     // Get OpenRouter client
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'google/gemini-2.0-flash-001';
+    const model = process.env.AI_MODEL || 'google/gemini-3-pro-preview';
 
     // Make API call
     const response = await retryWithBackoff(async () => {

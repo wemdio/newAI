@@ -25,16 +25,25 @@ export const estimateTokens = (text) => {
 /**
  * Calculate cost for OpenRouter API call
  * Gemini 2.0 Flash: $0.10/1M input tokens, $0.40/1M output tokens
+ * Gemini 3 Pro Preview: $2/M input tokens, $12/M output tokens
  */
-export const calculateCost = (inputTokens, outputTokens, model = 'gemini-2.0-flash') => {
+export const calculateCost = (inputTokens, outputTokens, model = 'google/gemini-3-pro-preview') => {
   const costs = {
     'gemini-2.0-flash': {
       input: 0.10 / 1_000_000,  // $0.10 per 1M tokens
       output: 0.40 / 1_000_000   // $0.40 per 1M tokens
+    },
+    'google/gemini-2.0-flash-001': {
+      input: 0.10 / 1_000_000,  // $0.10 per 1M tokens
+      output: 0.40 / 1_000_000   // $0.40 per 1M tokens
+    },
+    'google/gemini-3-pro-preview': {
+      input: 2.00 / 1_000_000,  // $2.00 per 1M tokens
+      output: 12.00 / 1_000_000  // $12.00 per 1M tokens
     }
   };
   
-  const modelCosts = costs[model] || costs['gemini-2.0-flash'];
+  const modelCosts = costs[model] || costs['google/gemini-3-pro-preview'];
   
   const inputCost = inputTokens * modelCosts.input;
   const outputCost = outputTokens * modelCosts.output;

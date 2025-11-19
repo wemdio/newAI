@@ -45,7 +45,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     });
     
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'google/gemini-2.0-flash-001';
+    const model = process.env.AI_MODEL || 'google/gemini-3-pro-preview';
     
     logger.info('Making OpenRouter API call', {
       messageId: message.id,
@@ -219,7 +219,7 @@ ${JSON.stringify(messagesArray, null, 2)}
 
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'google/gemini-2.0-flash-001';
+    const model = process.env.AI_MODEL || 'google/gemini-3-pro-preview';
     
     // Estimate tokens
     const estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt);
@@ -273,7 +273,60 @@ ${JSON.stringify(messagesArray, null, 2)}
     
     let batchResults;
     try {
-      const parsed = JSON.parse(cleanContent);
+      // Try to fix common JSON issues before parsing
+      let jsonToParse = cleanContent;
+      
+      // Attempt 1: Parse as-is
+      let parsed;
+      try {
+        parsed = JSON.parse(jsonToParse);
+      } catch (firstError) {
+        logger.warn('First JSON parse attempt failed, trying to fix common issues', {
+          error: firstError.message,
+          contentPreview: jsonToParse.substring(0, 300)
+        });
+        
+        // Attempt 2: Fix unterminated strings by finding last valid closing brace
+        try {
+          // Find the last occurrence of }] or } that might close our JSON
+          const lastBraceIndex = Math.max(
+            jsonToParse.lastIndexOf('}]'),
+            jsonToParse.lastIndexOf('}')
+          );
+          
+          if (lastBraceIndex > 0) {
+            const truncated = jsonToParse.substring(0, lastBraceIndex + (jsonToParse[lastBraceIndex] === '}' && jsonToParse[lastBraceIndex + 1] === ']' ? 2 : 1));
+            logger.info('Attempting to parse truncated JSON', {
+              originalLength: jsonToParse.length,
+              truncatedLength: truncated.length
+            });
+            parsed = JSON.parse(truncated);
+            logger.info('Successfully parsed truncated JSON');
+          } else {
+            throw firstError; // Re-throw original error if we can't find a valid end
+          }
+        } catch (secondError) {
+          // Attempt 3: Try to fix common escape issues
+          try {
+            const fixed = jsonToParse
+              .replace(/[\u0000-\u001F]+/g, '') // Remove control characters
+              .replace(/,(\s*[}\]])/g, '$1')     // Remove trailing commas
+              .trim();
+            parsed = JSON.parse(fixed);
+            logger.info('Successfully parsed JSON after fixing escape sequences');
+          } catch (thirdError) {
+            logger.error('All JSON parse attempts failed', {
+              firstError: firstError.message,
+              secondError: secondError.message,
+              thirdError: thirdError.message,
+              contentLength: jsonToParse.length,
+              contentStart: jsonToParse.substring(0, 100),
+              contentEnd: jsonToParse.substring(Math.max(0, jsonToParse.length - 100))
+            });
+            throw firstError; // Throw the original error for clarity
+          }
+        }
+      }
       
       logger.info('Parsed batch response structure', {
         batchSize,
