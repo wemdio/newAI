@@ -63,8 +63,56 @@ const addTransliterations = (text) => {
  * @returns {array} Array of keywords (expanded with transliterations)
  */
 export const extractKeywords = (userCriteria) => {
-  // Extract criteria points
-  const criteria = extractCriteria(userCriteria);
+  // Extract criteria points - remove negative sections first
+  let positiveCriteria = userCriteria;
+  
+  // Common markers for negative sections (case insensitive)
+  const negativeMarkers = [
+    'НЕ СЧИТАТЬ ЛИДОМ',
+    'СТОП-ФАКТОРЫ',
+    'STOP FACTORS',
+    'NEGATIVE KEYWORDS',
+    'ИСКЛЮЧЕНИЯ',
+    'EXCLUDE',
+    'IGNORE',
+    'НЕ ЛИД',
+    'NOT LEAD',
+    'СТОП-СЛОВА',
+    'STOP WORDS',
+    '🛑'
+  ];
+  
+  // Remove content starting from any negative marker until the next section or end
+  // Simple approach: just cut off everything after the first negative marker found if structure allows,
+  // or try to cut specific blocks.
+  // Better approach for now: Cut everything after these markers to avoid polluting keywords
+  
+  // Find the earliest occurrence of any negative marker
+  let cutIndex = positiveCriteria.length;
+  let foundMarker = false;
+  
+  for (const marker of negativeMarkers) {
+    const index = positiveCriteria.toUpperCase().indexOf(marker);
+    if (index !== -1 && index < cutIndex) {
+      cutIndex = index;
+      foundMarker = true;
+    }
+  }
+  
+  if (foundMarker) {
+    // Also check if there are positive sections AFTER the negative section?
+    // Complex parsing is risky. 
+    // Safer strategy: Assume negative keywords are at the end or clearly marked blocks.
+    // For now, let's try to remove just the negative blocks if possible, or cut off if simple.
+    
+    // Let's try a block removal strategy using regex
+    // Matches: MARKER: ... (until next double newline or end)
+    const regex = new RegExp(`(${negativeMarkers.join('|')})[:\\s].*?(\\n\\n|$)`, 'gis');
+    positiveCriteria = positiveCriteria.replace(regex, ' ');
+  }
+
+  // Extract criteria points from the cleaned text
+  const criteria = extractCriteria(positiveCriteria);
   
   // Extract meaningful words (longer than 3 chars, not common words)
   const commonWords = new Set([
