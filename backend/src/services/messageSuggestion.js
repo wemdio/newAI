@@ -93,9 +93,9 @@ ${lead.message}
 
     // Get OpenRouter client
     const client = getOpenRouter(apiKey);
-    // Use Gemini 2.0 Flash for suggestions (cheaper and faster)
-    // Gemini 3 Pro is reserved for actual lead communication in Python worker
-    const model = process.env.MESSAGE_SUGGESTION_MODEL || 'google/gemini-2.0-flash-001';
+    // Use Gemini 3 Pro for high-quality suggestions
+    // With increased max_tokens (500) and reasoning filter, it works reliably
+    const model = process.env.MESSAGE_SUGGESTION_MODEL || 'google/gemini-3-pro-preview';
 
     logger.debug('Using model for message suggestion', {
       leadId: lead.id,
