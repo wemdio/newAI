@@ -97,23 +97,45 @@ ${lead.message}
     // With increased max_tokens (500) and reasoning filter, it works reliably
     const model = process.env.MESSAGE_SUGGESTION_MODEL || 'google/gemini-3-pro-preview';
 
-    logger.debug('Using model for message suggestion', {
+    logger.info('🚀 Starting OpenRouter API call for suggestion', {
       leadId: lead.id,
-      model
+      model,
+      systemPromptLength: systemPrompt.length,
+      userPromptLength: userPrompt.length,
+      temperature: 0.7,
+      max_tokens: 500
     });
 
     // Make API call
-    const response = await retryWithBackoff(async () => {
-      return await client.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.7, // More creative for message generation
-        max_tokens: 500 // Increased for better completion
+    let response;
+    try {
+      response = await retryWithBackoff(async () => {
+        logger.info('⏳ Calling OpenRouter API...', { leadId: lead.id, model });
+        const apiResponse = await client.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          temperature: 0.7, // More creative for message generation
+          max_tokens: 500 // Increased for better completion
+        });
+        logger.info('✅ OpenRouter API call completed', { 
+          leadId: lead.id, 
+          hasResponse: !!apiResponse,
+          responseKeys: apiResponse ? Object.keys(apiResponse) : []
+        });
+        return apiResponse;
+      }, 3, 1000);
+    } catch (apiError) {
+      logger.error('❌ OpenRouter API call failed', {
+        leadId: lead.id,
+        error: apiError.message,
+        stack: apiError.stack,
+        name: apiError.name
       });
-    }, 3, 1000);
+      throw apiError;
+    }
 
     const duration = Date.now() - startTime;
 
