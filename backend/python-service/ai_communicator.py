@@ -1,12 +1,12 @@
-"""AI Communicator - Handles conversation with leads using Claude 3.5 Sonnet"""
+"""AI Communicator - Handles conversation with leads using Gemini 3 Pro Preview"""
 import aiohttp
 import json
 from typing import List, Dict, Tuple
-from config import CLAUDE_MODEL
+from config import AI_MODEL
 
 
 class AICommunicator:
-    """Handles AI-powered conversations using Claude 3.5 Sonnet via OpenRouter"""
+    """Handles AI-powered conversations using Gemini 3 Pro Preview via OpenRouter"""
     
     def __init__(self, communication_prompt: str, hot_lead_criteria: str, openrouter_api_key: str):
         self.communication_prompt = communication_prompt
@@ -56,7 +56,7 @@ class AICommunicator:
 """
         
         try:
-            message = await self._call_claude(system_prompt, [])
+            message = await self._call_ai(system_prompt, [])
             print(f"🤖 Generated first message for @{username}")
             return message.strip()
         except Exception as e:
@@ -100,22 +100,22 @@ class AICommunicator:
 Ответь на последнее сообщение лида.
 """
         
-        # Build conversation history for Claude
-        claude_history = []
+        # Build conversation history for AI
+        ai_history = []
         for msg in conversation_history:
-            claude_history.append({
+            ai_history.append({
                 'role': msg['role'],
                 'content': msg['content']
             })
         
         # Add new message
-        claude_history.append({
+        ai_history.append({
             'role': 'user',
             'content': new_message
         })
         
         try:
-            response = await self._call_claude(system_prompt, claude_history)
+            response = await self._call_ai(system_prompt, ai_history)
             
             # Check for hot lead marker
             is_hot_lead = '[HOT_LEAD]' in response
@@ -133,16 +133,16 @@ class AICommunicator:
             # Fallback response
             return ("Спасибо за ответ! Дайте мне немного времени, я уточню детали.", False)
     
-    async def _call_claude(self, system_prompt: str, conversation_history: List[Dict]) -> str:
+    async def _call_ai(self, system_prompt: str, conversation_history: List[Dict]) -> str:
         """
-        Call OpenRouter API with Claude 3.5 Sonnet using user's API key
+        Call OpenRouter API with Gemini 3 Pro Preview using user's API key
         
         Args:
             system_prompt: System instructions
             conversation_history: Previous messages
         
         Returns:
-            Claude's response text
+            AI's response text
         """
         if not self.openrouter_api_key:
             raise ValueError("OpenRouter API key not configured for this user")
@@ -161,7 +161,7 @@ class AICommunicator:
         }
         
         payload = {
-            'model': CLAUDE_MODEL,
+            'model': AI_MODEL,
             'messages': messages,
             'temperature': 0.7,
             'max_tokens': 500  # Keep responses concise

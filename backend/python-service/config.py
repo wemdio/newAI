@@ -11,10 +11,10 @@ SUPABASE_KEY = os.getenv('SUPABASE_ANON_KEY')
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY must be set")
 
-# OpenRouter Configuration (Claude)
+# OpenRouter Configuration (AI Model)
 # NOTE: API key is now user-specific and loaded from database (user_config table)
 # Each user provides their own OpenRouter API key in the app settings
-CLAUDE_MODEL = 'anthropic/claude-3.5-sonnet'
+AI_MODEL = 'google/gemini-3-pro-preview'
 
 # Safety Limits (Anti-ban) - VERY Conservative settings to avoid PeerFlood
 MAX_MESSAGES_PER_DAY = int(os.getenv('MAX_MESSAGES_PER_DAY', '10'))  # Reduced to 10 for new accounts
