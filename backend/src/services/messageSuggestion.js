@@ -81,7 +81,7 @@ ${lead.message}
           { role: 'user', content: userPrompt }
         ],
         temperature: 0.7, // More creative for message generation
-        max_tokens: 300
+        max_tokens: 500 // Increased for better completion
       });
     }, 3, 1000);
 
