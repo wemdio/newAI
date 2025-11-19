@@ -200,7 +200,7 @@ class AICommunicator:
             'model': AI_MODEL,
             'messages': messages,
             'temperature': 0.7,
-            'max_tokens': 2500  # Increased to allow room for reasoning + actual content
+            'max_tokens': 4000  # Increased to 4000 to accommodate deep reasoning + long history analysis
         }
         
         async with aiohttp.ClientSession() as session:
