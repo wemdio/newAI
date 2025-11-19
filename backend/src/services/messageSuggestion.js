@@ -63,7 +63,14 @@ ${lead.message}
 
     // Get OpenRouter client
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'google/gemini-3-pro-preview';
+    // Use Gemini 2.0 Flash for suggestions (cheaper and faster)
+    // Gemini 3 Pro is reserved for actual lead communication in Python worker
+    const model = process.env.MESSAGE_SUGGESTION_MODEL || 'google/gemini-2.0-flash-001';
+
+    logger.debug('Using model for message suggestion', {
+      leadId: lead.id,
+      model
+    });
 
     // Make API call
     const response = await retryWithBackoff(async () => {
@@ -80,9 +87,26 @@ ${lead.message}
 
     const duration = Date.now() - startTime;
 
+    // Log full response for debugging
+    logger.info('OpenRouter API response received', {
+      leadId: lead.id,
+      hasChoices: !!response.choices,
+      choicesLength: response.choices?.length,
+      hasMessage: !!response.choices?.[0]?.message,
+      hasContent: !!response.choices?.[0]?.message?.content,
+      contentLength: response.choices?.[0]?.message?.content?.length,
+      contentPreview: response.choices?.[0]?.message?.content?.substring(0, 100),
+      model: response.model,
+      usage: response.usage
+    });
+
     // Extract response
     const suggestion = response.choices[0]?.message?.content;
     if (!suggestion) {
+      logger.error('Empty response from AI - full response', {
+        leadId: lead.id,
+        response: JSON.stringify(response, null, 2)
+      });
       throw new AIServiceError('Empty response from AI');
     }
 
