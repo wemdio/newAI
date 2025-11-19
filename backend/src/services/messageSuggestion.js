@@ -4,6 +4,36 @@ import logger from '../utils/logger.js';
 import { AIServiceError, retryWithBackoff } from '../utils/errorHandler.js';
 
 /**
+ * Filter out reasoning/thinking patterns from AI response
+ * Gemini models (especially 3 Pro) might include internal reasoning
+ * @param {string} response - Raw AI response
+ * @returns {string} Cleaned response without reasoning artifacts
+ */
+const filterReasoning = (response) => {
+  if (!response) return response;
+  
+  // Common reasoning patterns to remove
+  const reasoningPatterns = [
+    /Thinking:.*?(?=\n\n|\n[A-ZА-Я]|\Z)/gis,     // "Thinking: ..."
+    /Reasoning:.*?(?=\n\n|\n[A-ZА-Я]|\Z)/gis,    // "Reasoning: ..."
+    /Let me think.*?(?=\n\n|\n[A-ZА-Я]|\Z)/gis,  // "Let me think..."
+    /Analysis:.*?(?=\n\n|\n[A-ZА-Я]|\Z)/gis,     // "Analysis: ..."
+    /\[REASONING\].*?\[\/REASONING\]/gis,         // [REASONING]...[/REASONING]
+    /<thinking>.*?<\/thinking>/gis,              // <thinking>...</thinking>
+  ];
+  
+  let cleaned = response;
+  for (const pattern of reasoningPatterns) {
+    cleaned = cleaned.replace(pattern, '');
+  }
+  
+  // Remove multiple blank lines
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  
+  return cleaned.trim();
+};
+
+/**
  * Generate sales message suggestion for a lead
  * @param {object} lead - Lead message data
  * @param {object} analysis - AI analysis result
@@ -101,13 +131,26 @@ ${lead.message}
     });
 
     // Extract response
-    const suggestion = response.choices[0]?.message?.content;
-    if (!suggestion) {
+    const rawSuggestion = response.choices[0]?.message?.content;
+    if (!rawSuggestion) {
       logger.error('Empty response from AI - full response', {
         leadId: lead.id,
         response: JSON.stringify(response, null, 2)
       });
       throw new AIServiceError('Empty response from AI');
+    }
+
+    // Filter out reasoning/thinking patterns
+    const suggestion = filterReasoning(rawSuggestion);
+    
+    // Log if reasoning was filtered out
+    if (suggestion.length < rawSuggestion.length) {
+      logger.info('Filtered reasoning from suggestion', {
+        leadId: lead.id,
+        originalLength: rawSuggestion.length,
+        cleanedLength: suggestion.length,
+        filtered: rawSuggestion.length - suggestion.length
+      });
     }
 
     // Calculate actual cost
