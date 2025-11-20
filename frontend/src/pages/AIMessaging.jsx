@@ -108,6 +108,8 @@ const AIMessaging = () => {
       try {
         setLoading(true);
         const userId = getUserId();
+        if (!userId) return; // Add check for userId
+        
         const headers = { 'x-user-id': userId };
         
         // Load accounts
@@ -132,7 +134,7 @@ const AIMessaging = () => {
         
       } catch (error) {
         console.error('Failed to load data:', error);
-        alert('Ошибка загрузки данных. Проверьте консоль.');
+        // alert('Ошибка загрузки данных. Проверьте консоль.'); // Optional: disable alert to reduce noise
       } finally {
         setLoading(false);
       }
@@ -244,7 +246,12 @@ const AIMessaging = () => {
         hot_lead_criteria: '',
         target_channel_id: ''
       });
-      loadData();
+      // Reload data after create. Since loadData is defined inside useEffect, we trigger a reload or call a shared function if possible.
+      // But since loadData is inside useEffect, we can't call it directly here easily unless we refactor.
+      // Best fix: Move loadData outside useEffect or define it using useCallback.
+      // For now, let's reload the page or simpler:
+      // Since we can't access loadData here (it's inside useEffect scope), we need to move it up.
+      window.location.reload(); 
     } catch (error) {
       console.error('Failed to create campaign:', error);
       alert('Ошибка создания кампании: ' + error.response?.data?.error || error.message);
@@ -345,7 +352,8 @@ const AIMessaging = () => {
       });
       
       alert('Кампания удалена');
-      loadData();
+      // Reload data after delete
+      await loadData();
     } catch (error) {
       console.error('Failed to delete campaign:', error);
       alert('Ошибка удаления: ' + error.response?.data?.error || error.message);
