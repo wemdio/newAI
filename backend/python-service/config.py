@@ -17,7 +17,7 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 AI_MODEL = 'google/gemini-3-pro-preview'
 
 # Safety Limits (Anti-ban) - VERY Conservative settings to avoid PeerFlood
-MAX_MESSAGES_PER_DAY = int(os.getenv('MAX_MESSAGES_PER_DAY', '10'))  # Reduced to 10 for new accounts
+MAX_MESSAGES_PER_DAY = int(os.getenv('MAX_MESSAGES_PER_DAY', '5'))  # Ultra-safe: 5 messages per day
 MESSAGE_DELAY_MIN = int(os.getenv('MESSAGE_DELAY_MIN', '120'))  # seconds (2 min)
 MESSAGE_DELAY_MAX = int(os.getenv('MESSAGE_DELAY_MAX', '300'))  # seconds (5 min)
 ACCOUNT_SWITCH_DELAY = int(os.getenv('ACCOUNT_SWITCH_DELAY', '600'))  # seconds (10 min)
