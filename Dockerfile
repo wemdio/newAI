@@ -25,11 +25,21 @@ RUN npm run build
 # Stage 2: serve with nginx
 FROM nginx:1.27-alpine
 
+# Copy built files
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Verify files exist
+# Copy nginx configuration
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+# Verify files exist and nginx config is valid
 RUN ls -la /usr/share/nginx/html && \
-    test -f /usr/share/nginx/html/index.html || (echo "ERROR: index.html not found!" && exit 1)
+    test -f /usr/share/nginx/html/index.html || (echo "ERROR: index.html not found!" && exit 1) && \
+    nginx -t
 
 EXPOSE 80
+
+# Add healthcheck
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost/health || exit 1
+
 CMD ["nginx", "-g", "daemon off;"]
