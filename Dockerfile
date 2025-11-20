@@ -27,5 +27,9 @@ FROM nginx:1.27-alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
 
+# Verify files exist
+RUN ls -la /usr/share/nginx/html && \
+    test -f /usr/share/nginx/html/index.html || (echo "ERROR: index.html not found!" && exit 1)
+
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
