@@ -1,0 +1,129 @@
+/**
+ * Telegram Web App specific styles
+ */
+
+/* Telegram Navigation */
+.telegram-nav {
+  display: flex;
+  justify-content: space-around;
+  background-color: var(--tg-theme-secondary-bg-color, #1a1a1a);
+  border-bottom: 1px solid var(--tg-theme-hint-color, #333);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.telegram-nav-item {
+  flex: 1;
+  text-align: center;
+  padding: 16px;
+  color: var(--tg-theme-text-color, #e0e0e0);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 400;
+  transition: background-color 0.2s;
+  border-bottom: 2px solid transparent;
+}
+
+.telegram-nav-item.active {
+  color: var(--tg-theme-link-color, #fff);
+  border-bottom-color: var(--tg-theme-link-color, #fff);
+  background-color: var(--tg-theme-bg-color, #0a0a0a);
+}
+
+.telegram-nav-item:hover {
+  background-color: var(--tg-theme-secondary-bg-color, #1a1a1a);
+}
+
+/* Telegram Mode Adjustments */
+.telegram-mode .app-main {
+  flex: 1;
+  padding: 0;
+  margin: 0;
+}
+
+.telegram-mode .container {
+  max-width: 100%;
+  padding: 12px;
+}
+
+/* Telegram Button Styles */
+.telegram-mode button,
+.telegram-mode .btn-primary,
+.telegram-mode .btn-secondary {
+  background-color: var(--tg-theme-button-color, #2481cc);
+  color: var(--tg-theme-button-text-color, #ffffff);
+  border: none;
+}
+
+.telegram-mode button:hover,
+.telegram-mode .btn-primary:hover {
+  opacity: 0.9;
+}
+
+/* Telegram Cards */
+.telegram-mode .lead-card,
+.telegram-mode .config-form,
+.telegram-mode .scanner-status-panel {
+  background-color: var(--tg-theme-secondary-bg-color, #111);
+  border-color: var(--tg-theme-hint-color, #222);
+}
+
+/* Telegram Text Colors */
+.telegram-mode,
+.telegram-mode h1,
+.telegram-mode h2,
+.telegram-mode h3 {
+  color: var(--tg-theme-text-color, #ffffff);
+}
+
+.telegram-mode .section-description,
+.telegram-mode .form-hint,
+.telegram-mode .info-description {
+  color: var(--tg-theme-hint-color, #888);
+}
+
+/* Telegram Inputs */
+.telegram-mode input,
+.telegram-mode textarea,
+.telegram-mode select {
+  background-color: var(--tg-theme-bg-color, #0a0a0a);
+  border-color: var(--tg-theme-hint-color, #333);
+  color: var(--tg-theme-text-color, #ffffff);
+}
+
+.telegram-mode input:focus,
+.telegram-mode textarea:focus,
+.telegram-mode select:focus {
+  border-color: var(--tg-theme-link-color, #2481cc);
+}
+
+/* Telegram Link Colors */
+.telegram-mode a {
+  color: var(--tg-theme-link-color, #2481cc);
+}
+
+/* Telegram Loading Screen */
+.telegram-mode .loading-screen {
+  background-color: var(--tg-theme-bg-color, #0a0a0a);
+}
+
+/* Telegram Safe Area */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .telegram-mode {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Telegram Responsive */
+@media (max-width: 768px) {
+  .telegram-mode .container {
+    padding: 8px;
+  }
+  
+  .telegram-nav-item {
+    padding: 12px 8px;
+    font-size: 13px;
+  }
+}
+

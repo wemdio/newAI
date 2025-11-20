@@ -1,25 +1,28 @@
 import axios from 'axios';
-import { createClient } from '@supabase/supabase-js';
-
-// Initialize Supabase client
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL || 'https://liavhyhyzqadilfmicba.supabase.co',
-  import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxpYXZoeWh5enFhZGlsZm1pY2JhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE1ODQ1NzIsImV4cCI6MjA3NzE2MDU3Mn0.tlqzG7LygCEKPtFIiXxChqef4JNMaXqj69ygLww1GQM'
-);
+import supabase from '../supabaseClient';
 
 // Auto-detect production URL based on current domain
 const getApiBaseUrl = () => {
   // If VITE_API_URL is set during build, use it
   if (import.meta.env.VITE_API_URL) {
+    console.log('Using VITE_API_URL:', import.meta.env.VITE_API_URL);
     return import.meta.env.VITE_API_URL;
   }
   
-  // If running on Timeweb Cloud (*.twc1.net), use production backend
+  // Production domain
+  if (window.location.hostname === 'telegram-scanner.ru') {
+    console.log('Detected telegram-scanner.ru domain');
+    return 'https://wemdio-newai-f239.twc1.net/api';
+  }
+  
+  // Timeweb Cloud fallback (*.twc1.net)
   if (window.location.hostname.includes('twc1.net')) {
+    console.log('Detected twc1.net domain, using hardcoded API URL');
     return 'https://wemdio-newai-f239.twc1.net/api';
   }
   
   // Default to localhost for local development
+  console.log('Using localhost API URL');
   return 'http://localhost:3000/api';
 };
 
