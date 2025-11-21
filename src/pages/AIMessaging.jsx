@@ -382,7 +382,7 @@ const AIMessaging = () => {
         }
       );
       
-      alert('Прокси обновлен! Перезапустите Python Worker чтобы применить изменения.');
+      alert('✅ Прокси обновлен успешно!');
       setShowEditAccount(false);
       setEditingAccount(null);
       loadData();
@@ -1011,9 +1011,6 @@ const AIMessaging = () => {
                   onChange={e => setEditingAccount({...editingAccount, proxy_url: e.target.value})}
                 />
                 <small>Формат: protocol://username:password@host:port (socks5, socks4, http)</small>
-                <small style={{ display: 'block', marginTop: '5px', color: '#ff6b6b' }}>
-                  ⚠️ После изменения прокси нужно перезапустить Python Worker
-                </small>
               </div>
               
               <div className="modal-actions">
