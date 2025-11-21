@@ -571,7 +571,6 @@ const AIMessaging = () => {
                 <button 
                   className="btn btn-secondary btn-full" 
                   onClick={() => viewConversation(conv.id)}
-                  style={{marginTop: '12px'}}
                 >
                   История диалога
                 </button>
