@@ -487,9 +487,11 @@ const AIMessaging = () => {
                 <div className="account-header">
                   <h3>{account.account_name}</h3>
                   <span className={`status-badge ${account.status}`}>
-                    {account.status === 'active' ? 'Активен' : 
-                     account.status === 'paused' ? 'Пауза' :
-                     account.status === 'banned' ? 'Забанен' : 'Ошибка'}
+                    {account.status === 'active' ? '✅ Активен' : 
+                     account.status === 'paused' ? '⏸️ Пауза' :
+                     account.status === 'spam_blocked' ? '⏳ Спамблок' :
+                     account.status === 'banned' ? '🚫 Забанен' : 
+                     account.status === 'error' ? '⚠️ Ошибка' : '❓ Неизвестно'}
                   </span>
                 </div>
                 
