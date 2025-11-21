@@ -4,6 +4,7 @@ import supabase from '../supabaseClient';
 import './AIMessaging.css';
 
 const AIMessaging = () => {
+  // UI Version 2.0 - Fix spacing and modal
   // Get session directly from Supabase to avoid rerenders from parent
   const [session, setSession] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
@@ -21,10 +22,8 @@ const AIMessaging = () => {
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
   const [showConversationDetail, setShowConversationDetail] = useState(false);
   const [showEditCampaign, setShowEditCampaign] = useState(false);
-  const [showEditAccount, setShowEditAccount] = useState(false);
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [editingCampaign, setEditingCampaign] = useState(null);
-  const [editingAccount, setEditingAccount] = useState(null);
   
   const [uploading, setUploading] = useState(false);
   const [sessionString, setSessionString] = useState('');
@@ -46,9 +45,39 @@ const AIMessaging = () => {
     target_channel_id: ''
   });
   
-  // ALL HOOKS MUST BE AT THE TOP - BEFORE ANY CONDITIONAL RETURNS!
+  // Initialize session
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setSessionLoading(false);
+    });
+    
+    // Subscribe to auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    
+    return () => subscription.unsubscribe();
+  }, []);
   
-  // Helper functions for component (available to all handlers)
+  // Verify session exists - AFTER all hooks
+  if (sessionLoading) {
+    return (
+      <div className="ai-messaging-loading">
+        <p>Загрузка...</p>
+      </div>
+    );
+  }
+  
+  if (!session?.user) {
+    return (
+      <div className="ai-messaging-loading">
+        <p>⚠️ Сессия не найдена. Пожалуйста, войдите в систему.</p>
+      </div>
+    );
+  }
+  
+  // API base URL
   const getApiUrl = () => {
     if (window.location.hostname === 'localhost') {
       return 'http://localhost:3000/api';
@@ -58,6 +87,7 @@ const AIMessaging = () => {
   
   const apiUrl = getApiUrl();
   
+  // Get user ID from Supabase session
   const getUserId = () => {
     if (!session?.user?.id) {
       console.error('❌ No session found!');
@@ -66,13 +96,28 @@ const AIMessaging = () => {
     return session.user.id;
   };
   
-  // Load data function (available to all handlers)
+  // Ensure user exists in database before using
+  const ensureUserExists = async () => {
+    const userId = getUserId();
+    if (!userId) {
+      throw new Error('No user session');
+    }
+    
+    try {
+      await axios.post(`${apiUrl}/auth/create-user`, { user_id: userId });
+      console.log('✅ User verified in database:', userId);
+      return userId;
+    } catch (err) {
+      console.error('Failed to ensure user exists:', err);
+      return userId;
+    }
+  };
+  
+  // Load all data
   const loadData = async () => {
     try {
       setLoading(true);
       const userId = getUserId();
-      if (!userId) return;
-      
       const headers = { 'x-user-id': userId };
       
       // Load accounts
@@ -97,48 +142,17 @@ const AIMessaging = () => {
       
     } catch (error) {
       console.error('Failed to load data:', error);
+      alert('Ошибка загрузки данных. Проверьте консоль.');
     } finally {
       setLoading(false);
     }
   };
   
-  // Initialize session
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setSessionLoading(false);
-    });
-    
-    // Subscribe to auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-    
-    return () => subscription.unsubscribe();
-  }, []);
-  
-  // Load data when session is ready
   useEffect(() => {
     // Only load data when session is ready
     if (!session?.user || sessionLoading) return;
     
     let isMounted = true;
-    
-    const ensureUserExists = async () => {
-      const userId = getUserId();
-      if (!userId) {
-        throw new Error('No user session');
-      }
-      
-      try {
-        await axios.post(`${apiUrl}/auth/create-user`, { user_id: userId });
-        console.log('✅ User verified in database:', userId);
-        return userId;
-      } catch (err) {
-        console.error('Failed to ensure user exists:', err);
-        return userId;
-      }
-    };
     
     // Ensure user exists before loading data
     const initializeAndLoad = async () => {
@@ -154,7 +168,8 @@ const AIMessaging = () => {
     
     initializeAndLoad();
     
-    // Refresh every 5 minutes (300 seconds)
+    // Refresh every 5 minutes (300 seconds) to reduce page reloads
+    // User can manually refresh if needed
     const interval = setInterval(() => {
       if (isMounted) {
         loadData().catch(err => console.error('Auto-refresh failed:', err));
@@ -166,23 +181,6 @@ const AIMessaging = () => {
       clearInterval(interval);
     };
   }, [session, sessionLoading]);
-  
-  // NOW we can do conditional returns - AFTER all hooks
-  if (sessionLoading) {
-    return (
-      <div className="ai-messaging-loading">
-        <p>Загрузка...</p>
-      </div>
-    );
-  }
-  
-  if (!session?.user) {
-    return (
-      <div className="ai-messaging-loading">
-        <p>Сессия не найдена. Пожалуйста, войдите в систему.</p>
-      </div>
-    );
-  }
   
   // Create account (manual)
   const handleCreateAccount = async (e) => {
@@ -227,12 +225,7 @@ const AIMessaging = () => {
         hot_lead_criteria: '',
         target_channel_id: ''
       });
-      // Reload data after create. Since loadData is defined inside useEffect, we trigger a reload or call a shared function if possible.
-      // But since loadData is inside useEffect, we can't call it directly here easily unless we refactor.
-      // Best fix: Move loadData outside useEffect or define it using useCallback.
-      // For now, let's reload the page or simpler:
-      // Since we can't access loadData here (it's inside useEffect scope), we need to move it up.
-      window.location.reload(); 
+      loadData();
     } catch (error) {
       console.error('Failed to create campaign:', error);
       alert('Ошибка создания кампании: ' + error.response?.data?.error || error.message);
@@ -333,8 +326,7 @@ const AIMessaging = () => {
       });
       
       alert('Кампания удалена');
-      // Reload data after delete
-      await loadData();
+      loadData();
     } catch (error) {
       console.error('Failed to delete campaign:', error);
       alert('Ошибка удаления: ' + error.response?.data?.error || error.message);
@@ -354,42 +346,6 @@ const AIMessaging = () => {
     } catch (error) {
       console.error('Failed to load conversation:', error);
       alert('Ошибка загрузки диалога');
-    }
-  };
-  
-  // Edit account proxy
-  const handleEditAccount = (account) => {
-    setEditingAccount({
-      id: account.id,
-      account_name: account.account_name,
-      proxy_url: account.proxy_url || ''
-    });
-    setShowEditAccount(true);
-  };
-  
-  // Update account proxy
-  const handleUpdateAccount = async (e) => {
-    e.preventDefault();
-    try {
-      const userId = getUserId();
-      await axios.put(
-        `${apiUrl}/messaging/accounts/${editingAccount.id}`,
-        {
-          proxy_url: editingAccount.proxy_url || null,
-          needs_reconnect: true  // Trigger graceful reconnect in Python Worker
-        },
-        {
-          headers: { 'x-user-id': userId }
-        }
-      );
-      
-      alert('✅ Прокси обновлен! Аккаунт будет переподключен автоматически.');
-      setShowEditAccount(false);
-      setEditingAccount(null);
-      loadData();
-    } catch (error) {
-      console.error('Failed to update account:', error);
-      alert('Ошибка обновления: ' + (error.response?.data?.error || error.message));
     }
   };
   
@@ -423,7 +379,7 @@ const AIMessaging = () => {
   return (
     <div className="ai-messaging">
       <div className="page-header">
-        <h1>AI Рассылки</h1>
+        <h1>🤖 AI Рассылки</h1>
         <p className="subtitle">
           Автоматическое общение с лидами через Telegram с использованием AI
         </p>
@@ -433,6 +389,7 @@ const AIMessaging = () => {
       {stats && (
         <div className="stats-overview">
           <div className="stat-card">
+            <div className="stat-icon">📊</div>
             <div className="stat-content">
               <div className="stat-label">Кампании</div>
               <div className="stat-value">{stats.campaigns.total}</div>
@@ -441,6 +398,7 @@ const AIMessaging = () => {
           </div>
           
           <div className="stat-card">
+            <div className="stat-icon">👥</div>
             <div className="stat-content">
               <div className="stat-label">Аккаунты</div>
               <div className="stat-value">{stats.accounts.total}</div>
@@ -449,6 +407,7 @@ const AIMessaging = () => {
           </div>
           
           <div className="stat-card">
+            <div className="stat-icon">💬</div>
             <div className="stat-content">
               <div className="stat-label">Диалоги</div>
               <div className="stat-value">{stats.conversations.total}</div>
@@ -457,6 +416,7 @@ const AIMessaging = () => {
           </div>
           
           <div className="stat-card hot">
+            <div className="stat-icon">🔥</div>
             <div className="stat-content">
               <div className="stat-label">Горячие лиды</div>
               <div className="stat-value">{stats.campaigns.total_hot_leads}</div>
@@ -469,7 +429,7 @@ const AIMessaging = () => {
       {/* Telegram Accounts Section */}
       <section className="section accounts-section">
         <div className="section-header">
-          <h2>Telegram Аккаунты</h2>
+          <h2>📱 Telegram Аккаунты</h2>
           <button className="btn btn-primary" onClick={() => setShowAddAccount(true)}>
             + Добавить аккаунт
           </button>
@@ -477,7 +437,7 @@ const AIMessaging = () => {
         
         {accounts.length === 0 ? (
           <div className="empty-state">
-            <p>Нет аккаунтов</p>
+            <p>😔 Нет аккаунтов</p>
             <p className="hint">Добавьте Telegram аккаунты для рассылки</p>
           </div>
         ) : (
@@ -489,9 +449,7 @@ const AIMessaging = () => {
                   <span className={`status-badge ${account.status}`}>
                     {account.status === 'active' ? '✅ Активен' : 
                      account.status === 'paused' ? '⏸️ Пауза' :
-                     account.status === 'spam_blocked' ? '⏳ Спамблок' :
-                     account.status === 'banned' ? '🚫 Забанен' : 
-                     account.status === 'error' ? '⚠️ Ошибка' : '❓ Неизвестно'}
+                     account.status === 'banned' ? '🔒 Забанен' : '❌ Ошибка'}
                   </span>
                 </div>
                 
@@ -502,7 +460,7 @@ const AIMessaging = () => {
                   </div>
                   <div className="info-row">
                     <span className="label">Прокси:</span>
-                    <span className="value">{account.proxy_url ? 'Есть' : 'Нет'}</span>
+                    <span className="value">{account.proxy_url ? '✅ Есть' : '❌ Нет'}</span>
                   </div>
                   <div className="info-row">
                     <span className="label">Сообщений сегодня:</span>
@@ -517,12 +475,6 @@ const AIMessaging = () => {
                 </div>
                 
                 <div className="account-actions">
-                  <button 
-                    className="btn btn-small btn-secondary" 
-                    onClick={() => handleEditAccount(account)}
-                  >
-                    Редактировать
-                  </button>
                   <button 
                     className="btn btn-small btn-danger" 
                     onClick={() => handleDeleteAccount(account.id)}
@@ -539,7 +491,7 @@ const AIMessaging = () => {
       {/* Campaigns Section */}
       <section className="section campaigns-section">
         <div className="section-header">
-          <h2>Кампании</h2>
+          <h2>🎯 Кампании</h2>
           <button className="btn btn-primary" onClick={() => setShowCreateCampaign(true)}>
             + Создать кампанию
           </button>
@@ -547,7 +499,7 @@ const AIMessaging = () => {
         
         {campaigns.length === 0 ? (
           <div className="empty-state">
-            <p>Нет кампаний</p>
+            <p>😔 Нет кампаний</p>
             <p className="hint">Создайте кампанию для автоматической рассылки</p>
           </div>
         ) : (
@@ -558,9 +510,9 @@ const AIMessaging = () => {
                   <div>
                     <h3>{campaign.name}</h3>
                     <span className={`status-badge ${campaign.status}`}>
-                      {campaign.status === 'running' ? 'Запущена' :
-                       campaign.status === 'paused' ? 'Приостановлена' :
-                       campaign.status === 'stopped' ? 'Остановлена' : 'Черновик'}
+                      {campaign.status === 'running' ? '🟢 Запущена' :
+                       campaign.status === 'paused' ? '⏸️ Приостановлена' :
+                       campaign.status === 'stopped' ? '⏹️ Остановлена' : '📝 Черновик'}
                     </span>
                   </div>
                   <div className="campaign-actions">
@@ -585,7 +537,7 @@ const AIMessaging = () => {
                         className="btn btn-success" 
                         onClick={() => handleResumeCampaign(campaign.id)}
                       >
-                        Возобновить
+                        ▶️ Возобновить
                       </button>
                     )}
                     <button 
@@ -593,7 +545,7 @@ const AIMessaging = () => {
                       onClick={() => openEditCampaign(campaign)}
                       title="Редактировать промпты"
                     >
-                      Изменить
+                      ✏️ Изменить
                     </button>
                     {(campaign.status === 'draft' || campaign.status === 'paused' || campaign.status === 'stopped') && (
                       <button 
@@ -601,7 +553,7 @@ const AIMessaging = () => {
                         onClick={() => handleDeleteCampaign(campaign.id)}
                         title="Удалить кампанию"
                       >
-                        Удалить
+                        🗑️ Удалить
                       </button>
                     )}
                   </div>
@@ -644,7 +596,7 @@ const AIMessaging = () => {
       {/* Conversations Section */}
       <section className="section conversations-section">
         <div className="section-header">
-          <h2>Активные диалоги</h2>
+          <h2>💬 Активные диалоги (обновлено)</h2>
           <span className="count-badge">{conversations.length}</span>
         </div>
         
@@ -657,29 +609,37 @@ const AIMessaging = () => {
             {conversations.slice(0, 10).map(conv => (
               <div key={conv.id} className="conversation-card">
                 <div className="conv-header">
-                  <div>
+                  <div className="conv-user-info">
                     <strong>@{conv.peer_username || conv.peer_user_id}</strong>
                     <span className={`status-badge ${conv.status}`}>
-                      {conv.status === 'active' ? 'Активен' :
-                       conv.status === 'hot_lead' ? 'Горячий' :
-                       conv.status === 'waiting' ? 'Ожидание' : 'Завершен'}
+                      {conv.status === 'active' ? 'АКТИВЕН' :
+                       conv.status === 'hot_lead' ? 'ГОРЯЧИЙ' :
+                       conv.status === 'waiting' ? 'ОЖИДАНИЕ' : 'ОСТАНОВЛЕН'}
                     </span>
                   </div>
-                  <span className="conv-account">
-                    Аккаунт: {conv.telegram_accounts?.account_name || 'N/A'}
-                  </span>
                 </div>
                 
-                <div className="conv-info">
-                  <span>Сообщений: {conv.messages_count}</span>
-                  <span>Последнее: {new Date(conv.last_message_at).toLocaleString('ru')}</span>
+                <div className="conv-details">
+                  <div className="conv-row">
+                     <span className="label">Аккаунт:</span>
+                     <span className="value">{conv.telegram_accounts?.account_name || 'N/A'}</span>
+                  </div>
+                  <div className="conv-row">
+                     <span className="label">Сообщений:</span>
+                     <span className="value">{conv.messages_count}</span>
+                  </div>
+                  <div className="conv-row">
+                     <span className="label">Последнее:</span>
+                     <span className="value date">{new Date(conv.last_message_at).toLocaleString('ru')}</span>
+                  </div>
                 </div>
                 
                 <button 
-                  className="btn btn-small" 
+                  className="btn btn-secondary btn-full" 
                   onClick={() => viewConversation(conv.id)}
+                  style={{marginTop: '12px'}}
                 >
-                  Посмотреть историю
+                  💬 Посмотреть историю
                 </button>
               </div>
             ))}
@@ -690,7 +650,7 @@ const AIMessaging = () => {
       {/* Hot Leads Section */}
       <section className="section hot-leads-section">
         <div className="section-header">
-          <h2>Горячие лиды</h2>
+          <h2>🔥 Горячие лиды</h2>
           <span className="count-badge hot">{hotLeads.length}</span>
         </div>
         
@@ -724,7 +684,7 @@ const AIMessaging = () => {
                     {(lead.conversation_history || []).map((msg, idx) => (
                       <div key={idx} className={`message ${msg.role}`}>
                         <div className="message-role">
-                          {msg.role === 'user' ? 'Лид' : 'Мы'}
+                          {msg.role === 'user' ? '👤 Лид' : '🤖 Мы'}
                         </div>
                         <div className="message-content">{msg.content}</div>
                       </div>
@@ -762,8 +722,7 @@ const AIMessaging = () => {
                     `${apiUrl}/messaging/accounts/import-session`,
                     {
                       account_name: accountName,
-                      session_string: sessionString.trim(),
-                      proxy_url: newAccount.proxy_url || null
+                      session_string: sessionString.trim()
                     },
                     {
                       headers: {
@@ -773,7 +732,7 @@ const AIMessaging = () => {
                   );
                   
                   if (response.data.success) {
-                    alert('Аккаунт успешно добавлен!');
+                    alert('✅ Аккаунт успешно добавлен!');
                     setShowAddAccount(false);
                     setSessionString('');
                     setNewAccount({
@@ -794,7 +753,7 @@ const AIMessaging = () => {
                 }
               }}>
                 <div className="help-box">
-                  <strong>Session String</strong> - это зашифрованные данные сессии Telegram.<br/>
+                  💡 <strong>Session String</strong> - это зашифрованные данные сессии Telegram.<br/>
                   Обычно выдается магазинами аккаунтов как длинная hex-строка.<br/>
                   <br/>
                   <strong>Пример:</strong> 838bbfe1808a243cecf7155620941acc2107...
@@ -821,24 +780,13 @@ const AIMessaging = () => {
                     style={{ fontFamily: 'monospace', fontSize: '12px' }}
                     required
                   />
-                  <small>API credentials будут использованы автоматически</small>
-                </div>
-                
-                <div className="form-group">
-                  <label>Proxy URL (опционально)</label>
-                  <input
-                    type="text"
-                    placeholder="socks5://user:pass@1.2.3.4:1080"
-                    value={newAccount.proxy_url}
-                    onChange={e => setNewAccount({...newAccount, proxy_url: e.target.value})}
-                  />
-                  <small>Формат: protocol://username:password@host:port (socks5, socks4, http)</small>
+                  <small>🔐 API credentials будут использованы автоматически</small>
                 </div>
                 
                 <div className="form-actions">
                   <button type="button" onClick={() => setShowAddAccount(false)}>Отмена</button>
                   <button type="submit" className="primary" disabled={uploading}>
-                    {uploading ? 'Импорт...' : 'Импортировать Session'}
+                    {uploading ? '⏳ Импорт...' : '✅ Импортировать Session'}
                   </button>
                 </div>
               </form>
@@ -920,7 +868,7 @@ const AIMessaging = () => {
         <div className="modal-overlay" onClick={() => setShowEditCampaign(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Редактировать кампанию</h2>
+              <h2>✏️ Редактировать кампанию</h2>
               <button className="close-btn" onClick={() => setShowEditCampaign(false)}>×</button>
             </div>
             
@@ -976,52 +924,7 @@ const AIMessaging = () => {
                   Отмена
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  Сохранить
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-      
-      {/* Edit Account Modal */}
-      {showEditAccount && editingAccount && (
-        <div className="modal-overlay" onClick={() => setShowEditAccount(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Редактировать аккаунт</h2>
-              <button className="close-btn" onClick={() => setShowEditAccount(false)}>×</button>
-            </div>
-            
-            <form onSubmit={handleUpdateAccount}>
-              <div className="form-group">
-                <label>Название аккаунта</label>
-                <input
-                  type="text"
-                  value={editingAccount.account_name}
-                  disabled
-                  style={{ backgroundColor: '#f5f5f5', cursor: 'not-allowed' }}
-                />
-                <small>Название нельзя изменить</small>
-              </div>
-              
-              <div className="form-group">
-                <label>Proxy URL</label>
-                <input
-                  type="text"
-                  placeholder="socks5://user:pass@1.2.3.4:1080"
-                  value={editingAccount.proxy_url}
-                  onChange={e => setEditingAccount({...editingAccount, proxy_url: e.target.value})}
-                />
-                <small>Формат: protocol://username:password@host:port (socks5, socks4, http)</small>
-              </div>
-              
-              <div className="modal-actions">
-                <button type="button" className="btn btn-secondary" onClick={() => setShowEditAccount(false)}>
-                  Отмена
-                </button>
-                <button type="submit" className="btn btn-primary">
-                  Сохранить
+                  💾 Сохранить
                 </button>
               </div>
             </form>
@@ -1039,10 +942,27 @@ const AIMessaging = () => {
             </div>
             
             <div className="conversation-detail">
-              <div className="conv-meta">
-                <div><strong>Статус:</strong> {selectedConversation.status}</div>
-                <div><strong>Сообщений:</strong> {selectedConversation.messages_count}</div>
-                <div><strong>Аккаунт:</strong> {selectedConversation.telegram_accounts?.account_name}</div>
+              <div className="conv-meta-grid">
+                <div className="meta-item">
+                  <span className="label">Статус:</span>
+                  <span className={`status-badge ${selectedConversation.status}`}>
+                      {selectedConversation.status === 'active' ? 'АКТИВЕН' :
+                       selectedConversation.status === 'hot_lead' ? 'ГОРЯЧИЙ' :
+                       selectedConversation.status === 'waiting' ? 'ОЖИДАНИЕ' : 'ОСТАНОВЛЕН'}
+                  </span>
+                </div>
+                <div className="meta-item">
+                  <span className="label">Сообщений:</span>
+                  <span className="value">{selectedConversation.messages_count}</span>
+                </div>
+                <div className="meta-item">
+                  <span className="label">Аккаунт:</span>
+                  <span className="value">{selectedConversation.telegram_accounts?.account_name}</span>
+                </div>
+                <div className="meta-item">
+                  <span className="label">Начало:</span>
+                  <span className="value">{new Date(selectedConversation.created_at).toLocaleString('ru')}</span>
+                </div>
               </div>
               
               <div className="history-messages">
@@ -1050,7 +970,7 @@ const AIMessaging = () => {
                   <div key={idx} className={`message ${msg.role}`}>
                     <div className="message-header">
                       <span className="message-role">
-                        {msg.role === 'user' ? 'Лид' : 'Мы'}
+                        {msg.role === 'user' ? '👤 Лид' : '🤖 Мы'}
                       </span>
                       <span className="message-time">
                         {new Date(msg.timestamp).toLocaleString('ru')}
