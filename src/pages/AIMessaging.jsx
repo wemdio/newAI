@@ -375,14 +375,15 @@ const AIMessaging = () => {
       await axios.put(
         `${apiUrl}/messaging/accounts/${editingAccount.id}`,
         {
-          proxy_url: editingAccount.proxy_url || null
+          proxy_url: editingAccount.proxy_url || null,
+          needs_reconnect: true  // Trigger graceful reconnect in Python Worker
         },
         {
           headers: { 'x-user-id': userId }
         }
       );
       
-      alert('✅ Прокси обновлен успешно!');
+      alert('✅ Прокси обновлен! Аккаунт будет переподключен автоматически.');
       setShowEditAccount(false);
       setEditingAccount(null);
       loadData();
