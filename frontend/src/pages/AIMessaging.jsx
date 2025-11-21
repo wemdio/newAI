@@ -4,6 +4,7 @@ import supabase from '../supabaseClient';
 import './AIMessaging.css';
 
 const AIMessaging = () => {
+  // UI Version 2.0 - Fix spacing and modal
   // Get session directly from Supabase to avoid rerenders from parent
   const [session, setSession] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
@@ -941,10 +942,27 @@ const AIMessaging = () => {
             </div>
             
             <div className="conversation-detail">
-              <div className="conv-meta">
-                <div><strong>Статус:</strong> {selectedConversation.status}</div>
-                <div><strong>Сообщений:</strong> {selectedConversation.messages_count}</div>
-                <div><strong>Аккаунт:</strong> {selectedConversation.telegram_accounts?.account_name}</div>
+              <div className="conv-meta-grid">
+                <div className="meta-item">
+                  <span className="label">Статус:</span>
+                  <span className={`status-badge ${selectedConversation.status}`}>
+                      {selectedConversation.status === 'active' ? 'АКТИВЕН' :
+                       selectedConversation.status === 'hot_lead' ? 'ГОРЯЧИЙ' :
+                       selectedConversation.status === 'waiting' ? 'ОЖИДАНИЕ' : 'ОСТАНОВЛЕН'}
+                  </span>
+                </div>
+                <div className="meta-item">
+                  <span className="label">Сообщений:</span>
+                  <span className="value">{selectedConversation.messages_count}</span>
+                </div>
+                <div className="meta-item">
+                  <span className="label">Аккаунт:</span>
+                  <span className="value">{selectedConversation.telegram_accounts?.account_name}</span>
+                </div>
+                <div className="meta-item">
+                  <span className="label">Начало:</span>
+                  <span className="value">{new Date(selectedConversation.created_at).toLocaleString('ru')}</span>
+                </div>
               </div>
               
               <div className="history-messages">
