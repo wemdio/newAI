@@ -48,6 +48,60 @@ const AIMessaging = () => {
   
   // ALL HOOKS MUST BE AT THE TOP - BEFORE ANY CONDITIONAL RETURNS!
   
+  // Helper functions for component (available to all handlers)
+  const getApiUrl = () => {
+    if (window.location.hostname === 'localhost') {
+      return 'http://localhost:3000/api';
+    }
+    return 'https://wemdio-newai-f239.twc1.net/api';
+  };
+  
+  const apiUrl = getApiUrl();
+  
+  const getUserId = () => {
+    if (!session?.user?.id) {
+      console.error('❌ No session found!');
+      return null;
+    }
+    return session.user.id;
+  };
+  
+  // Load data function (available to all handlers)
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      const userId = getUserId();
+      if (!userId) return;
+      
+      const headers = { 'x-user-id': userId };
+      
+      // Load accounts
+      const accountsRes = await axios.get(`${apiUrl}/messaging/accounts`, { headers });
+      setAccounts(accountsRes.data.accounts || []);
+      
+      // Load campaigns
+      const campaignsRes = await axios.get(`${apiUrl}/messaging/campaigns`, { headers });
+      setCampaigns(campaignsRes.data.campaigns || []);
+      
+      // Load conversations
+      const conversationsRes = await axios.get(`${apiUrl}/messaging/conversations`, { headers });
+      setConversations(conversationsRes.data.conversations || []);
+      
+      // Load hot leads
+      const hotLeadsRes = await axios.get(`${apiUrl}/messaging/hot-leads`, { headers });
+      setHotLeads(hotLeadsRes.data.hot_leads || []);
+      
+      // Load stats
+      const statsRes = await axios.get(`${apiUrl}/messaging/stats`, { headers });
+      setStats(statsRes.data.stats);
+      
+    } catch (error) {
+      console.error('Failed to load data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  
   // Initialize session
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -70,24 +124,6 @@ const AIMessaging = () => {
     
     let isMounted = true;
     
-    // Helper functions
-    const getApiUrl = () => {
-      if (window.location.hostname === 'localhost') {
-        return 'http://localhost:3000/api';
-      }
-      return 'https://wemdio-newai-f239.twc1.net/api';
-    };
-    
-    const apiUrl = getApiUrl();
-    
-    const getUserId = () => {
-      if (!session?.user?.id) {
-        console.error('❌ No session found!');
-        return null;
-      }
-      return session.user.id;
-    };
-    
     const ensureUserExists = async () => {
       const userId = getUserId();
       if (!userId) {
@@ -101,42 +137,6 @@ const AIMessaging = () => {
       } catch (err) {
         console.error('Failed to ensure user exists:', err);
         return userId;
-      }
-    };
-    
-    const loadData = async () => {
-      try {
-        setLoading(true);
-        const userId = getUserId();
-        if (!userId) return; // Add check for userId
-        
-        const headers = { 'x-user-id': userId };
-        
-        // Load accounts
-        const accountsRes = await axios.get(`${apiUrl}/messaging/accounts`, { headers });
-        setAccounts(accountsRes.data.accounts || []);
-        
-        // Load campaigns
-        const campaignsRes = await axios.get(`${apiUrl}/messaging/campaigns`, { headers });
-        setCampaigns(campaignsRes.data.campaigns || []);
-        
-        // Load conversations
-        const conversationsRes = await axios.get(`${apiUrl}/messaging/conversations`, { headers });
-        setConversations(conversationsRes.data.conversations || []);
-        
-        // Load hot leads
-        const hotLeadsRes = await axios.get(`${apiUrl}/messaging/hot-leads`, { headers });
-        setHotLeads(hotLeadsRes.data.hot_leads || []);
-        
-        // Load stats
-        const statsRes = await axios.get(`${apiUrl}/messaging/stats`, { headers });
-        setStats(statsRes.data.stats);
-        
-      } catch (error) {
-        console.error('Failed to load data:', error);
-        // alert('Ошибка загрузки данных. Проверьте консоль.'); // Optional: disable alert to reduce noise
-      } finally {
-        setLoading(false);
       }
     };
     
@@ -154,8 +154,7 @@ const AIMessaging = () => {
     
     initializeAndLoad();
     
-    // Refresh every 5 minutes (300 seconds) to reduce page reloads
-    // User can manually refresh if needed
+    // Refresh every 5 minutes (300 seconds)
     const interval = setInterval(() => {
       if (isMounted) {
         loadData().catch(err => console.error('Auto-refresh failed:', err));
@@ -184,24 +183,6 @@ const AIMessaging = () => {
       </div>
     );
   }
-  
-  // Helper functions for component (used in handlers)
-  const getApiUrl = () => {
-    if (window.location.hostname === 'localhost') {
-      return 'http://localhost:3000/api';
-    }
-    return 'https://wemdio-newai-f239.twc1.net/api';
-  };
-  
-  const apiUrl = getApiUrl();
-  
-  const getUserId = () => {
-    if (!session?.user?.id) {
-      console.error('❌ No session found!');
-      return null;
-    }
-    return session.user.id;
-  };
   
   // Create account (manual)
   const handleCreateAccount = async (e) => {
