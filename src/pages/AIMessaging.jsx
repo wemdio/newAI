@@ -539,7 +539,7 @@ const AIMessaging = () => {
       {/* Conversations Section */}
       <section className="section conversations-section">
         <div className="section-header">
-          <h2>💬 Активные диалоги (обновлено)</h2>
+          <h2>💬 Активные диалоги</h2>
           <span className="count-badge">{conversations.length}</span>
         </div>
         
