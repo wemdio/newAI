@@ -4,12 +4,12 @@ import supabase from '../supabaseClient';
 import './AIMessaging.css';
 
 const AIMessaging = () => {
-  // UI Version 2.0 - Fix spacing and modal
+  // UI Version 2.1 - Fix Hook Order Error
   // Get session directly from Supabase to avoid rerenders from parent
   const [session, setSession] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   
-  // State management - MUST be before any conditional returns!
+  // State management
   const [accounts, setAccounts] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
   const [conversations, setConversations] = useState([]);
@@ -44,39 +44,9 @@ const AIMessaging = () => {
     hot_lead_criteria: '',
     target_channel_id: ''
   });
-  
-  // Initialize session
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setSessionLoading(false);
-    });
-    
-    // Subscribe to auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-    });
-    
-    return () => subscription.unsubscribe();
-  }, []);
-  
-  // Verify session exists - AFTER all hooks
-  if (sessionLoading) {
-    return (
-      <div className="ai-messaging-loading">
-        <p>Загрузка...</p>
-      </div>
-    );
-  }
-  
-  if (!session?.user) {
-    return (
-      <div className="ai-messaging-loading">
-        <p>⚠️ Сессия не найдена. Пожалуйста, войдите в систему.</p>
-      </div>
-    );
-  }
-  
+
+  // --- HELPERS ---
+
   // API base URL
   const getApiUrl = () => {
     if (window.location.hostname === 'localhost') {
@@ -99,9 +69,7 @@ const AIMessaging = () => {
   // Ensure user exists in database before using
   const ensureUserExists = async () => {
     const userId = getUserId();
-    if (!userId) {
-      throw new Error('No user session');
-    }
+    if (!userId) throw new Error('No user session');
     
     try {
       await axios.post(`${apiUrl}/auth/create-user`, { user_id: userId });
@@ -118,6 +86,8 @@ const AIMessaging = () => {
     try {
       setLoading(true);
       const userId = getUserId();
+      if (!userId) return;
+
       const headers = { 'x-user-id': userId };
       
       // Load accounts
@@ -142,22 +112,36 @@ const AIMessaging = () => {
       
     } catch (error) {
       console.error('Failed to load data:', error);
-      alert('Ошибка загрузки данных. Проверьте консоль.');
     } finally {
       setLoading(false);
     }
   };
+
+  // --- HOOKS ---
   
+  // Initialize session
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setSessionLoading(false);
+    });
+    
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+    
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Load data when session ready
   useEffect(() => {
     // Only load data when session is ready
     if (!session?.user || sessionLoading) return;
     
     let isMounted = true;
     
-    // Ensure user exists before loading data
     const initializeAndLoad = async () => {
       if (!isMounted) return;
-      
       try {
         await ensureUserExists();
         await loadData();
@@ -168,8 +152,6 @@ const AIMessaging = () => {
     
     initializeAndLoad();
     
-    // Refresh every 5 minutes (300 seconds) to reduce page reloads
-    // User can manually refresh if needed
     const interval = setInterval(() => {
       if (isMounted) {
         loadData().catch(err => console.error('Auto-refresh failed:', err));
@@ -181,8 +163,9 @@ const AIMessaging = () => {
       clearInterval(interval);
     };
   }, [session, sessionLoading]);
+
+  // --- HANDLERS ---
   
-  // Create account (manual)
   const handleCreateAccount = async (e) => {
     e.preventDefault();
     try {
@@ -190,25 +173,15 @@ const AIMessaging = () => {
       await axios.post(`${apiUrl}/messaging/accounts`, newAccount, {
         headers: { 'x-user-id': userId }
       });
-      
       alert('Аккаунт добавлен!');
       setShowAddAccount(false);
-      setNewAccount({
-        account_name: '',
-        session_file: '',
-        api_id: '',
-        api_hash: '',
-        proxy_url: '',
-        phone_number: ''
-      });
+      setNewAccount({ account_name: '', session_file: '', api_id: '', api_hash: '', proxy_url: '', phone_number: '' });
       loadData();
     } catch (error) {
-      console.error('Failed to create account:', error);
-      alert('Ошибка создания аккаунта: ' + error.response?.data?.error || error.message);
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
     }
   };
   
-  // Create campaign
   const handleCreateCampaign = async (e) => {
     e.preventDefault();
     try {
@@ -216,73 +189,49 @@ const AIMessaging = () => {
       await axios.post(`${apiUrl}/messaging/campaigns`, newCampaign, {
         headers: { 'x-user-id': userId }
       });
-      
       alert('Кампания создана!');
       setShowCreateCampaign(false);
-      setNewCampaign({
-        name: '',
-        communication_prompt: '',
-        hot_lead_criteria: '',
-        target_channel_id: ''
-      });
+      setNewCampaign({ name: '', communication_prompt: '', hot_lead_criteria: '', target_channel_id: '' });
       loadData();
     } catch (error) {
-      console.error('Failed to create campaign:', error);
-      alert('Ошибка создания кампании: ' + error.response?.data?.error || error.message);
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
     }
   };
   
-  // Start campaign
   const handleStartCampaign = async (campaignId) => {
     if (!window.confirm('Запустить кампанию?')) return;
-    
     try {
       const userId = getUserId();
-      await axios.post(`${apiUrl}/messaging/campaigns/${campaignId}/start`, {}, {
-        headers: { 'x-user-id': userId }
-      });
-      
+      await axios.post(`${apiUrl}/messaging/campaigns/${campaignId}/start`, {}, { headers: { 'x-user-id': userId } });
       alert('Кампания запущена!');
       loadData();
     } catch (error) {
-      console.error('Failed to start campaign:', error);
-      alert('Ошибка запуска: ' + error.response?.data?.error || error.message);
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
     }
   };
   
-  // Pause campaign
   const handlePauseCampaign = async (campaignId) => {
     try {
       const userId = getUserId();
-      await axios.post(`${apiUrl}/messaging/campaigns/${campaignId}/pause`, {}, {
-        headers: { 'x-user-id': userId }
-      });
-      
+      await axios.post(`${apiUrl}/messaging/campaigns/${campaignId}/pause`, {}, { headers: { 'x-user-id': userId } });
       alert('Кампания приостановлена');
       loadData();
     } catch (error) {
-      console.error('Failed to pause campaign:', error);
-      alert('Ошибка: ' + error.response?.data?.error || error.message);
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
     }
   };
 
-  // Resume campaign
   const handleResumeCampaign = async (campaignId) => {
     try {
       const userId = getUserId();
-      await axios.post(`${apiUrl}/messaging/campaigns/${campaignId}/resume`, {}, {
-        headers: { 'x-user-id': userId }
-      });
-      
+      await axios.post(`${apiUrl}/messaging/campaigns/${campaignId}/resume`, {}, { headers: { 'x-user-id': userId } });
       alert('Кампания возобновлена');
       loadData();
     } catch (error) {
-      console.error('Failed to resume campaign:', error);
-      alert('Ошибка: ' + error.response?.data?.error || error.message);
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
     }
   };
   
-  // Open edit campaign modal
   const openEditCampaign = (campaign) => {
     setEditingCampaign({
       id: campaign.id,
@@ -294,84 +243,78 @@ const AIMessaging = () => {
     setShowEditCampaign(true);
   };
   
-  // Update campaign
   const handleUpdateCampaign = async (e) => {
     e.preventDefault();
     try {
       const userId = getUserId();
-      await axios.put(`${apiUrl}/messaging/campaigns/${editingCampaign.id}`, editingCampaign, {
-        headers: { 'x-user-id': userId }
-      });
-      
+      await axios.put(`${apiUrl}/messaging/campaigns/${editingCampaign.id}`, editingCampaign, { headers: { 'x-user-id': userId } });
       alert('Кампания обновлена!');
       setShowEditCampaign(false);
       setEditingCampaign(null);
       loadData();
     } catch (error) {
-      console.error('Failed to update campaign:', error);
-      alert('Ошибка обновления: ' + error.response?.data?.error || error.message);
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
     }
   };
 
-  // Delete campaign
   const handleDeleteCampaign = async (campaignId) => {
-    if (!window.confirm('Вы уверены, что хотите удалить эту кампанию? Это действие нельзя отменить.')) {
-      return;
-    }
-    
+    if (!window.confirm('Удалить кампанию?')) return;
     try {
       const userId = getUserId();
-      await axios.delete(`${apiUrl}/messaging/campaigns/${campaignId}`, {
-        headers: { 'x-user-id': userId }
-      });
-      
+      await axios.delete(`${apiUrl}/messaging/campaigns/${campaignId}`, { headers: { 'x-user-id': userId } });
       alert('Кампания удалена');
       loadData();
     } catch (error) {
-      console.error('Failed to delete campaign:', error);
-      alert('Ошибка удаления: ' + error.response?.data?.error || error.message);
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
     }
   };
   
-  // View conversation
   const viewConversation = async (conversationId) => {
     try {
       const userId = getUserId();
-      const res = await axios.get(`${apiUrl}/messaging/conversations/${conversationId}`, {
-        headers: { 'x-user-id': userId }
-      });
-      
+      const res = await axios.get(`${apiUrl}/messaging/conversations/${conversationId}`, { headers: { 'x-user-id': userId } });
       setSelectedConversation(res.data.conversation);
       setShowConversationDetail(true);
     } catch (error) {
-      console.error('Failed to load conversation:', error);
       alert('Ошибка загрузки диалога');
     }
   };
   
-  // Delete account
   const handleDeleteAccount = async (accountId) => {
     if (!window.confirm('Удалить аккаунт?')) return;
-    
     try {
       const userId = getUserId();
-      await axios.delete(`${apiUrl}/messaging/accounts/${accountId}`, {
-        headers: { 'x-user-id': userId }
-      });
-      
+      await axios.delete(`${apiUrl}/messaging/accounts/${accountId}`, { headers: { 'x-user-id': userId } });
       alert('Аккаунт удален');
       loadData();
     } catch (error) {
-      console.error('Failed to delete account:', error);
       alert('Ошибка удаления');
     }
   };
+
+  // --- RENDER CONDITIONS (Moved to bottom) ---
+  if (sessionLoading) {
+    return (
+      <div className="ai-messaging-loading">
+        <div className="spinner"></div>
+        <p>Загрузка...</p>
+      </div>
+    );
+  }
   
-  if (loading) {
+  if (!session?.user) {
+    return (
+      <div className="ai-messaging-loading">
+        <p>⚠️ Сессия не найдена. Пожалуйста, войдите в систему.</p>
+      </div>
+    );
+  }
+  
+  if (loading && !stats) {
     return (
       <div className="ai-messaging loading">
         <div className="spinner"></div>
-        <p>Загрузка...</p>
+        <p>Загрузка данных...</p>
       </div>
     );
   }
@@ -989,6 +932,3 @@ const AIMessaging = () => {
 };
 
 export default AIMessaging;
-
-
-
