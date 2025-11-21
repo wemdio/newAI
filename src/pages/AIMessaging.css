@@ -181,13 +181,14 @@
   font-family: 'Courier New', monospace;
 }
 
-/* Campaign Cards */
+/* Campaign Cards - Improved UI */
 .campaign-card {
   background: var(--bg-dark);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 24px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  position: relative;
 }
 
 .campaign-card.running {
@@ -197,35 +198,51 @@
 
 .campaign-header {
   display: flex;
+  flex-direction: row;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 20px;
+  gap: 16px;
 }
 
 .campaign-header h3 {
   font-size: 18px;
   font-weight: 600;
   color: var(--text-main);
+  margin-top: 4px;
 }
 
+/* Stats Row - Cleaner Look */
 .campaign-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 16px;
-  background: rgba(255, 255, 255, 0.03);
-  padding: 16px;
-  border-radius: var(--radius-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  background: transparent;
+  padding: 16px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   margin: 20px 0;
+}
+
+.campaign-stats .stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .campaign-stats .stat-label {
   font-size: 11px;
-  margin-bottom: 4px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  margin: 0;
 }
 
 .campaign-stats .stat-value {
-  font-size: 20px;
-  margin-bottom: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin: 0;
 }
 
 /* Buttons inside cards */
@@ -233,14 +250,51 @@
   display: flex;
   gap: 12px;
   margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+/* Prompt Block - Fixed Text Overflow */
+.prompt-block {
+  background: rgba(255, 255, 255, 0.03);
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  margin-top: 16px;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.prompt-block strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--primary);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.prompt-block pre {
+  margin: 0;
+  white-space: pre-wrap;       /* CSS3 */
+  white-space: -moz-pre-wrap;  /* Mozilla, since 1999 */
+  white-space: -pre-wrap;      /* Opera 4-6 */
+  white-space: -o-pre-wrap;    /* Opera 7 */
+  word-wrap: break-word;       /* Internet Explorer 5.5+ */
+  word-break: break-word;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  max-width: 100%;
 }
 
 /* Status Badges */
 .status-badge {
+  display: inline-block;
   padding: 4px 12px;
   border-radius: var(--radius-full);
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -248,16 +302,20 @@
 .status-badge.running {
   background: rgba(0, 204, 102, 0.15);
   color: var(--success);
+  border: 1px solid rgba(0, 204, 102, 0.2);
 }
 
 .status-badge.paused {
   background: rgba(255, 187, 0, 0.15);
   color: var(--warning);
+  border: 1px solid rgba(255, 187, 0, 0.2);
 }
 
-.status-badge.stopped {
+.status-badge.stopped,
+.status-badge.draft {
   background: rgba(255, 255, 255, 0.1);
   color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 /* Modals */
