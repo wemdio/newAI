@@ -4,8 +4,7 @@ import supabase from '../supabaseClient';
 import './AIMessaging.css';
 
 const AIMessaging = () => {
-  // UI Version 2.1 - Fix Hook Order Error
-  // Get session directly from Supabase to avoid rerenders from parent
+  // UI Version 2.2 - Minimal & Compact
   const [session, setSession] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
   
@@ -60,7 +59,7 @@ const AIMessaging = () => {
   // Get user ID from Supabase session
   const getUserId = () => {
     if (!session?.user?.id) {
-      console.error('❌ No session found!');
+      console.error('No session found!');
       return null;
     }
     return session.user.id;
@@ -73,7 +72,7 @@ const AIMessaging = () => {
     
     try {
       await axios.post(`${apiUrl}/auth/create-user`, { user_id: userId });
-      console.log('✅ User verified in database:', userId);
+      console.log('User verified in database:', userId);
       return userId;
     } catch (err) {
       console.error('Failed to ensure user exists:', err);
@@ -135,7 +134,6 @@ const AIMessaging = () => {
 
   // Load data when session ready
   useEffect(() => {
-    // Only load data when session is ready
     if (!session?.user || sessionLoading) return;
     
     let isMounted = true;
@@ -292,7 +290,6 @@ const AIMessaging = () => {
     }
   };
 
-  // --- RENDER CONDITIONS (Moved to bottom) ---
   if (sessionLoading) {
     return (
       <div className="ai-messaging-loading">
@@ -305,7 +302,7 @@ const AIMessaging = () => {
   if (!session?.user) {
     return (
       <div className="ai-messaging-loading">
-        <p>⚠️ Сессия не найдена. Пожалуйста, войдите в систему.</p>
+        <p>Сессия не найдена. Пожалуйста, войдите в систему.</p>
       </div>
     );
   }
@@ -322,7 +319,7 @@ const AIMessaging = () => {
   return (
     <div className="ai-messaging">
       <div className="page-header">
-        <h1>🤖 AI Рассылки</h1>
+        <h1>AI Рассылки</h1>
         <p className="subtitle">
           Автоматическое общение с лидами через Telegram с использованием AI
         </p>
@@ -332,7 +329,6 @@ const AIMessaging = () => {
       {stats && (
         <div className="stats-overview">
           <div className="stat-card">
-            <div className="stat-icon">📊</div>
             <div className="stat-content">
               <div className="stat-label">Кампании</div>
               <div className="stat-value">{stats.campaigns.total}</div>
@@ -341,7 +337,6 @@ const AIMessaging = () => {
           </div>
           
           <div className="stat-card">
-            <div className="stat-icon">👥</div>
             <div className="stat-content">
               <div className="stat-label">Аккаунты</div>
               <div className="stat-value">{stats.accounts.total}</div>
@@ -350,7 +345,6 @@ const AIMessaging = () => {
           </div>
           
           <div className="stat-card">
-            <div className="stat-icon">💬</div>
             <div className="stat-content">
               <div className="stat-label">Диалоги</div>
               <div className="stat-value">{stats.conversations.total}</div>
@@ -359,7 +353,6 @@ const AIMessaging = () => {
           </div>
           
           <div className="stat-card hot">
-            <div className="stat-icon">🔥</div>
             <div className="stat-content">
               <div className="stat-label">Горячие лиды</div>
               <div className="stat-value">{stats.campaigns.total_hot_leads}</div>
@@ -372,15 +365,15 @@ const AIMessaging = () => {
       {/* Telegram Accounts Section */}
       <section className="section accounts-section">
         <div className="section-header">
-          <h2>📱 Telegram Аккаунты</h2>
+          <h2>Telegram Аккаунты</h2>
           <button className="btn btn-primary" onClick={() => setShowAddAccount(true)}>
-            + Добавить аккаунт
+            Добавить аккаунт
           </button>
         </div>
         
         {accounts.length === 0 ? (
           <div className="empty-state">
-            <p>😔 Нет аккаунтов</p>
+            <p>Нет аккаунтов</p>
             <p className="hint">Добавьте Telegram аккаунты для рассылки</p>
           </div>
         ) : (
@@ -390,9 +383,9 @@ const AIMessaging = () => {
                 <div className="account-header">
                   <h3>{account.account_name}</h3>
                   <span className={`status-badge ${account.status}`}>
-                    {account.status === 'active' ? '✅ Активен' : 
-                     account.status === 'paused' ? '⏸️ Пауза' :
-                     account.status === 'banned' ? '🔒 Забанен' : '❌ Ошибка'}
+                    {account.status === 'active' ? 'Активен' : 
+                     account.status === 'paused' ? 'Пауза' :
+                     account.status === 'banned' ? 'Забанен' : 'Ошибка'}
                   </span>
                 </div>
                 
@@ -403,16 +396,16 @@ const AIMessaging = () => {
                   </div>
                   <div className="info-row">
                     <span className="label">Прокси:</span>
-                    <span className="value">{account.proxy_url ? '✅ Есть' : '❌ Нет'}</span>
+                    <span className="value">{account.proxy_url ? 'Да' : 'Нет'}</span>
                   </div>
                   <div className="info-row">
                     <span className="label">Сообщений сегодня:</span>
                     <span className="value">{account.messages_sent_today} / 25</span>
                   </div>
                   <div className="info-row">
-                    <span className="label">Последнее использование:</span>
+                    <span className="label">Использован:</span>
                     <span className="value">
-                      {account.last_used_at ? new Date(account.last_used_at).toLocaleString('ru') : 'Не использовался'}
+                      {account.last_used_at ? new Date(account.last_used_at).toLocaleString('ru') : 'Нет'}
                     </span>
                   </div>
                 </div>
@@ -434,15 +427,15 @@ const AIMessaging = () => {
       {/* Campaigns Section */}
       <section className="section campaigns-section">
         <div className="section-header">
-          <h2>🎯 Кампании</h2>
+          <h2>Кампании</h2>
           <button className="btn btn-primary" onClick={() => setShowCreateCampaign(true)}>
-            + Создать кампанию
+            Создать кампанию
           </button>
         </div>
         
         {campaigns.length === 0 ? (
           <div className="empty-state">
-            <p>😔 Нет кампаний</p>
+            <p>Нет кампаний</p>
             <p className="hint">Создайте кампанию для автоматической рассылки</p>
           </div>
         ) : (
@@ -453,9 +446,9 @@ const AIMessaging = () => {
                   <div>
                     <h3>{campaign.name}</h3>
                     <span className={`status-badge ${campaign.status}`}>
-                      {campaign.status === 'running' ? '🟢 Запущена' :
-                       campaign.status === 'paused' ? '⏸️ Приостановлена' :
-                       campaign.status === 'stopped' ? '⏹️ Остановлена' : '📝 Черновик'}
+                      {campaign.status === 'running' ? 'Запущена' :
+                       campaign.status === 'paused' ? 'Приостановлена' :
+                       campaign.status === 'stopped' ? 'Остановлена' : 'Черновик'}
                     </span>
                   </div>
                   <div className="campaign-actions">
@@ -480,23 +473,21 @@ const AIMessaging = () => {
                         className="btn btn-success" 
                         onClick={() => handleResumeCampaign(campaign.id)}
                       >
-                        ▶️ Возобновить
+                        Возобновить
                       </button>
                     )}
                     <button 
                       className="btn btn-primary" 
                       onClick={() => openEditCampaign(campaign)}
-                      title="Редактировать промпты"
                     >
-                      ✏️ Изменить
+                      Изменить
                     </button>
                     {(campaign.status === 'draft' || campaign.status === 'paused' || campaign.status === 'stopped') && (
                       <button 
                         className="btn btn-danger" 
                         onClick={() => handleDeleteCampaign(campaign.id)}
-                        title="Удалить кампанию"
                       >
-                        🗑️ Удалить
+                        Удалить
                       </button>
                     )}
                   </div>
@@ -504,16 +495,16 @@ const AIMessaging = () => {
                 
                 <div className="campaign-stats">
                   <div className="stat">
-                    <span className="stat-label">Обработано лидов:</span>
+                    <span className="stat-label">Лиды:</span>
                     <span className="stat-value">{campaign.leads_contacted}</span>
                   </div>
                   <div className="stat">
-                    <span className="stat-label">Горячих лидов:</span>
+                    <span className="stat-label">Горячие:</span>
                     <span className="stat-value">{campaign.hot_leads_found}</span>
                   </div>
                   <div className="stat">
-                    <span className="stat-label">Канал уведомлений:</span>
-                    <span className="stat-value">{campaign.target_channel_id || 'Не указан'}</span>
+                    <span className="stat-label">Канал:</span>
+                    <span className="stat-value">{campaign.target_channel_id || 'Нет'}</span>
                   </div>
                 </div>
                 
@@ -539,7 +530,7 @@ const AIMessaging = () => {
       {/* Conversations Section */}
       <section className="section conversations-section">
         <div className="section-header">
-          <h2>💬 Активные диалоги</h2>
+          <h2>Активные диалоги</h2>
           <span className="count-badge">{conversations.length}</span>
         </div>
         
@@ -555,9 +546,9 @@ const AIMessaging = () => {
                   <div className="conv-user-info">
                     <strong>@{conv.peer_username || conv.peer_user_id}</strong>
                     <span className={`status-badge ${conv.status}`}>
-                      {conv.status === 'active' ? 'АКТИВЕН' :
-                       conv.status === 'hot_lead' ? 'ГОРЯЧИЙ' :
-                       conv.status === 'waiting' ? 'ОЖИДАНИЕ' : 'ОСТАНОВЛЕН'}
+                      {conv.status === 'active' ? 'Активен' :
+                       conv.status === 'hot_lead' ? 'Горячий' :
+                       conv.status === 'waiting' ? 'Ожидание' : 'Остановлен'}
                     </span>
                   </div>
                 </div>
@@ -582,7 +573,7 @@ const AIMessaging = () => {
                   onClick={() => viewConversation(conv.id)}
                   style={{marginTop: '12px'}}
                 >
-                  💬 Посмотреть историю
+                  История диалога
                 </button>
               </div>
             ))}
@@ -593,14 +584,13 @@ const AIMessaging = () => {
       {/* Hot Leads Section */}
       <section className="section hot-leads-section">
         <div className="section-header">
-          <h2>🔥 Горячие лиды</h2>
+          <h2>Горячие лиды</h2>
           <span className="count-badge hot">{hotLeads.length}</span>
         </div>
         
         {hotLeads.length === 0 ? (
           <div className="empty-state">
             <p>Горячих лидов пока нет</p>
-            <p className="hint">Когда AI определит интерес - они появятся здесь</p>
           </div>
         ) : (
           <div className="hot-leads-list">
@@ -609,7 +599,7 @@ const AIMessaging = () => {
                 <div className="hot-lead-header">
                   <div>
                     <h3>@{lead.ai_conversations?.peer_username}</h3>
-                    {!lead.posted_to_channel && <span className="badge new">НОВЫЙ</span>}
+                    {!lead.posted_to_channel && <span className="badge new">New</span>}
                   </div>
                   <span className="hot-lead-time">
                     {new Date(lead.created_at).toLocaleString('ru')}
@@ -622,12 +612,12 @@ const AIMessaging = () => {
                 </div>
                 
                 <details className="conversation-history">
-                  <summary>История диалога ({lead.conversation_history?.length || 0} сообщений)</summary>
+                  <summary>История диалога ({lead.conversation_history?.length || 0})</summary>
                   <div className="history-messages">
                     {(lead.conversation_history || []).map((msg, idx) => (
                       <div key={idx} className={`message ${msg.role}`}>
                         <div className="message-role">
-                          {msg.role === 'user' ? '👤 Лид' : '🤖 Мы'}
+                          {msg.role === 'user' ? 'Лид' : 'AI'}
                         </div>
                         <div className="message-content">{msg.content}</div>
                       </div>
@@ -645,7 +635,7 @@ const AIMessaging = () => {
         <div className="modal-overlay" onClick={() => setShowAddAccount(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>Добавить Telegram аккаунт</h2>
+              <h2>Добавить аккаунт</h2>
               <button className="close-btn" onClick={() => setShowAddAccount(false)}>×</button>
             </div>
             
@@ -675,7 +665,7 @@ const AIMessaging = () => {
                   );
                   
                   if (response.data.success) {
-                    alert('✅ Аккаунт успешно добавлен!');
+                    alert('Аккаунт успешно добавлен!');
                     setShowAddAccount(false);
                     setSessionString('');
                     setNewAccount({
@@ -696,7 +686,7 @@ const AIMessaging = () => {
                 }
               }}>
                 <div className="help-box">
-                  💡 <strong>Session String</strong> - это зашифрованные данные сессии Telegram.<br/>
+                  <strong>Session String</strong> - это зашифрованные данные сессии Telegram.<br/>
                   Обычно выдается магазинами аккаунтов как длинная hex-строка.<br/>
                   <br/>
                   <strong>Пример:</strong> 838bbfe1808a243cecf7155620941acc2107...
@@ -723,13 +713,13 @@ const AIMessaging = () => {
                     style={{ fontFamily: 'monospace', fontSize: '12px' }}
                     required
                   />
-                  <small>🔐 API credentials будут использованы автоматически</small>
+                  <small>API credentials будут использованы автоматически</small>
                 </div>
                 
                 <div className="form-actions">
                   <button type="button" onClick={() => setShowAddAccount(false)}>Отмена</button>
                   <button type="submit" className="primary" disabled={uploading}>
-                    {uploading ? '⏳ Импорт...' : '✅ Импортировать Session'}
+                    {uploading ? 'Импорт...' : 'Импортировать'}
                   </button>
                 </div>
               </form>
@@ -811,7 +801,7 @@ const AIMessaging = () => {
         <div className="modal-overlay" onClick={() => setShowEditCampaign(false)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>✏️ Редактировать кампанию</h2>
+              <h2>Редактировать кампанию</h2>
               <button className="close-btn" onClick={() => setShowEditCampaign(false)}>×</button>
             </div>
             
@@ -867,7 +857,7 @@ const AIMessaging = () => {
                   Отмена
                 </button>
                 <button type="submit" className="btn btn-primary">
-                  💾 Сохранить
+                  Сохранить
                 </button>
               </div>
             </form>
@@ -889,9 +879,9 @@ const AIMessaging = () => {
                 <div className="meta-item">
                   <span className="label">Статус:</span>
                   <span className={`status-badge ${selectedConversation.status}`}>
-                      {selectedConversation.status === 'active' ? 'АКТИВЕН' :
-                       selectedConversation.status === 'hot_lead' ? 'ГОРЯЧИЙ' :
-                       selectedConversation.status === 'waiting' ? 'ОЖИДАНИЕ' : 'ОСТАНОВЛЕН'}
+                      {selectedConversation.status === 'active' ? 'Активен' :
+                       selectedConversation.status === 'hot_lead' ? 'Горячий' :
+                       selectedConversation.status === 'waiting' ? 'Ожидание' : 'Остановлен'}
                   </span>
                 </div>
                 <div className="meta-item">
@@ -913,7 +903,7 @@ const AIMessaging = () => {
                   <div key={idx} className={`message ${msg.role}`}>
                     <div className="message-header">
                       <span className="message-role">
-                        {msg.role === 'user' ? '👤 Лид' : '🤖 Мы'}
+                        {msg.role === 'user' ? 'Лид' : 'AI'}
                       </span>
                       <span className="message-time">
                         {new Date(msg.timestamp).toLocaleString('ru')}
