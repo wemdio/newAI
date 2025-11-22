@@ -25,6 +25,7 @@ class AIMessagingService:
         self.safety = None
         self.telethon = None
         self.running = False
+        self.active_campaign_tasks = {}  # {campaign_id: asyncio.Task}
     
     async def start(self):
         """Start the service"""
@@ -74,6 +75,26 @@ class AIMessagingService:
             iteration += 1
             print(f"\n{'='*60}")
             print(f"🔄 Iteration #{iteration} - {datetime.utcnow().strftime('%H:%M:%S')} UTC")
+            
+            # Clean up finished tasks
+            finished_campaigns = []
+            for campaign_id, task in self.active_campaign_tasks.items():
+                if task.done():
+                    finished_campaigns.append(campaign_id)
+                    # Check for exceptions
+                    try:
+                        exc = task.exception()
+                        if exc:
+                            print(f"❌ Campaign {campaign_id} task failed: {exc}")
+                    except Exception as e:
+                        print(f"⚠️ Error checking task status: {e}")
+            
+            for campaign_id in finished_campaigns:
+                del self.active_campaign_tasks[campaign_id]
+                
+            if self.active_campaign_tasks:
+                print(f"ℹ️ Currently running campaigns: {len(self.active_campaign_tasks)}")
+            
             print(f"{'='*60}\n")
             
             try:
@@ -90,9 +111,20 @@ class AIMessagingService:
                     
                     # Process each campaign
                     for campaign in campaigns:
-                        await self.process_campaign(campaign)
+                        campaign_id = str(campaign['id'])
+                        
+                        # Check if already running
+                        if campaign_id in self.active_campaign_tasks:
+                            print(f"🔄 Campaign {campaign['name']} is already running - skipping duplicate start")
+                            continue
+                            
+                        # Start background task for this campaign
+                        print(f"🚀 Starting background task for: {campaign['name']}")
+                        task = asyncio.create_task(self.process_campaign(campaign))
+                        self.active_campaign_tasks[campaign_id] = task
                 
                 # Check if need to reset daily counters
+                # NOTE: Ideally this should be moved to pg_cron or separate worker as discussed
                 await self.safety.check_and_reset_daily_counters()
                 
             except Exception as e:
@@ -101,7 +133,8 @@ class AIMessagingService:
                 traceback.print_exc()
             
             # Wait before next iteration (60 seconds)
-            print(f"\n⏸️ Sleeping for 60 seconds...")
+            # The campaigns run in background during this sleep!
+            print(f"\n⏸️ Main loop sleeping for 60 seconds...")
             await asyncio.sleep(60)
     
     async def check_and_reconnect_accounts(self):
@@ -177,6 +210,18 @@ class AIMessagingService:
         print("\n🛑 Shutting down...")
         
         self.running = False
+        
+        # Cancel active campaign tasks
+        if hasattr(self, 'active_campaign_tasks') and self.active_campaign_tasks:
+            print(f"⏳ Cancelling {len(self.active_campaign_tasks)} active campaign tasks...")
+            for task in self.active_campaign_tasks.values():
+                task.cancel()
+            
+            # Wait for tasks to cancel
+            try:
+                await asyncio.wait(self.active_campaign_tasks.values(), timeout=5)
+            except Exception as e:
+                print(f"⚠️ Error waiting for tasks to cancel: {e}")
         
         # Close Telethon clients
         if self.telethon:
