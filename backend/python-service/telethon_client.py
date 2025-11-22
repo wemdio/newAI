@@ -482,6 +482,13 @@ class TelethonManager:
             wait_time = spam_status.get('wait_time', 86400)  # Default 24h if can't determine
             status = spam_status.get('status', 'spam_blocked')
             
+            # IMPORTANT: PeerFlood can happen even when SpamBot says "clean"
+            # This is Telegram's rate limiting for new accounts or writing to strangers
+            # If SpamBot says "active" but PeerFlood occurred, enforce minimum 24h cooldown
+            if status == 'active' and wait_time == 0:
+                wait_time = 86400  # Force 24h cooldown for PeerFlood
+                print(f"   ⚠️ PeerFlood despite clean SpamBot status - enforcing 24h cooldown")
+            
             print(f"   SpamBot says: {status}, wait time: {wait_time}s ({wait_time/3600:.1f}h)")
             
             # Update account status in database
