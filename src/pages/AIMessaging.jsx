@@ -290,6 +290,27 @@ const AIMessaging = () => {
     }
   };
 
+  // Merge hot leads from 'hot_leads' table and conversations with 'hot_lead' status
+  // This handles legacy hot leads that don't have a record in 'hot_leads' table
+  const hotLeadConversationIds = new Set(hotLeads.map(hl => hl.conversation_id));
+  const missingHotLeads = conversations.filter(c => c.status === 'hot_lead' && !hotLeadConversationIds.has(c.id));
+
+  const adaptedMissingLeads = missingHotLeads.map(c => ({
+      id: `legacy-${c.id}`,
+      created_at: c.last_message_at || c.created_at,
+      ai_conversations: {
+          peer_username: c.peer_username,
+          peer_user_id: c.peer_user_id
+      },
+      messaging_campaigns: c.messaging_campaigns || { name: 'Legacy' },
+      conversation_history: c.conversation_history,
+      posted_to_channel: true // Assume posted/processed for legacy to avoid "New" badge
+  }));
+
+  const allHotLeads = [...hotLeads, ...adaptedMissingLeads].sort((a, b) => 
+    new Date(b.created_at) - new Date(a.created_at)
+  );
+
   if (sessionLoading) {
     return (
       <div className="ai-messaging-loading">
@@ -355,8 +376,8 @@ const AIMessaging = () => {
           <div className="stat-card hot">
             <div className="stat-content">
               <div className="stat-label">Горячие лиды</div>
-              <div className="stat-value">{stats.campaigns.total_hot_leads}</div>
-              <div className="stat-detail">{hotLeads.filter(l => !l.posted_to_channel).length} новых</div>
+              <div className="stat-value">{allHotLeads.length}</div>
+              <div className="stat-detail">{allHotLeads.filter(l => !l.posted_to_channel).length} новых</div>
             </div>
           </div>
         </div>
@@ -577,16 +598,16 @@ const AIMessaging = () => {
       <section className="section hot-leads-section">
         <div className="section-header">
           <h2>Горячие лиды</h2>
-          <span className="count-badge hot">{hotLeads.length}</span>
+          <span className="count-badge hot">{allHotLeads.length}</span>
         </div>
         
-        {hotLeads.length === 0 ? (
+        {allHotLeads.length === 0 ? (
           <div className="empty-state">
             <p>Горячих лидов пока нет</p>
           </div>
         ) : (
           <div className="hot-leads-list">
-            {hotLeads.map(lead => (
+            {allHotLeads.map(lead => (
               <div key={lead.id} className="hot-lead-card">
                 <div className="hot-lead-header">
                   <div>
