@@ -9,6 +9,7 @@ from telethon.errors import (
     AuthKeyUnregisteredError,
     SessionPasswordNeededError
 )
+from telethon.errors.common import TypeNotFoundError
 from urllib.parse import urlparse
 from typing import Dict, Optional, Callable
 import asyncio
@@ -210,6 +211,15 @@ class TelethonManager:
         except AuthKeyUnregisteredError:
             print(f"❌ Account {account_id} auth key unregistered (banned or deleted)")
             await self.safety.handle_account_ban(account_id)
+            return False
+        except TypeNotFoundError as e:
+            print(f"❌ TypeNotFoundError for account {account_id}: {e}")
+            print(f"   This usually means Telethon version is outdated or session is corrupted")
+            print(f"   Please update Telethon and re-import the session")
+            await self.supabase.mark_account_error(
+                account_id,
+                f"Session incompatible: TypeNotFoundError. Update Telethon or re-import session."
+            )
             return False
         except Exception as e:
             print(f"❌ Error initializing account {account_id}: {e}")
@@ -508,6 +518,17 @@ class TelethonManager:
             # Account permanently banned
             print(f"🔒 Account {account_id} permanently banned")
             await self.safety.handle_account_ban(account_id)
+            return False
+            
+        except TypeNotFoundError as e:
+            # Telethon version mismatch or corrupted session data
+            print(f"⚠️ TypeNotFoundError for account {account_id}: {e}")
+            print(f"   This usually means Telethon needs to be updated or session is corrupted")
+            print(f"   Marking account as error - please re-import the session")
+            await self.supabase.mark_account_error(
+                account_id,
+                f"Session incompatible: TypeNotFoundError. Please re-import session."
+            )
             return False
             
         except Exception as e:
