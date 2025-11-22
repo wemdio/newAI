@@ -162,6 +162,8 @@ class TelethonManager:
                         f"Proxy connection failed: {account.get('proxy_url')}"
                     )
                     return False
+            else:
+                print(f"⚠️ No proxy configured for account {account['account_name']} - using direct connection")
             
             # Create client
             client = TelegramClient(
