@@ -391,10 +391,6 @@ const AIMessaging = () => {
                 
                 <div className="account-info">
                   <div className="info-row">
-                    <span className="label">Телефон:</span>
-                    <span className="value">{account.phone_number || 'N/A'}</span>
-                  </div>
-                  <div className="info-row">
                     <span className="label">Прокси:</span>
                     <span className="value">{account.proxy_url ? 'Да' : 'Нет'}</span>
                   </div>
