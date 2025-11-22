@@ -491,16 +491,8 @@ const AIMessaging = () => {
                 
                 <div className="campaign-stats">
                   <div className="stat">
-                    <span className="stat-label">Лиды:</span>
-                    <span className="stat-value">{campaign.leads_contacted}</span>
-                  </div>
-                  <div className="stat">
-                    <span className="stat-label">Горячие:</span>
-                    <span className="stat-value">{campaign.hot_leads_found}</span>
-                  </div>
-                  <div className="stat">
-                    <span className="stat-label">Канал:</span>
-                    <span className="stat-value">{campaign.target_channel_id || 'Нет'}</span>
+                     <span className="stat-label">Канал:</span>
+                     <span className="stat-value">{campaign.target_channel_id || 'Нет'}</span>
                   </div>
                 </div>
                 
@@ -527,16 +519,21 @@ const AIMessaging = () => {
       <section className="section conversations-section">
         <div className="section-header">
           <h2>Активные диалоги</h2>
-          <span className="count-badge">{conversations.length}</span>
+          <span className="count-badge">
+            {conversations.filter(c => c.status !== 'hot_lead' && c.status !== 'stopped').length}
+          </span>
         </div>
         
-        {conversations.length === 0 ? (
+        {conversations.filter(c => c.status !== 'hot_lead' && c.status !== 'stopped').length === 0 ? (
           <div className="empty-state">
             <p>Нет активных диалогов</p>
           </div>
         ) : (
           <div className="conversations-list">
-            {conversations.slice(0, 10).map(conv => (
+            {conversations
+              .filter(c => c.status !== 'hot_lead' && c.status !== 'stopped')
+              .slice(0, 10)
+              .map(conv => (
               <div key={conv.id} className="conversation-card">
                 <div className="conv-header">
                   <div className="conv-user-info">
