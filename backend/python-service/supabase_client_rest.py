@@ -1,7 +1,7 @@
 """Supabase REST API client for AI Messaging Service (no database password needed)"""
 import aiohttp
 import json
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional
 
 
@@ -104,7 +104,6 @@ class SupabaseClient:
         """Get uncontacted leads - fetches detected_leads with is_contacted=false (last 24h only)"""
         try:
             # Calculate timestamp for 24 hours ago
-            from datetime import timedelta
             twenty_four_hours_ago = (datetime.utcnow() - timedelta(hours=24)).isoformat()
             
             print(f"🔍 Fetching uncontacted leads for user {user_id}")
@@ -211,7 +210,6 @@ class SupabaseClient:
         messages_today = account.get('messages_sent_today', 0)
         
         if last_used:
-            from datetime import datetime, timezone
             last_used_dt = datetime.fromisoformat(last_used.replace('Z', '+00:00'))
             now = datetime.now(timezone.utc)
             
