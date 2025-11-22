@@ -654,7 +654,8 @@ const AIMessaging = () => {
                     `${apiUrl}/messaging/accounts/import-session`,
                     {
                       account_name: accountName,
-                      session_string: sessionString.trim()
+                      session_string: sessionString.trim(),
+                      proxy_url: newAccount.proxy_url || null
                     },
                     {
                       headers: {
@@ -713,6 +714,17 @@ const AIMessaging = () => {
                     required
                   />
                   <small>API credentials будут использованы автоматически</small>
+                </div>
+                
+                <div className="form-group">
+                  <label>Proxy URL (опционально)</label>
+                  <input
+                    type="text"
+                    placeholder="http://user:pass@ip:port"
+                    value={newAccount.proxy_url}
+                    onChange={e => setNewAccount({...newAccount, proxy_url: e.target.value})}
+                  />
+                  <small>Рекомендуется использовать мобильные прокси для предотвращения банов</small>
                 </div>
                 
                 <div className="form-actions">
