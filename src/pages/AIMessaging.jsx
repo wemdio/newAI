@@ -331,6 +331,7 @@ const AIMessaging = () => {
 
   const adaptedMissingLeads = missingHotLeads.map(c => ({
       id: `legacy-${c.id}`,
+      conversation_id: c.id, // Fix: Add conversation_id for modal lookup
       created_at: c.last_message_at || c.created_at,
       ai_conversations: {
           peer_username: c.peer_username,
