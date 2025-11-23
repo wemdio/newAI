@@ -102,11 +102,11 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     const validation = validateAIResponse(aiResponse, message);
     logValidationResult(validation, message);
     
-    // Simple validation: trust AI if confidence >= 60 (practical threshold)
+    // Simple validation: trust AI if confidence >= 70 (practical threshold)
     const isValidMatch = 
       validation.valid && 
       aiResponse.is_match &&
-      aiResponse.confidence_score >= 60;
+      aiResponse.confidence_score >= 70;
     
     // Prepare result
     const result = {
@@ -133,7 +133,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
       isMatch: isValidMatch,
       confidence: aiResponse.confidence_score,
       validationPassed: validation.valid,
-      meetsThreshold: aiResponse.confidence_score >= 60,
+      meetsThreshold: aiResponse.confidence_score >= 70,
       duration,
       cost: cost.totalCost
     });
@@ -422,7 +422,7 @@ ${JSON.stringify(messagesArray, null, 2)}
       
       // FIXED: validateAIResponse returns { valid, reason, validations }, NOT { isValid, data }!
       const result = {
-        isMatch: aiResult.is_match && aiResult.confidence_score >= 60,
+        isMatch: aiResult.is_match && aiResult.confidence_score >= 70,
         aiResponse: aiResult,
         metadata: {
           duration: duration / batchSize, // Average duration per message
@@ -443,7 +443,7 @@ ${JSON.stringify(messagesArray, null, 2)}
         isMatch: result.isMatch,
         confidence: result.aiResponse.confidence_score,
         validationPassed: validation.valid,
-        meetsThreshold: result.aiResponse.confidence_score >= 60,
+        meetsThreshold: result.aiResponse.confidence_score >= 70,
         duration: Math.round(duration / batchSize),
         cost: costPerMessage
       });
