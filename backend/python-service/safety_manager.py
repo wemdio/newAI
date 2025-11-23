@@ -1,6 +1,7 @@
 """Safety Manager - Anti-ban system with account rotation and limits"""
 import asyncio
 import random
+import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict
 from config import (
@@ -9,6 +10,8 @@ from config import (
     MESSAGE_DELAY_MAX,
     ACCOUNT_COOLDOWN
 )
+
+logger = logging.getLogger('SafetyManager')
 
 
 class SafetyManager:
@@ -24,41 +27,31 @@ class SafetyManager:
         Accounts are rotated automatically (sorted by last_used_at)
         Returns None if no accounts available
         """
-        accounts = await self.supabase.get_accounts_for_user(user_id)
+        # Optimized fetch: get only accounts that haven't reached limit
+        accounts = await self.supabase.get_accounts_for_user(user_id, max_daily_limit=MAX_MESSAGES_PER_DAY)
         
         if not accounts:
-            print(f"❌ No accounts found for user {user_id}")
+            logger.warning(f"❌ No available accounts found for user {user_id} (all limits reached or none active)")
             return None
         
-        print(f"🔄 Round-robin rotation: checking {len(accounts)} accounts...")
+        logger.debug(f"🔄 Checking {len(accounts)} potentially available accounts...")
         
         for idx, account in enumerate(accounts, 1):
             account_id = str(account['id'])
             account_name = account.get('account_name', account_id[:8])
-            messages_today = account.get('messages_sent_today', 0)
-            last_used = account.get('last_used_at', 'Never')
-            
-            print(f"  Account {idx}: {account_name}")
-            print(f"    Messages today: {messages_today}/{MAX_MESSAGES_PER_DAY}")
-            print(f"    Last used: {last_used}")
-            
-            # Check daily limit
-            if self._is_daily_limit_reached(account):
-                print(f"    ❌ Daily limit reached")
-                continue
             
             # Check cooldown period (20 min between messages from same account)
+            # This is still done in Python as it's hard to filter by relative time in Supabase REST
             if self._needs_cooldown(account):
                 cooldown_left = self._get_cooldown_time_left(account)
-                print(f"    ⏳ Cooldown: {cooldown_left:.0f}s remaining (20 min rule)")
+                logger.debug(f"    ⏳ Account {account_name} in cooldown: {cooldown_left:.0f}s remaining")
                 continue
             
             # Found available account - automatically rotated!
-            print(f"    ✅ SELECTED (rotation: account {idx} of {len(accounts)})")
+            logger.info(f"    ✅ SELECTED Account: {account_name}")
             return account
         
-        print(f"⚠️ All accounts in cooldown or reached daily limit")
-        print(f"   💡 Next account available in: {self._get_next_available_time(accounts):.0f}s")
+        logger.warning(f"⚠️ All {len(accounts)} active accounts are currently in cooldown")
         return None
     
     def _get_next_available_time(self, accounts: list) -> float:
