@@ -28,21 +28,25 @@ class SafetyManager:
         Accounts are rotated automatically (sorted by last_used_at)
         Returns None if no accounts available
         """
-        # Optimized fetch: get only accounts that haven't reached limit
-        accounts = await self.supabase.get_accounts_for_user(user_id, max_daily_limit=MAX_MESSAGES_PER_DAY)
+        # Fetch all active accounts (filtering is done in Python to support individual limits)
+        accounts = await self.supabase.get_accounts_for_user(user_id)
         
         if not accounts:
-            logger.warning(f"❌ No available accounts found for user {user_id} (all limits reached or none active)")
+            logger.warning(f"❌ No available accounts found for user {user_id} (none active)")
             return None
         
-        logger.debug(f"🔄 Checking {len(accounts)} potentially available accounts...")
+        logger.debug(f"🔄 Checking {len(accounts)} accounts for availability...")
         
         for idx, account in enumerate(accounts, 1):
             account_id = str(account['id'])
             account_name = account.get('account_name', account_id[:8])
             
+            # Check daily limit (individual)
+            if self._is_daily_limit_reached(account):
+                logger.debug(f"    ⏭️ Account {account_name} reached daily limit")
+                continue
+            
             # Check cooldown period (20 min between messages from same account)
-            # This is still done in Python as it's hard to filter by relative time in Supabase REST
             if self._needs_cooldown(account):
                 cooldown_left = self._get_cooldown_time_left(account)
                 logger.debug(f"    ⏳ Account {account_name} in cooldown: {cooldown_left:.0f}s remaining")
@@ -52,7 +56,7 @@ class SafetyManager:
             logger.info(f"    ✅ SELECTED Account: {account_name}")
             return account
         
-        logger.warning(f"⚠️ All {len(accounts)} active accounts are currently in cooldown")
+        logger.warning(f"⚠️ All {len(accounts)} accounts are currently unavailable (limit or cooldown)")
         return None
     
     def _get_next_available_time(self, accounts: list) -> float:
@@ -72,6 +76,13 @@ class SafetyManager:
     def _is_daily_limit_reached(self, account: Dict) -> bool:
         """Check if account reached daily message limit"""
         messages_today = account.get('messages_sent_today', 0)
+        
+        # Use account specific limit or global default
+        # Default to 3 if daily_limit is not set in DB (safe default)
+        limit = account.get('daily_limit')
+        if limit is None:
+            limit = 3
+            
         last_used_at = account.get('last_used_at')
         
         # If account was last used on a different day, counter should reset
@@ -85,7 +96,7 @@ class SafetyManager:
             if last_used_at.date() < now.date():
                 return False
         
-        return messages_today >= MAX_MESSAGES_PER_DAY
+        return messages_today >= limit
     
     def _needs_cooldown(self, account: Dict) -> bool:
         """Check if account needs cooldown period (20 min between messages)"""

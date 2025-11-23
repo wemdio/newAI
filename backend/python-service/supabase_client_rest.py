@@ -167,16 +167,14 @@ class SupabaseClient:
     
     # ============= ACCOUNTS =============
     
-    async def get_accounts_for_user(self, user_id: str, max_daily_limit: int = 100) -> List[Dict]:
-        """Get available accounts that haven't reached daily limit"""
-        # print(f"🔍 DEBUG: Fetching accounts for user_id={user_id}")
-        
+    async def get_accounts_for_user(self, user_id: str) -> List[Dict]:
+        """Get available accounts"""
         # Build URL
         url = f"{self.url}/rest/v1/telegram_accounts?select=*"
         url += f"&user_id=eq.{user_id}"
         url += f"&status=eq.active"
         url += f"&is_available=is.true"
-        url += f"&messages_sent_today=lt.{max_daily_limit}"  # Filter by daily limit in DB!
+        # Removed db-side limit check to support individual account limits
         url += f"&order=last_used_at.asc.nullsfirst"
         
         async with self.session.get(url) as resp:
