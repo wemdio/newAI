@@ -20,7 +20,8 @@ class SafetyManager:
     def __init__(self, supabase):
         self.supabase = supabase
         self.account_usage = {}  # In-memory tracking
-    
+        self.last_reset_date = None
+
     async def get_available_account(self, user_id: str) -> Optional[Dict]:
         """
         Get next available account for user with round-robin rotation
@@ -158,13 +159,21 @@ class SafetyManager:
     async def check_and_reset_daily_counters(self):
         """
         Check if it's time to reset daily counters (call at startup and hourly)
+        Only runs once per day at 00:00 UTC
         """
-        current_hour = datetime.utcnow().hour
+        now = datetime.utcnow()
         
         # Reset at midnight UTC
-        if current_hour == 0:
-            print("🔄 Resetting daily message counters")
-            await self.supabase.reset_daily_counters()
+        if now.hour == 0:
+            today_str = now.strftime('%Y-%m-%d')
+            
+            # Check if already reset today to avoid spamming logs/DB every minute
+            if self.last_reset_date != today_str:
+                logger.info(f"🔄 Resetting daily message counters (New day: {today_str})")
+                await self.supabase.reset_daily_counters()
+                self.last_reset_date = today_str
+            else:
+                logger.debug("ℹ️ Daily counters already reset for today")
 
 
 
