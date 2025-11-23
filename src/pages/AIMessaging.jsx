@@ -21,8 +21,10 @@ const AIMessaging = () => {
   const [showCreateCampaign, setShowCreateCampaign] = useState(false);
   const [showConversationDetail, setShowConversationDetail] = useState(false);
   const [showEditCampaign, setShowEditCampaign] = useState(false);
+  const [showEditAccount, setShowEditAccount] = useState(false); // Added for account editing
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [editingCampaign, setEditingCampaign] = useState(null);
+  const [editingAccount, setEditingAccount] = useState(null); // Added for account editing
   
   const [uploading, setUploading] = useState(false);
   const [sessionString, setSessionString] = useState('');
@@ -291,6 +293,37 @@ const AIMessaging = () => {
     }
   };
 
+  const openEditAccount = (account) => {
+    setEditingAccount({
+      id: account.id,
+      account_name: account.account_name,
+      proxy_url: account.proxy_url || '',
+      daily_limit: account.daily_limit || 3
+    });
+    setShowEditAccount(true);
+  };
+
+  const handleUpdateAccount = async (e) => {
+    e.preventDefault();
+    try {
+      const userId = getUserId();
+      await axios.put(`${apiUrl}/messaging/accounts/${editingAccount.id}`, 
+        {
+          account_name: editingAccount.account_name,
+          proxy_url: editingAccount.proxy_url || null,
+          daily_limit: parseInt(editingAccount.daily_limit)
+        }, 
+        { headers: { 'x-user-id': userId } }
+      );
+      alert('Аккаунт обновлен!');
+      setShowEditAccount(false);
+      setEditingAccount(null);
+      loadData();
+    } catch (error) {
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
   // Merge hot leads from 'hot_leads' table and conversations with 'hot_lead' status
   // This handles legacy hot leads that don't have a record in 'hot_leads' table
   const hotLeadConversationIds = new Set(hotLeads.map(hl => hl.conversation_id));
@@ -429,6 +462,13 @@ const AIMessaging = () => {
                 </div>
                 
                 <div className="account-actions">
+                  <button 
+                    className="btn btn-small btn-primary" 
+                    onClick={() => openEditAccount(account)}
+                    style={{ marginRight: '8px' }}
+                  >
+                    Изменить
+                  </button>
                   <button 
                     className="btn btn-small btn-danger" 
                     onClick={() => handleDeleteAccount(account.id)}
@@ -894,6 +934,64 @@ const AIMessaging = () => {
               
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowEditCampaign(false)}>
+                  Отмена
+                </button>
+                <button type="submit" className="btn btn-primary">
+                  Сохранить
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Account Modal */}
+      {showEditAccount && editingAccount && (
+        <div className="modal-overlay" onClick={() => setShowEditAccount(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>Редактировать аккаунт</h2>
+              <button className="close-btn" onClick={() => setShowEditAccount(false)}>×</button>
+            </div>
+            
+            <form onSubmit={handleUpdateAccount}>
+              <div className="form-group">
+                <label>Название аккаунта</label>
+                <input
+                  type="text"
+                  value={editingAccount.account_name}
+                  onChange={e => setEditingAccount({...editingAccount, account_name: e.target.value})}
+                  placeholder="Мой аккаунт"
+                  required
+                />
+              </div>
+
+              <div className="form-group">
+                <label>Proxy URL</label>
+                <input
+                  type="text"
+                  value={editingAccount.proxy_url}
+                  onChange={e => setEditingAccount({...editingAccount, proxy_url: e.target.value})}
+                  placeholder="http://user:pass@ip:port"
+                />
+                <small>Оставьте пустым, если не используете прокси</small>
+              </div>
+
+              <div className="form-group">
+                <label>Дневной лимит сообщений</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  value={editingAccount.daily_limit}
+                  onChange={e => setEditingAccount({...editingAccount, daily_limit: e.target.value})}
+                  required
+                />
+                <small>Лимит сообщений в сутки (по умолчанию 3)</small>
+              </div>
+              
+              <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={() => setShowEditAccount(false)}>
                   Отмена
                 </button>
                 <button type="submit" className="btn btn-primary">
