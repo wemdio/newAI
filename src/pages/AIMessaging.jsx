@@ -34,7 +34,8 @@ const AIMessaging = () => {
     api_id: '',
     api_hash: '',
     proxy_url: '',
-    phone_number: ''
+    phone_number: '',
+    daily_limit: 3
   });
   
   const [newCampaign, setNewCampaign] = useState({
@@ -417,7 +418,7 @@ const AIMessaging = () => {
                   </div>
                   <div className="info-row">
                     <span className="label">Сообщений сегодня:</span>
-                    <span className="value">{account.messages_sent_today} / 25</span>
+                    <span className="value">{account.messages_sent_today || 0} / {account.daily_limit || 3}</span>
                   </div>
                   <div className="info-row">
                     <span className="label">Использован:</span>
@@ -669,7 +670,8 @@ const AIMessaging = () => {
                     {
                       account_name: accountName,
                       session_string: sessionString.trim(),
-                      proxy_url: newAccount.proxy_url || null
+                      proxy_url: newAccount.proxy_url || null,
+                      daily_limit: newAccount.daily_limit
                     },
                     {
                       headers: {
@@ -739,6 +741,19 @@ const AIMessaging = () => {
                     onChange={e => setNewAccount({...newAccount, proxy_url: e.target.value})}
                   />
                   <small>Рекомендуется использовать мобильные прокси для предотвращения банов</small>
+                </div>
+
+                <div className="form-group">
+                  <label>Дневной лимит сообщений</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={newAccount.daily_limit}
+                    onChange={e => setNewAccount({...newAccount, daily_limit: parseInt(e.target.value)})}
+                    required
+                  />
+                  <small>По умолчанию: 3. Не ставьте больше 25 для новых аккаунтов.</small>
                 </div>
                 
                 <div className="form-actions">
