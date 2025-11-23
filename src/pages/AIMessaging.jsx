@@ -879,7 +879,7 @@ const AIMessaging = () => {
       {/* Edit Campaign Modal */}
       {showEditCampaign && editingCampaign && (
         <div className="modal-overlay" onClick={() => setShowEditCampaign(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal large" onClick={e => e.stopPropagation()}>
             <div className="modal-header">
               <h2>Редактировать кампанию</h2>
               <button className="close-btn" onClick={() => setShowEditCampaign(false)}>×</button>
