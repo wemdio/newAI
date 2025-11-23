@@ -345,6 +345,21 @@ const AIMessaging = () => {
     new Date(b.created_at) - new Date(a.created_at)
   );
 
+  // Split conversations into active and completed (older than 48h or stopped)
+  const now = new Date();
+  const twoDaysAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+
+  const activeConversations = conversations.filter(c => 
+    c.status !== 'hot_lead' && 
+    c.status !== 'stopped' && 
+    new Date(c.last_message_at) > twoDaysAgo
+  );
+
+  const completedConversations = conversations.filter(c => 
+    c.status !== 'hot_lead' && 
+    (c.status === 'stopped' || new Date(c.last_message_at) <= twoDaysAgo)
+  );
+
   if (sessionLoading) {
     return (
       <div className="ai-messaging-loading">
@@ -577,24 +592,68 @@ const AIMessaging = () => {
         )}
       </section>
       
-      {/* Conversations Section */}
+      {/* Hot Leads Section */}
+      <section className="section hot-leads-section">
+        <div className="section-header">
+          <h2>Горячие лиды</h2>
+          <span className="count-badge hot">{allHotLeads.length}</span>
+        </div>
+        
+        {allHotLeads.length === 0 ? (
+          <div className="empty-state">
+            <p>Горячих лидов пока нет</p>
+          </div>
+        ) : (
+          <div className="conversations-list scrollable-list">
+            {allHotLeads.map(lead => (
+              <div key={lead.id} className="conversation-card" style={{ borderLeft: '2px solid #d17d7d' }}>
+                <div className="conv-header">
+                  <div className="conv-user-info">
+                    <strong>@{lead.ai_conversations?.peer_username || lead.ai_conversations?.peer_user_id}</strong>
+                    {!lead.posted_to_channel && <span className="badge new">New</span>}
+                  </div>
+                </div>
+                
+                <div className="conv-details">
+                  <div className="conv-row">
+                     <span className="label">Кампания:</span>
+                     <span className="value">{lead.messaging_campaigns?.name}</span>
+                  </div>
+                  <div className="conv-row">
+                     <span className="label">Создан:</span>
+                     <span className="value date">{new Date(lead.created_at).toLocaleString('ru')}</span>
+                  </div>
+                </div>
+                
+                <button 
+                  className="btn btn-secondary btn-full" 
+                  onClick={() => viewConversation(lead.conversation_id)} // Use conversation_id for modal
+                >
+                  История
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Conversations Section (Active) */}
       <section className="section conversations-section">
         <div className="section-header">
-          <h2>Активные диалоги</h2>
+          <h2>Активные диалоги (48ч)</h2>
           <span className="count-badge">
-            {conversations.filter(c => c.status !== 'hot_lead' && c.status !== 'stopped').length}
+            {activeConversations.length}
           </span>
         </div>
         
-        {conversations.filter(c => c.status !== 'hot_lead' && c.status !== 'stopped').length === 0 ? (
+        {activeConversations.length === 0 ? (
           <div className="empty-state">
             <p>Нет активных диалогов</p>
           </div>
         ) : (
-          <div className="conversations-list">
-            {conversations
-              .filter(c => c.status !== 'hot_lead' && c.status !== 'stopped')
-              .slice(0, 10)
+          <div className="conversations-list scrollable-list">
+            {activeConversations
+              .slice(0, 50) // Limit render for performance
               .map(conv => (
               <div key={conv.id} className="conversation-card">
                 <div className="conv-header">
@@ -602,8 +661,7 @@ const AIMessaging = () => {
                     <strong>@{conv.peer_username || conv.peer_user_id}</strong>
                     <span className={`status-badge ${conv.status}`}>
                       {conv.status === 'active' ? 'Активен' :
-                       conv.status === 'hot_lead' ? 'Горячий' :
-                       conv.status === 'waiting' ? 'Ожидание' : 'Остановлен'}
+                       conv.status === 'waiting' ? 'Ожидание' : conv.status}
                     </span>
                   </div>
                 </div>
@@ -627,57 +685,63 @@ const AIMessaging = () => {
                   className="btn btn-secondary btn-full" 
                   onClick={() => viewConversation(conv.id)}
                 >
-                  История диалога
+                  История
                 </button>
               </div>
             ))}
           </div>
         )}
       </section>
-      
-      {/* Hot Leads Section */}
-      <section className="section hot-leads-section">
+
+      {/* Completed Conversations Section */}
+      <section className="section conversations-section">
         <div className="section-header">
-          <h2>Горячие лиды</h2>
-          <span className="count-badge hot">{allHotLeads.length}</span>
+          <h2>Завершенные / Старые</h2>
+          <span className="count-badge">
+            {completedConversations.length}
+          </span>
         </div>
         
-        {allHotLeads.length === 0 ? (
+        {completedConversations.length === 0 ? (
           <div className="empty-state">
-            <p>Горячих лидов пока нет</p>
+            <p>Нет завершенных диалогов</p>
           </div>
         ) : (
-          <div className="hot-leads-list">
-            {allHotLeads.map(lead => (
-              <div key={lead.id} className="hot-lead-card">
-                <div className="hot-lead-header">
-                  <div>
-                    <h3>@{lead.ai_conversations?.peer_username}</h3>
-                    {!lead.posted_to_channel && <span className="badge new">New</span>}
+          <div className="conversations-list scrollable-list">
+            {completedConversations
+              .slice(0, 20) // Show fewer completed by default
+              .map(conv => (
+              <div key={conv.id} className="conversation-card" style={{ opacity: 0.7 }}>
+                <div className="conv-header">
+                  <div className="conv-user-info">
+                    <strong>@{conv.peer_username || conv.peer_user_id}</strong>
+                    <span className={`status-badge ${conv.status}`}>
+                      {conv.status === 'stopped' ? 'Остановлен' : 'Нет ответа'}
+                    </span>
                   </div>
-                  <span className="hot-lead-time">
-                    {new Date(lead.created_at).toLocaleString('ru')}
-                  </span>
                 </div>
                 
-                <div className="hot-lead-info">
-                  <div><strong>Кампания:</strong> {lead.messaging_campaigns?.name}</div>
-                  <div><strong>Telegram ID:</strong> {lead.ai_conversations?.peer_user_id}</div>
+                <div className="conv-details">
+                  <div className="conv-row">
+                     <span className="label">Аккаунт:</span>
+                     <span className="value">{conv.telegram_accounts?.account_name || 'N/A'}</span>
+                  </div>
+                  <div className="conv-row">
+                     <span className="label">Сообщений:</span>
+                     <span className="value">{conv.messages_count}</span>
+                  </div>
+                  <div className="conv-row">
+                     <span className="label">Последнее:</span>
+                     <span className="value date">{new Date(conv.last_message_at).toLocaleString('ru')}</span>
+                  </div>
                 </div>
                 
-                <details className="conversation-history">
-                  <summary>История диалога ({lead.conversation_history?.length || 0})</summary>
-                  <div className="history-messages">
-                    {(lead.conversation_history || []).map((msg, idx) => (
-                      <div key={idx} className={`message ${msg.role}`}>
-                        <div className="message-role">
-                          {msg.role === 'user' ? 'Лид' : 'AI'}
-                        </div>
-                        <div className="message-content">{msg.content}</div>
-                      </div>
-                    ))}
-                  </div>
-                </details>
+                <button 
+                  className="btn btn-secondary btn-full" 
+                  onClick={() => viewConversation(conv.id)}
+                >
+                  История
+                </button>
               </div>
             ))}
           </div>
