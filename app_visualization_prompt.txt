@@ -1,0 +1,74 @@
+**Project Title:** Telegram AI Scanner & Auto-responder Dashboard (Dark Mode SaaS)
+
+**Overview:**
+Design a high-fidelity, professional, and compact "Dark Mode" admin dashboard for a Telegram marketing automation tool. The interface should look modern, technical, and data-dense but clean.
+
+**Visual Style & Color Palette:**
+- **Theme:** Deep Dark / Cyberpunk-Lite / Developer-focused.
+- **Backgrounds:** Very dark gray/black (`#0a0a0a` for page background, `#111111` for cards/containers).
+- **Borders:** Subtle dark borders (`#222222`).
+- **Text:** White (`#ffffff`) for headings and inputs, Light Gray (`#cccccc`) for body, Dim Gray (`#666666`) for labels.
+- **Accents:**
+  - **Primary (Active/Success):** Muted Neon Green (`#7dd17d`). Used for "Active" badges, "Start" buttons, toggles.
+  - **Secondary (Alert/Hot Lead):** Muted Red/Salmon (`#d17d7d`). Used for "Hot Leads", "Delete" buttons, "Banned" status.
+  - **Tertiary (Warning):** Gold/Yellow (`#d1b07d`). Used for "Paused" status.
+- **Corner Radius:** Small/Moderate (6px-8px).
+- **Typography:** Sans-serif, clean, legible (e.g., Inter or Roboto).
+
+**Layout Structure:**
+
+1.  **Header:**
+    - Simple text logo "AI Рассылки" (AI Messaging).
+    - Subtitle describing the tool's purpose.
+    - No heavy navigation bar, single-page application feel.
+
+2.  **Stats Overview (Top Row):**
+    - A grid of 4 compact statistic cards.
+    - **Card 1 (Campaigns):** Total count + Active count.
+    - **Card 2 (Accounts):** Total count + Active count.
+    - **Card 3 (Dialogs):** Total count + Active count.
+    - **Card 4 (Hot Leads):** Distinctive background (dark reddish tint `#1a0f0f`). Shows total hot leads and "New" count.
+
+3.  **Section 1: Telegram Accounts (Grid Layout):**
+    - **Header:** Title + "Add Account" button (Primary Green).
+    - **Content:** A grid of account cards.
+    - **Card Design:**
+      - Dark background (`#111`).
+      - Top: Account Name + Status Badge (Green "Active", Red "Banned", or Yellow "Paused").
+      - Middle: Info rows (Proxy: Yes/No, Daily Limit: 3/25, Last Used Date).
+      - Bottom: Action buttons. "Edit" (Primary, small) and "Delete" (Red outline, small).
+
+4.  **Section 2: Campaigns (List/Grid Layout):**
+    - **Header:** Title + "Create Campaign" button.
+    - **Card Design:**
+      - Left side: Campaign Name + Status Badge ("Running", "Draft", "Stopped").
+      - Right side: Action buttons (Start/Pause/Resume, Edit, Delete).
+      - Details: Collapsible section ("Show Prompts") revealing code-block styled text areas for "Communication Prompt" and "Lead Criteria".
+
+5.  **Section 3: Hot Leads (Priority List):**
+    - **Style:** Highlighted section with a subtle red border on cards.
+    - **Content:** List of high-value leads found by AI.
+    - **Card Items:**
+      - Lead Username/ID.
+      - "New" Badge (if unread).
+      - Campaign Name reference.
+      - Button: "History" (Full width, secondary style) opens the chat modal.
+
+6.  **Section 4 & 5: Conversations (Split Views):**
+    - **Active Conversations:** A scrollable list (max-height 400px) of recent chats (< 48 hours).
+    - **Completed/Old Conversations:** A separate scrollable list for stopped or inactive chats (> 48 hours), slightly more transparent (opacity 0.7) to indicate inactivity.
+    - **List Item Design:** Compact rows. Username | Status Badge | Message Count | Last Date | "History" Button.
+
+**UI Components & Interactions:**
+
+-   **Modals (Pop-ups):**
+    -   **Style:** Dark overlay with blur. Modal window is dark (`#111`) with white text.
+    -   **"Add/Edit Account" Modal:** Inputs for Name, Session String (large textarea), Proxy, and Daily Limit (number input).
+    -   **"Create/Edit Campaign" Modal:** **Wide layout (900px)**. Large textareas for prompts. Inputs have white text on dark backgrounds.
+    -   **"Chat History" Modal:** Displays the conversation like a messenger. User messages on left (dark grey bubble), AI messages on right (dark green tint bubble).
+
+**Key UX Details:**
+-   The interface feels "Compact" – information density is high but readable.
+-   Input fields in forms must clearly show white text against the dark background.
+-   Scrollbars in the conversation lists are dark and thin.
+

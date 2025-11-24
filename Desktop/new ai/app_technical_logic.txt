@@ -1,0 +1,80 @@
+# Technical Architecture & Logic Documentation: Telegram AI Scanner
+
+## 1. System Overview
+The application is a microservices-based system designed to automate lead generation and communication on Telegram using AI. It consists of three main components:
+1.  **Frontend (React/Vite):** User interface for management.
+2.  **Backend API (Node.js/Express):** REST API for data management and account sessions handling.
+3.  **Worker Service (Python/Telethon):** The core engine responsible for interacting with Telegram, processing messages, and AI analysis.
+4.  **Database (Supabase/PostgreSQL):** Centralized data storage.
+
+---
+
+## 2. Core Components & Logic
+
+### A. Python Worker Service (`backend/python-service`)
+This is the "brain" of the application. It runs a continuous event loop to manage Telegram accounts.
+
+**1. Campaign Orchestration (`main.py`):**
+*   **Concurrency:** Uses `asyncio.create_task` to run multiple campaigns in parallel.
+*   **Lifecycle:** Fetches active campaigns from Supabase every 60 seconds. Starts new tasks for new campaigns and gracefully cancels tasks for stopped ones.
+*   **State Management:** Maintains a dictionary of active `asyncio.Task` objects mapped to campaign IDs.
+
+**2. Telegram Interaction (`telethon_client.py`):**
+*   **Session Management:** Loads Telethon sessions from file strings stored in the database.
+*   **Connection:** Connects to Telegram via MTProto. Handles connection errors and automatic reconnections.
+*   **Message Listening:** Subscribes to new messages in target channels/groups defined in the campaign.
+
+**3. Lead Detection Pipeline (`lead_detector.js` logic replicated in Python):**
+*   **Step 1: Pre-filtering:** Incoming messages are first filtered by keywords (if defined) to discard irrelevant chatter immediately.
+*   **Step 2: AI Analysis:** Relevant messages are sent to an LLM (OpenRouter/DeepSeek/GPT) with a specific "Lead Detection Prompt" configured by the user.
+*   **Step 3: Scoring:** The AI returns a JSON response with `is_match` (boolean) and `confidence_score` (0-100).
+*   **Threshold:** Messages with `confidence_score >= 70` are flagged as potential leads.
+
+**4. Automated Messaging & Safety (`safety_manager.py` & `lead_manager.py`):**
+*   **Account Rotation:** Implements a Round-Robin algorithm to select the next available sender account.
+*   **Constraint Checking:** Before sending, checks:
+    *   **Daily Limit:** Has the account reached its individual limit (default 3, configurable)?
+    *   **Global Cooldown:** Is the account in a cooldown period (20 mins between messages)?
+    *   **Status:** Is the account active and not banned?
+*   **Message Generation:** If a lead is found, the AI generates a personalized first message based on the "Communication Prompt" and the user's context.
+*   **Sending:** The message is sent via the selected Telegram account. The conversation state is saved to `ai_conversations`.
+
+**5. Anti-Ban Mechanisms:**
+*   **FloodWait Handling:** Automatically catches Telegram `FloodWaitError`, pauses the specific account for the required duration, and updates its status in the DB.
+*   **Daily Limits:** Enforced strictly via database counters (`messages_sent_today`). Counters are reset once every 24 hours (at 00:00 UTC).
+
+### B. Backend API (`backend/src`)
+Handles CRUD operations and specific logic that requires Node.js libraries.
+
+*   **Account Import:** Accepts Telegram `session string` (hex format). Validates format, cleans input, and stores it in Supabase. Does NOT convert tdata (legacy feature).
+*   **Stats Aggregation:** Aggregates counters for UI (active campaigns, total messages, hot leads) via efficient SQL queries.
+
+### C. Frontend (`src/pages/AIMessaging.jsx`)
+*   **Real-time Data:** Polls the backend API for updates on accounts, campaigns, and conversations.
+*   **Client-side Logic:**
+    *   **Conversation Filtering:** Separates "Active" (< 48h activity) and "Completed" (> 48h inactivity) conversations purely on the client side for display purposes.
+    *   **Hot Lead Mapping:** Merges data from `hot_leads` table with legacy conversation data to present a unified list.
+
+---
+
+## 3. Data Flow & Database Schema
+
+**Key Tables:**
+*   **`telegram_accounts`:**
+    *   `session_string`: Encrypted auth key for Telethon.
+    *   `daily_limit`: Max messages per day (default 3).
+    *   `messages_sent_today`: Counter, resets daily.
+    *   `proxy_url`: SOCKS5/HTTP proxy for the connection.
+*   **`messaging_campaigns`:**
+    *   `communication_prompt`: Instructions for the AI on how to talk.
+    *   `hot_lead_criteria`: Rules for AI to determine if a lead is interested.
+*   **`ai_conversations`:**
+    *   Stores the chat history between the bot and the lead.
+    *   `status`: `active`, `waiting`, `hot_lead`, `stopped`.
+*   **`hot_leads`:**
+    *   Specific reference to successful detections for quick access.
+
+## 4. Deployment
+*   **Docker:** The Python Worker is containerized (`Dockerfile`) to ensure environment consistency (dependencies, system libs for Telethon).
+*   **Scaling:** The architecture supports horizontal scaling of workers, provided they don't conflict on the same specific Telegram account (managed via database locks/status).
+
