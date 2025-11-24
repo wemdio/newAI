@@ -281,6 +281,22 @@ class LeadManager:
                 
                 print(f"   🤖 Generated response: {response[:100]}...")
                 
+                # Check if hot lead - STOP IMMEDIATELY if true
+                if is_hot_lead:
+                    print(f"   🔥 Hot lead detected! Stopping conversation immediately (no response sent).")
+                    
+                    # Update history with user's message but NO assistant response
+                    final_history = history + [{'role': 'user', 'content': new_message}]
+                    
+                    await self._handle_hot_lead(
+                        campaign_id,
+                        campaign,
+                        conversation_id,
+                        event.sender_id,
+                        final_history
+                    )
+                    return
+
                 # Human-like delay before sending response (10 sec - 3 min)
                 import random
                 delay = random.uniform(10, 180)
@@ -296,19 +312,6 @@ class LeadManager:
                     'assistant',
                     response
                 )
-                
-                # Check if hot lead
-                if is_hot_lead:
-                    await self._handle_hot_lead(
-                        campaign_id,
-                        campaign,
-                        conversation_id,
-                        event.sender_id,
-                        history + [
-                            {'role': 'user', 'content': new_message},
-                            {'role': 'assistant', 'content': response}
-                        ]
-                    )
                 
             except Exception as e:
                 print(f"   ❌ Error handling message: {e}")
