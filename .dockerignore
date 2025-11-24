@@ -1,5 +1,10 @@
 # Node dependencies
 node_modules
+**/node_modules
+backend/node_modules
+backend/python-service/sessions
+backend/python-service/__pycache__
+**/__pycache__
 
 # Git metadata
 .git
