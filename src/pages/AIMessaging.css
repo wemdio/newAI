@@ -842,12 +842,34 @@
 }
 
 .history-messages {
+  display: flex;
+  flex-direction: column;
   gap: 10px;
   max-height: 50vh;
+  overflow-y: auto;
   padding: 10px;
   background: #0a0a0a;
   border-radius: 6px;
   border: 1px solid #1a1a1a;
+}
+
+/* Custom Scrollbar for history */
+.history-messages::-webkit-scrollbar {
+  width: 6px;
+}
+
+.history-messages::-webkit-scrollbar-track {
+  background: #0a0a0a;
+  border-radius: 3px;
+}
+
+.history-messages::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+
+.history-messages::-webkit-scrollbar-thumb:hover {
+  background: #555;
 }
 
 .message {
