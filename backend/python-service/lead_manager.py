@@ -1,5 +1,6 @@
 """Lead Manager - Orchestrates the lead outreach workflow"""
 import asyncio
+import aiohttp
 from typing import Dict, List
 from datetime import datetime
 
@@ -67,7 +68,8 @@ class LeadManager:
                 campaign_id,
                 campaign,
                 account,
-                lead
+                lead,
+                user_id  # Pass user_id
             )
             
             if success:
@@ -91,7 +93,8 @@ class LeadManager:
         campaign_id: str,
         campaign: Dict,
         account: Dict, 
-        lead: Dict
+        lead: Dict,
+        user_id: str
     ) -> bool:
         """
         Process a single lead - send first message
@@ -171,7 +174,8 @@ class LeadManager:
                 campaign_id,
                 campaign,
                 telegram_user_id,
-                lead_id  # Pass lead_id
+                lead_id,
+                user_id  # Pass user_id
             )
             
             # Mark lead as contacted
@@ -194,7 +198,8 @@ class LeadManager:
         campaign_id: str,
         campaign: Dict,
         peer_user_id: int,
-        lead_id: int = 0
+        lead_id: int = 0,
+        user_id: str = None
     ):
         """
         Register handler for incoming messages in this conversation
@@ -297,7 +302,8 @@ class LeadManager:
                         event.sender_id,
                         final_history,
                         account_id,
-                        lead_id
+                        lead_id,
+                        user_id
                     )
                     return
 
@@ -331,7 +337,8 @@ class LeadManager:
         peer_user_id: int,
         full_history: List[Dict],
         account_id: str,
-        lead_id: int
+        lead_id: int,
+        user_id: str
     ):
         """
         Handle hot lead detection
@@ -347,18 +354,10 @@ class LeadManager:
         # Get detailed lead info
         lead_details = await self.supabase.get_lead_details(lead_id)
         if not lead_details:
-             # Fallback if details fetch fails
              print(f"   ⚠️ Could not fetch lead details for lead_id {lead_id}, using minimal info")
-             # Try to get from conversation history (fallback)
-             conv_data = await self.supabase.get_conversation_history(conversation_id) # This only returns messages, not metadata in current impl
-             # Actually, we need username at least. 
-             # In previous code it tried conversation[0].get('peer_username'), but that was broken.
-             # We passed peer_username to create_conversation.
-             # Let's try to recover username from elsewhere if needed, but lead_details should work.
              pass
         
-        # Construct contact info from available data
-        # Use lead_details if available, otherwise fallback
+        # Construct contact info
         username = 'unknown'
         if lead_details and lead_details.get('original_message'):
              username = lead_details['original_message'].get('username') or 'unknown'
@@ -388,8 +387,8 @@ class LeadManager:
                 target_channel,
                 contact_info,
                 full_history,
-                account_id,
-                lead_details
+                lead_details,
+                user_id
             )
         
         print(f"   ✅ Hot lead saved: {hot_lead_id}")
@@ -400,61 +399,77 @@ class LeadManager:
         channel_id: str,
         contact_info: Dict,
         conversation_history: List[Dict],
-        account_id: str,
-        lead_details: Dict
+        lead_details: Dict,
+        user_id: str
     ):
         """
-        Post hot lead notification to Telegram channel
+        Post hot lead notification to Telegram channel using Bot API
         """
         try:
             print(f"   📢 Generating report for channel {channel_id}...")
             
-            # 1. Get Lead Info
+            # 1. Get Bot Token from user config
+            user_config = await self.supabase.get_user_config(user_id)
+            bot_token = user_config.get('telegram_bot_token') if user_config else None
+            
+            if not bot_token:
+                print(f"   ⚠️ No telegram_bot_token found for user {user_id} - cannot post to channel")
+                return
+
+            # 2. Get Lead Info
             username = contact_info.get('username', 'Unknown')
             original_msg = lead_details.get('original_message', {}) if lead_details else {}
             chat_name = original_msg.get('chat_name', 'Unknown Chat')
             original_text = original_msg.get('message', 'N/A')
             
-            # 2. Generate AI Context/Summary
+            # 3. Generate AI Context/Summary
             summary = await self.ai.generate_lead_summary(lead_details, conversation_history)
             
-            # 3. Format Dialogue
+            # 4. Format Dialogue
             dialogue_text = ""
             for msg in conversation_history:
                 role = "🤖" if msg['role'] == 'assistant' else "👤"
                 content = msg['content']
                 dialogue_text += f"{role} {content}\n\n"
             
-            # 4. Construct Message
+            # 5. Construct Message (Markdown)
             message = f"""
-🔥 **ГОРЯЧИЙ ЛИД НАЙДЕН!**
+🔥 *ГОРЯЧИЙ ЛИД НАЙДЕН!*
 
-👤 **Инфо о лиде:**
+👤 *Инфо о лиде:*
 User: @{username}
 ID: `{contact_info.get('telegram_user_id', 'N/A')}`
 Чат-источник: {chat_name}
 
-📝 **Изначальный запрос:**
+📝 *Изначальный запрос:*
 "{original_text}"
 
-🧠 **Анализ (почему подходит):**
+🧠 *Анализ (почему подходит):*
 {summary}
 
-💬 **Переписка:**
+💬 *Переписка:*
 {dialogue_text}
 
 🔗 ID лида в системе: `{hot_lead_id}`
 """
             
-            # 5. Send to channel using the account
-            success = await self.telethon.send_message(account_id, channel_id, message)
+            # 6. Send via Telegram Bot API
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            payload = {
+                'chat_id': channel_id,
+                'text': message,
+                'parse_mode': 'Markdown'
+            }
             
-            if success:
-                # Mark as posted
-                await self.supabase.mark_hot_lead_posted(hot_lead_id)
-                print(f"   ✅ Posted hot lead report to channel {channel_id}")
-            else:
-                print(f"   ❌ Failed to send report to channel {channel_id}")
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload) as resp:
+                    if resp.status == 200:
+                        # Mark as posted
+                        await self.supabase.mark_hot_lead_posted(hot_lead_id)
+                        print(f"   ✅ Posted hot lead report to channel {channel_id} via Bot")
+                    else:
+                        err_text = await resp.text()
+                        print(f"   ❌ Failed to send report via Bot: {resp.status} - {err_text}")
             
         except Exception as e:
             print(f"   ⚠️ Failed to post to channel: {e}")
