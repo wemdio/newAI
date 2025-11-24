@@ -1,6 +1,7 @@
 """Lead Manager - Orchestrates the lead outreach workflow"""
 import asyncio
 import aiohttp
+import os
 from typing import Dict, List
 from datetime import datetime
 
@@ -408,12 +409,11 @@ class LeadManager:
         try:
             print(f"   📢 Generating report for channel {channel_id}...")
             
-            # 1. Get Bot Token from user config
-            user_config = await self.supabase.get_user_config(user_id)
-            bot_token = user_config.get('telegram_bot_token') if user_config else None
+            # 1. Get Bot Token from environment variables
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
             
             if not bot_token:
-                print(f"   ⚠️ No telegram_bot_token found for user {user_id} - cannot post to channel")
+                print(f"   ⚠️ No TELEGRAM_BOT_TOKEN in env vars - cannot post to channel")
                 return
 
             # 2. Get Lead Info
