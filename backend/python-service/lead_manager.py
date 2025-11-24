@@ -307,9 +307,9 @@ class LeadManager:
         Process response generation after a delay (to batch user messages)
         """
         try:
-            # Wait 15 seconds to allow user to finish typing multiple messages
-            print(f"   ⏳ Waiting 15s for more messages from user...")
-            await asyncio.sleep(15)
+            # Wait 60 seconds to allow user to finish typing multiple messages
+            print(f"   ⏳ Waiting 60s for more messages from user...")
+            await asyncio.sleep(60)
             
             print(f"   🤖 Generating response for conversation {conversation_id}")
             
