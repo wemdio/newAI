@@ -7,6 +7,7 @@ import Configuration from './pages/Configuration';
 import Leads from './pages/Leads';
 import Login from './pages/Login';
 import AIMessaging from './pages/AIMessaging';
+import LeadAudit from './pages/LeadAudit';
 import { isTelegramWebApp, initTelegram, getTelegramUser, getTelegramInitData } from './utils/telegram';
 import axios from 'axios';
 
@@ -265,6 +266,7 @@ function App() {
               <Route path="/" element={<Leads />} />
               <Route path="/config" element={<Configuration />} />
               <Route path="/messaging" element={<AIMessaging />} />
+              <Route path="/audit" element={<LeadAudit />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
