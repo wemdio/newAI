@@ -160,6 +160,42 @@ class SupabaseClient:
         except Exception as e:
             print(f"❌ Error getting uncontacted leads: {e}")
             return []
+            
+    async def get_lead_details(self, lead_id: int) -> Optional[Dict]:
+        """Get detailed lead info by ID"""
+        try:
+            # Get lead
+            url = f"{self.url}/rest/v1/detected_leads"
+            url += f"?select=*"
+            url += f"&id=eq.{lead_id}"
+            
+            async with self.session.get(url) as resp:
+                if resp.status != 200:
+                    return None
+                leads = await resp.json()
+                if not leads:
+                    return None
+                lead = leads[0]
+            
+            # Get associated message
+            msg_url = f"{self.url}/rest/v1/messages"
+            msg_url += f"?select=*"
+            msg_url += f"&id=eq.{lead['message_id']}"
+            
+            async with self.session.get(msg_url) as msg_resp:
+                if msg_resp.status == 200:
+                    messages = await msg_resp.json()
+                    if messages:
+                        message = messages[0]
+                        # Combine info
+                        lead['original_message'] = message
+                        return lead
+            
+            return lead
+            
+        except Exception as e:
+            print(f"❌ Error getting lead details: {e}")
+            return None
     
     async def mark_lead_contacted(self, lead_id: int):
         """Mark lead as contacted"""

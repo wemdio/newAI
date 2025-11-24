@@ -169,6 +169,52 @@ class AICommunicator:
             # Fallback response
             return ("Спасибо за ответ! Дайте мне немного времени, я уточню детали.", False)
     
+    async def generate_lead_summary(self, lead_info: Dict, conversation_history: List[Dict]) -> str:
+        """
+        Generate a summary of why this lead is relevant
+        
+        Args:
+            lead_info: Lead details including original message
+            conversation_history: Dialogue history
+            
+        Returns:
+            Summary text
+        """
+        username = lead_info.get('username', 'Unknown')
+        original_message = lead_info.get('original_message', {}).get('message', '')
+        
+        # Format conversation for prompt
+        dialogue_text = ""
+        for msg in conversation_history:
+            role = "Assistant" if msg['role'] == 'assistant' else "User"
+            dialogue_text += f"{role}: {msg['content']}\n"
+            
+        system_prompt = f"""
+Ты - аналитик лидов. Твоя задача - объяснить, почему этот пользователь является "Горячим лидом" и что он ищет.
+
+Данные лида:
+Username: @{username}
+Изначальное сообщение (где мы его нашли): "{original_message}"
+
+Переписка с ботом:
+{dialogue_text}
+
+Напиши КРАТКОЕ резюме (3-5 предложений):
+1. Кого или что искал лид изначально?
+2. Почему он нам подходит (почему мы считаем его горячим)?
+3. О чем договорились в переписке (если есть договоренности)?
+
+Отвечай на русском языке, четко и по делу. Не используй маркеры форматирования (типа **bold**), просто текст.
+"""
+        
+        try:
+            summary = await self._call_ai(system_prompt, [])
+            return summary.strip()
+        except Exception as e:
+            print(f"❌ Error generating lead summary: {e}")
+            return f"Лид проявил интерес в ходе переписки. Изначально искал: {original_message[:50]}..."
+
+    
     async def _call_ai(self, system_prompt: str, conversation_history: List[Dict]) -> str:
         """
         Call OpenRouter API with Gemini 3 Pro Preview using user's API key
