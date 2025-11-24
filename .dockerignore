@@ -5,6 +5,10 @@ backend/node_modules
 backend/python-service/sessions
 backend/python-service/__pycache__
 **/__pycache__
+venv
+.venv
+env
+.env
 
 # Git metadata
 .git
