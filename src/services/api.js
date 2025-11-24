@@ -83,4 +83,9 @@ export const scannerApi = {
   manualScan: () => api.post('/scanner/manual-scan'),
 };
 
+// Audit API
+export const auditApi = {
+  run: (data) => api.post('/audit/run', data)
+};
+
 export default api;
