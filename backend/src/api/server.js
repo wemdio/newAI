@@ -15,6 +15,7 @@ import leadsRoutes from './routes/leads.js';
 import analyticsRoutes from './routes/analytics.js';
 import scannerRoutes from './routes/scanner.js';
 import messagingRoutes from './routes/messaging.js';
+import auditRoutes from './routes/audit.js';
 
 /**
  * Express server setup
@@ -112,6 +113,7 @@ app.use('/api/leads', leadsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/scanner', scannerRoutes);
 app.use('/api/messaging', messagingRoutes);
+app.use('/api/audit', auditRoutes);
 
 // 404 handler
 app.use((req, res) => {
