@@ -81,11 +81,16 @@ class LeadManager:
                     campaign_id, 
                     leads_contacted=1
                 )
-            
-            # Wait before next lead (anti-spam delay)
-            if i < len(leads):  # Don't wait after last lead
-                delay = await self.safety.get_message_delay()
-                await asyncio.sleep(delay)
+                
+                # Wait before next lead ONLY IF successful (anti-spam delay)
+                if i < len(leads):  # Don't wait after last lead
+                    delay = await self.safety.get_message_delay()
+                    print(f"   ⏱️ Waiting {delay:.1f}s before next message")
+                    await asyncio.sleep(delay)
+            else:
+                # If skipped or failed, don't wait full delay
+                print(f"   ⏭️ Skipped/Failed, moving to next lead immediately")
+                await asyncio.sleep(1)
         
         print(f"\n   ✅ Campaign complete: contacted {contacted_count}/{len(leads)} leads")
     
@@ -108,7 +113,8 @@ class LeadManager:
         username = lead.get('username')
         
         if not username:
-            print(f"      ⚠️ Lead {lead_id} has no username, skipping")
+            print(f"      ⚠️ Lead {lead_id} has no username, marking as processed and skipping")
+            await self.supabase.mark_lead_contacted(lead_id)
             return False
         
         # Remove @ if present
