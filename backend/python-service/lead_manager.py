@@ -15,6 +15,7 @@ class LeadManager:
         self.ai = ai_communicator
         self.telethon = telethon_manager
         self.active_conversations = {}  # {conversation_id: data}
+        self.pending_response_tasks = {}  # {conversation_id: asyncio.Task}
     
     async def process_campaign(self, campaign: Dict):
         """
@@ -232,18 +233,9 @@ class LeadManager:
                     await self.supabase.update_conversation_status(conversation_id, 'stopped')
                     return
                 
-                # Get conversation history
-                history = await self.supabase.get_conversation_history(conversation_id)
-                
-                # Add new message to history
                 new_message = event.message.text
-                await self.supabase.add_message_to_conversation(
-                    conversation_id,
-                    'user',
-                    new_message
-                )
                 
-                # 🛡️ AUTO-BOT DETECTION
+                # 🛡️ AUTO-BOT DETECTION (Immediate checks)
                 
                 # Check 1: Message mentions other bots (@...bot, @..._bot)
                 import re
@@ -252,15 +244,6 @@ class LeadManager:
                     print(f"   🤖 Message mentions bots {bot_mentions} - likely auto-responder, stopping")
                     await self.supabase.update_conversation_status(conversation_id, 'stopped')
                     return
-                
-                # Check 2: Detect repeated messages (same message sent twice)
-                user_messages = [msg['content'] for msg in history if msg['role'] == 'user']
-                if len(user_messages) >= 2:
-                    # Check if last 2 messages are very similar
-                    if user_messages[-1] == user_messages[-2]:
-                        print(f"   🤖 Detected identical repeated messages - likely bot, stopping")
-                        await self.supabase.update_conversation_status(conversation_id, 'stopped')
-                        return
                 
                 # Check 3: Detect spam/ad keywords
                 spam_keywords = [
@@ -280,61 +263,129 @@ class LeadManager:
                     print(f"   🤖 Message contains spam keywords - likely auto-responder, stopping")
                     await self.supabase.update_conversation_status(conversation_id, 'stopped')
                     return
-                
-                # Check 4: Conversation length limit (max 5 messages without hot lead)
-                if len(history) >= 10:  # 5 exchanges (5 user + 5 assistant)
-                    print(f"   ⚠️ Conversation reached 5 messages without becoming hot lead - stopping")
-                    await self.supabase.update_conversation_status(conversation_id, 'stopped')
-                    return
-                
-                # Generate AI response
-                response, is_hot_lead = await self.ai.generate_response(
-                    history,
+
+                # Add new message to history
+                await self.supabase.add_message_to_conversation(
+                    conversation_id,
+                    'user',
                     new_message
                 )
                 
-                print(f"   🤖 Generated response: {response[:100]}...")
+                # Cancel any existing pending response task (Debouncing)
+                if conversation_id in self.pending_response_tasks:
+                    print(f"   🔄 Cancelling pending response for {conversation_id} (user sent another message)")
+                    self.pending_response_tasks[conversation_id].cancel()
+                    try:
+                        await self.pending_response_tasks[conversation_id]
+                    except asyncio.CancelledError:
+                        pass
                 
-                # Check if hot lead - STOP IMMEDIATELY if true
-                if is_hot_lead:
-                    print(f"   🔥 Hot lead detected! Stopping conversation immediately (no response sent).")
-                    
-                    # Update history with user's message but NO assistant response
-                    final_history = history + [{'role': 'user', 'content': new_message}]
-                    
-                    await self._handle_hot_lead(
-                        campaign_id,
-                        campaign,
-                        conversation_id,
-                        event.sender_id,
-                        final_history,
-                        account_id,
-                        lead_id,
-                        user_id
-                    )
-                    return
-
-                # Human-like delay before sending response (10 sec - 3 min)
-                import random
-                delay = random.uniform(10, 180)
-                print(f"   ⏳ Waiting {delay:.0f}s before responding (human-like delay)")
-                await asyncio.sleep(delay)
-                
-                # Send response
-                await event.respond(response)
-                
-                # Save our response
-                await self.supabase.add_message_to_conversation(
-                    conversation_id,
-                    'assistant',
-                    response
-                )
+                # Schedule new response task with delay
+                task = asyncio.create_task(self._process_delayed_response(
+                    account_id, conversation_id, campaign_id, campaign, peer_user_id, lead_id, user_id, event
+                ))
+                self.pending_response_tasks[conversation_id] = task
                 
             except Exception as e:
                 print(f"   ❌ Error handling message: {e}")
         
         # Register handler
         self.telethon.register_message_callback(account_id, message_handler)
+
+    async def _process_delayed_response(
+        self,
+        account_id: str,
+        conversation_id: str,
+        campaign_id: str,
+        campaign: Dict,
+        peer_user_id: int,
+        lead_id: int,
+        user_id: str,
+        last_event
+    ):
+        """
+        Process response generation after a delay (to batch user messages)
+        """
+        try:
+            # Wait 15 seconds to allow user to finish typing multiple messages
+            print(f"   ⏳ Waiting 15s for more messages from user...")
+            await asyncio.sleep(15)
+            
+            print(f"   🤖 Generating response for conversation {conversation_id}")
+            
+            # Get updated history (includes all recent user messages)
+            history = await self.supabase.get_conversation_history(conversation_id)
+            
+            # Check length limit
+            if len(history) >= 12: # 6 exchanges
+                 print(f"   ⚠️ Conversation reached limit without becoming hot lead - stopping")
+                 await self.supabase.update_conversation_status(conversation_id, 'stopped')
+                 return
+
+            # Check repeated messages (spam check on history)
+            user_messages = [msg['content'] for msg in history if msg['role'] == 'user']
+            if len(user_messages) >= 3:
+                 if user_messages[-1] == user_messages[-2]:
+                      print(f"   🤖 Detected identical repeated messages - likely bot, stopping")
+                      await self.supabase.update_conversation_status(conversation_id, 'stopped')
+                      return
+
+            # Prepare data for AI
+            if not history:
+                return
+                
+            last_message_content = history[-1]['content']
+            history_for_ai = history[:-1] # All except last
+            
+            # Generate AI response
+            response, is_hot_lead = await self.ai.generate_response(
+                history_for_ai,
+                last_message_content
+            )
+            
+            print(f"   🤖 Generated response: {response[:100]}...")
+            
+            # Check if hot lead - STOP IMMEDIATELY if true
+            if is_hot_lead:
+                print(f"   🔥 Hot lead detected! Stopping conversation immediately (no response sent).")
+                
+                # We don't send response, but we update history for the report
+                # The user message is already in history. We won't add assistant response.
+                
+                await self._handle_hot_lead(
+                    campaign_id,
+                    campaign,
+                    conversation_id,
+                    peer_user_id,
+                    history, # Pass current history without assistant response
+                    account_id,
+                    lead_id,
+                    user_id
+                )
+                return
+
+            # Human-like delay (additional small random delay)
+            import random
+            delay = random.uniform(5, 15)
+            await asyncio.sleep(delay)
+            
+            # Send response
+            await last_event.respond(response)
+            
+            # Save our response
+            await self.supabase.add_message_to_conversation(
+                conversation_id,
+                'assistant',
+                response
+            )
+            
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"   ❌ Error in delayed response processing: {e}")
+        finally:
+            if conversation_id in self.pending_response_tasks:
+                del self.pending_response_tasks[conversation_id]
     
     async def _handle_hot_lead(
         self, 
