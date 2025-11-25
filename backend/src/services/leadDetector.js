@@ -11,7 +11,7 @@ import { DatabaseError } from '../utils/errorHandler.js';
  */
 
 /**
- * Fetch messages from last hour
+ * Fetch messages from last hour (with pagination for large datasets)
  * @param {object} options - Query options
  * @returns {array} Messages from last hour
  */
@@ -29,29 +29,79 @@ export const fetchRecentMessages = async (options = {}) => {
     
     logger.info('Fetching recent messages', {
       hoursBack,
-      timeThreshold: timeThreshold.toISOString()
+      timeThreshold: timeThreshold.toISOString(),
+      limit: limit || 'unlimited (paginated)'
     });
     
-    let query = supabase
-      .from('messages')
-      .select('*')
-      .gte('message_time', timeThreshold.toISOString())
-      .order('message_time', { ascending: false });
-    
+    // If limit is specified, use simple query
     if (limit) {
-      query = query.limit(limit);
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .gte('message_time', timeThreshold.toISOString())
+        .order('message_time', { ascending: false })
+        .limit(limit);
+      
+      if (error) throw error;
+      
+      logger.info('Fetched recent messages (limited)', {
+        count: data?.length || 0,
+        hoursBack,
+        limit
+      });
+      
+      return data || [];
     }
     
-    const { data, error } = await query;
+    // No limit - use pagination to fetch ALL messages
+    // Supabase default limit is 1000, so we need to paginate
+    const PAGE_SIZE = 1000;
+    let allMessages = [];
+    let offset = 0;
+    let hasMore = true;
     
-    if (error) throw error;
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from('messages')
+        .select('*')
+        .gte('message_time', timeThreshold.toISOString())
+        .order('message_time', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1);
+      
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        allMessages = allMessages.concat(data);
+        offset += PAGE_SIZE;
+        
+        // If we got less than PAGE_SIZE, we've reached the end
+        if (data.length < PAGE_SIZE) {
+          hasMore = false;
+        }
+        
+        logger.debug('Pagination progress', {
+          fetched: data.length,
+          total: allMessages.length,
+          offset
+        });
+      } else {
+        hasMore = false;
+      }
+      
+      // Safety limit to prevent infinite loops (max 100k messages)
+      if (allMessages.length >= 100000) {
+        logger.warn('Reached safety limit of 100k messages');
+        hasMore = false;
+      }
+    }
     
-    logger.info('Fetched recent messages', {
-      count: data?.length || 0,
-      hoursBack
+    logger.info('Fetched recent messages (paginated)', {
+      count: allMessages.length,
+      hoursBack,
+      pages: Math.ceil(allMessages.length / PAGE_SIZE)
     });
     
-    return data || [];
+    return allMessages;
   } catch (error) {
     logger.error('Failed to fetch recent messages', {
       error: error.message
