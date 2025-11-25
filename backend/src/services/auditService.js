@@ -26,7 +26,7 @@ export const runAudit = async (userId, config) => {
 
   const detectionOptions = {
     hoursBack: daysBack * 24,
-    maxMessages: 2000 // Allow scanning more messages for audit
+    maxMessages: null // No limit - scan ALL messages for the period
   };
 
   // 2. Run Detection Pipeline
