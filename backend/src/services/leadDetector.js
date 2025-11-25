@@ -335,8 +335,8 @@ export const detectLeads = async (userId, userConfig, options = {}) => {
         // Record usage for this detection
         await recordUsage(userId, {
           cost: match.analysis.metadata.cost,
-          inputTokens: match.analysis.metadata.tokens.input,
-          outputTokens: match.analysis.metadata.tokens.output,
+          inputTokens: Math.round(match.analysis.metadata.tokens.input),
+          outputTokens: Math.round(match.analysis.metadata.tokens.output),
           model: match.analysis.metadata.model
         });
       } catch (error) {
