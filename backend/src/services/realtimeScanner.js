@@ -20,32 +20,85 @@ const BATCH_INTERVAL = 5000; // 5 seconds
 let pendingMessages = [];
 let batchTimer = null;
 
+// Track last processed message ID per user to ensure all users get all messages
+let userLastProcessedIds = new Map();
+
 /**
- * Process a batch of new messages
+ * Process messages for all active users
+ * Each user tracks their own lastProcessedId to ensure they get ALL new messages
  */
 const processBatch = async () => {
-  if (pendingMessages.length === 0) return;
-
-  const messagesToProcess = [...pendingMessages];
-  pendingMessages = [];
-
-  logger.info('Processing batch of new messages', {
-    count: messagesToProcess.length
-  });
-
   try {
+    const supabase = getSupabase();
+    
     // Get active user configs
     const activeUsers = await getActiveUserConfigs();
 
     if (activeUsers.length === 0) {
-      logger.info('No active users to process messages for');
+      logger.debug('No active users to process messages for');
       return;
     }
 
-    // Process for each active user
+    // Process for each active user independently
     for (const userConfig of activeUsers) {
       try {
-        await processMessagesForUser(messagesToProcess, userConfig);
+        const userId = userConfig.user_id;
+        
+        // Get or initialize last processed ID for this user
+        let userLastId = userLastProcessedIds.get(userId);
+        
+        // If user is new or was reactivated, start from current max ID
+        // This prevents processing old messages when user first activates
+        if (userLastId === undefined) {
+          const { data: latestMessage } = await supabase
+            .from('messages')
+            .select('id')
+            .order('id', { ascending: false })
+            .limit(1)
+            .single();
+          
+          userLastId = latestMessage?.id || 0;
+          userLastProcessedIds.set(userId, userLastId);
+          
+          logger.info('Initialized lastProcessedId for user', {
+            userId,
+            startingFromId: userLastId
+          });
+          continue; // Skip this cycle, start processing from next poll
+        }
+        
+        // Fetch new messages for this user (messages after their lastProcessedId)
+        // Limit can be configured via env var, default 1000 messages per user per cycle
+        const messagesLimit = parseInt(process.env.MESSAGES_PER_CYCLE || '1000', 10);
+        const { data: messages, error } = await supabase
+          .from('messages')
+          .select('*')
+          .gt('id', userLastId)
+          .order('id', { ascending: true })
+          .limit(messagesLimit);
+        
+        if (error) {
+          logger.error('Error fetching messages for user', { userId, error: error.message });
+          continue;
+        }
+        
+        if (!messages || messages.length === 0) {
+          continue; // No new messages for this user
+        }
+        
+        logger.info('Processing messages for user', {
+          userId,
+          count: messages.length,
+          fromId: userLastId,
+          toId: messages[messages.length - 1].id
+        });
+        
+        // Update user's last processed ID
+        userLastProcessedIds.set(userId, messages[messages.length - 1].id);
+        
+        // Process messages for this user
+        await processMessagesForUser(messages, userConfig);
+        
       } catch (error) {
         logger.error('Failed to process messages for user', {
           userId: userConfig.user_id,
@@ -276,7 +329,7 @@ const processMessagesForUser = async (messages, userConfig) => {
 };
 
 /**
- * Add message to pending batch
+ * Add message to pending batch (legacy - kept for compatibility)
  */
 const addToBatch = (message) => {
   // Avoid duplicates
@@ -287,16 +340,6 @@ const addToBatch = (message) => {
   processedMessageIds.add(message.id);
   pendingMessages.push(message);
 
-  // Clear existing timer
-  if (batchTimer) {
-    clearTimeout(batchTimer);
-  }
-
-  // Set new timer to process batch
-  batchTimer = setTimeout(() => {
-    processBatch();
-  }, BATCH_INTERVAL);
-
   logger.debug('Message added to batch', {
     messageId: message.id,
     batchSize: pendingMessages.length
@@ -305,6 +348,7 @@ const addToBatch = (message) => {
 
 /**
  * Start real-time message scanner (using polling instead of Realtime)
+ * Each user independently tracks their own lastProcessedId
  */
 export const startRealtimeScanner = async () => {
   if (isRunning) {
@@ -313,90 +357,38 @@ export const startRealtimeScanner = async () => {
   }
 
   try {
-    const supabase = getSupabase();
-
-    logger.info('🔄 Starting Realtime Message Scanner (polling mode)...');
+    logger.info('🔄 Starting Realtime Message Scanner (per-user tracking mode)...');
 
     // Mark as running immediately
     isRunning = true;
     subscribedAt = new Date().toISOString();
     
-    // CRITICAL: Initialize lastProcessedId to max ID in database
-    // This prevents processing thousands of old messages on startup
-    let lastProcessedId = null;
-    try {
-      const { data: latestMessage } = await supabase
-        .from('messages')
-        .select('id')
-        .order('id', { ascending: false })
-        .limit(1)
-        .single();
-      
-      if (latestMessage) {
-        lastProcessedId = latestMessage.id;
-        logger.info('Scanner initialized - will process only NEW messages', {
-          startingFromId: lastProcessedId
-        });
-      }
-    } catch (error) {
-      logger.warn('Could not get latest message ID, will process from beginning', {
-        error: error.message
-      });
-    }
-
-    // Polling function - check for new messages every 5 seconds
-    const pollForMessages = async () => {
-      if (!isRunning) return;
-
-      try {
-        const query = supabase
-          .from('messages')
-          .select('*')
-          .order('id', { ascending: true }) // FIXED: ascending to process oldest first
-          .limit(100); // Process up to 100 messages per poll
-
-        if (lastProcessedId) {
-          query.gt('id', lastProcessedId);
-        }
-
-        const { data: messages, error } = await query;
-
-        if (error) {
-          logger.error('Error polling for messages', { error: error.message });
-          return;
-        }
-
-        if (messages && messages.length > 0) {
-          logger.info('New messages found', { count: messages.length });
-          
-          // Update last processed ID to the highest ID in this batch
-          lastProcessedId = Math.max(...messages.map(m => m.id));
-
-          // Process messages in order (already sorted oldest first)
-          for (const message of messages) {
-            addToBatch(message);
-          }
-        }
-      } catch (error) {
-        logger.error('Polling error', { error: error.message });
-      }
-    };
-
-    // Start polling every 5 seconds
-    realtimeChannel = setInterval(pollForMessages, 5000);
+    // Clear user tracking on restart
+    userLastProcessedIds.clear();
     
-    logger.info('✅ Realtime scanner started successfully (polling mode)', {
+    logger.info('Scanner initialized - each user will track their own message position');
+
+    // Start processing every 5 seconds
+    // processBatch now handles per-user message fetching
+    realtimeChannel = setInterval(processBatch, BATCH_INTERVAL);
+    
+    logger.info('✅ Realtime scanner started successfully (per-user tracking mode)', {
       subscribedAt,
-      interval: '5 seconds'
+      interval: `${BATCH_INTERVAL / 1000} seconds`
     });
 
-    // Clean up old processed IDs every hour
+    // Clean up inactive users from tracking every hour
     setInterval(() => {
-      if (processedMessageIds.size > 10000) {
-        const idsArray = Array.from(processedMessageIds);
-        processedMessageIds = new Set(idsArray.slice(-5000));
-        logger.info('Cleaned up processed message IDs', {
-          kept: processedMessageIds.size
+      // Keep tracking map clean - will be repopulated when users become active
+      if (userLastProcessedIds.size > 100) {
+        logger.info('Cleaning up user tracking map', {
+          before: userLastProcessedIds.size
+        });
+        // Keep only last 50 users (most recently active will be re-added)
+        const entries = Array.from(userLastProcessedIds.entries());
+        userLastProcessedIds = new Map(entries.slice(-50));
+        logger.info('User tracking map cleaned', {
+          after: userLastProcessedIds.size
         });
       }
     }, 3600000); // 1 hour
@@ -440,6 +432,9 @@ export const stopRealtimeScanner = async () => {
 
     isRunning = false;
     subscribedAt = null;
+    
+    // Clear user tracking
+    userLastProcessedIds.clear();
 
     logger.info('✅ Realtime scanner stopped');
 
@@ -464,7 +459,9 @@ export const getScannerStatus = () => {
     isRunning,
     subscribedAt,
     pendingBatchSize: pendingMessages.length,
-    processedMessagesCount: processedMessageIds.size
+    processedMessagesCount: processedMessageIds.size,
+    trackedUsersCount: userLastProcessedIds.size,
+    userPositions: Object.fromEntries(userLastProcessedIds)
   };
 };
 
