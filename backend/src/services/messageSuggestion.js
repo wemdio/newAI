@@ -104,7 +104,7 @@ ${lead.message}
       systemPromptLength: systemPrompt.length,
       userPromptLength: userPrompt.length,
       temperature: 0.7,
-      max_tokens: 2500
+      max_tokens: 4000
     });
 
     // Make API call
@@ -119,7 +119,7 @@ ${lead.message}
             { role: 'user', content: userPrompt }
           ],
           temperature: 0.7, // More creative for message generation
-          max_tokens: 2500 // Further increased - Gemini 3 Pro uses lots of reasoning tokens
+          max_tokens: 4000 // Increased: Gemini 3 Pro needs ~2500 for reasoning + ~1000 for content
         });
         logger.info('✅ OpenRouter API call completed', { 
           leadId: lead.id, 
