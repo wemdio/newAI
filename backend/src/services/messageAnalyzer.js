@@ -45,7 +45,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     });
     
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'google/gemini-2.0-flash-001';
+    const model = process.env.AI_MODEL || 'openai/gpt-4o-mini';
     
     logger.info('Making OpenRouter API call', {
       messageId: message.id,
@@ -219,7 +219,7 @@ ${JSON.stringify(messagesArray, null, 2)}
 
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'google/gemini-2.0-flash-001';
+    const model = process.env.AI_MODEL || 'openai/gpt-4o-mini';
     
     // Estimate tokens
     const estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt);

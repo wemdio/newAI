@@ -28,8 +28,13 @@ export const estimateTokens = (text) => {
  * Gemini 2.0 Flash: $0.10/1M input tokens, $0.40/1M output tokens
  * Gemini 3 Pro Preview: $2/M input tokens, $12/M output tokens
  */
-export const calculateCost = (inputTokens, outputTokens, model = 'anthropic/claude-3-haiku') => {
+export const calculateCost = (inputTokens, outputTokens, model = 'openai/gpt-4o-mini') => {
   const costs = {
+    // GPT-4o-mini - good quality, reasonable cost
+    'openai/gpt-4o-mini': {
+      input: 0.15 / 1_000_000,  // $0.15 per 1M tokens
+      output: 0.60 / 1_000_000   // $0.60 per 1M tokens
+    },
     // Claude 3 Haiku - best balance of quality and cost
     'anthropic/claude-3-haiku': {
       input: 0.25 / 1_000_000,  // $0.25 per 1M tokens
@@ -50,7 +55,7 @@ export const calculateCost = (inputTokens, outputTokens, model = 'anthropic/clau
     }
   };
   
-  const modelCosts = costs[model] || costs['anthropic/claude-3-haiku'];
+  const modelCosts = costs[model] || costs['openai/gpt-4o-mini'];
   
   const inputCost = inputTokens * modelCosts.input;
   const outputCost = outputTokens * modelCosts.output;

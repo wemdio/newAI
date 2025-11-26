@@ -62,7 +62,7 @@ export const getOpenRouter = (apiKey = null) => {
 export const testConnection = async (apiKey = null) => {
   try {
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'google/gemini-2.0-flash-001';
+    const model = process.env.AI_MODEL || 'openai/gpt-4o-mini';
 
     // Simple test request
     const response = await client.chat.completions.create({
