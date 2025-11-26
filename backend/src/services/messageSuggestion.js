@@ -94,9 +94,9 @@ ${lead.message}
 
     // Get OpenRouter client
     const client = getOpenRouter(apiKey);
-    // Use Gemini 3 Pro for high-quality suggestions
-    // With increased max_tokens (2500) to allow room for reasoning + content and reasoning filter, it works reliably
-    const model = process.env.MESSAGE_SUGGESTION_MODEL || 'google/gemini-3-pro-preview';
+    // Use Gemini 2.0 Flash for fast, reliable suggestions (no reasoning overhead)
+    // Gemini 3 Pro Preview has issues - returns empty content with reasoning in separate field
+    const model = process.env.MESSAGE_SUGGESTION_MODEL || 'google/gemini-2.0-flash-001';
 
     logger.info('🚀 Starting OpenRouter API call for suggestion', {
       leadId: lead.id,
@@ -104,7 +104,7 @@ ${lead.message}
       systemPromptLength: systemPrompt.length,
       userPromptLength: userPrompt.length,
       temperature: 0.7,
-      max_tokens: 2500
+      max_tokens: 1000
     });
 
     // Make API call
@@ -119,7 +119,7 @@ ${lead.message}
             { role: 'user', content: userPrompt }
           ],
           temperature: 0.7, // More creative for message generation
-          max_tokens: 2500 // Further increased - Gemini 3 Pro uses lots of reasoning tokens
+          max_tokens: 1000 // Sufficient for message suggestions without reasoning overhead
         });
         logger.info('✅ OpenRouter API call completed', { 
           leadId: lead.id, 
