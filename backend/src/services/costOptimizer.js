@@ -25,7 +25,7 @@ export const recordUsage = async (userId, usageData) => {
         cost: usageData.cost,
         input_tokens: usageData.inputTokens,
         output_tokens: usageData.outputTokens,
-        model_used: usageData.model || 'google/gemini-2.0-flash-001'
+        model_used: usageData.model || 'anthropic/claude-3-haiku'
       })
       .select()
       .single();

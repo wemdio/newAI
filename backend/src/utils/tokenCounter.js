@@ -24,11 +24,18 @@ export const estimateTokens = (text) => {
 
 /**
  * Calculate cost for OpenRouter API call
+ * Claude 3 Haiku: $0.25/1M input tokens, $1.25/1M output tokens
  * Gemini 2.0 Flash: $0.10/1M input tokens, $0.40/1M output tokens
  * Gemini 3 Pro Preview: $2/M input tokens, $12/M output tokens
  */
-export const calculateCost = (inputTokens, outputTokens, model = 'google/gemini-3-pro-preview') => {
+export const calculateCost = (inputTokens, outputTokens, model = 'anthropic/claude-3-haiku') => {
   const costs = {
+    // Claude 3 Haiku - best balance of quality and cost
+    'anthropic/claude-3-haiku': {
+      input: 0.25 / 1_000_000,  // $0.25 per 1M tokens
+      output: 1.25 / 1_000_000   // $1.25 per 1M tokens
+    },
+    // Gemini models
     'gemini-2.0-flash': {
       input: 0.10 / 1_000_000,  // $0.10 per 1M tokens
       output: 0.40 / 1_000_000   // $0.40 per 1M tokens
@@ -43,7 +50,7 @@ export const calculateCost = (inputTokens, outputTokens, model = 'google/gemini-
     }
   };
   
-  const modelCosts = costs[model] || costs['google/gemini-3-pro-preview'];
+  const modelCosts = costs[model] || costs['anthropic/claude-3-haiku'];
   
   const inputCost = inputTokens * modelCosts.input;
   const outputCost = outputTokens * modelCosts.output;

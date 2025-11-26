@@ -63,13 +63,11 @@ const addTransliterations = (text) => {
  * @returns {array} Array of keywords (expanded with transliterations)
  */
 export const extractKeywords = (userCriteria) => {
-  // Extract criteria points - remove negative sections first
-  let positiveCriteria = userCriteria;
-  
   // Common markers for negative sections (case insensitive)
   const negativeMarkers = [
     'НЕ СЧИТАТЬ ЛИДОМ',
     'СТОП-ФАКТОРЫ',
+    'СТОП ФАКТОРЫ',
     'STOP FACTORS',
     'NEGATIVE KEYWORDS',
     'ИСКЛЮЧЕНИЯ',
@@ -79,37 +77,32 @@ export const extractKeywords = (userCriteria) => {
     'NOT LEAD',
     'СТОП-СЛОВА',
     'STOP WORDS',
-    '🛑'
+    '🛑',
+    'ПРИМЕРЫ — ЭТО НЕ ЛИД',
+    'ЭТО НЕ ЛИД',
+    'НЕ ДОДУМЫВАЙ',
+    'КРИТИЧЕСКИ ВАЖНО',
+    'МУСОР'
   ];
   
-  // Remove content starting from any negative marker until the next section or end
-  // Simple approach: just cut off everything after the first negative marker found if structure allows,
-  // or try to cut specific blocks.
-  // Better approach for now: Cut everything after these markers to avoid polluting keywords
-  
-  // Find the earliest occurrence of any negative marker
-  let cutIndex = positiveCriteria.length;
-  let foundMarker = false;
+  // Find the earliest occurrence of any negative marker and CUT everything after it
+  let cutIndex = userCriteria.length;
   
   for (const marker of negativeMarkers) {
-    const index = positiveCriteria.toUpperCase().indexOf(marker);
+    const index = userCriteria.toUpperCase().indexOf(marker.toUpperCase());
     if (index !== -1 && index < cutIndex) {
       cutIndex = index;
-      foundMarker = true;
     }
   }
   
-  if (foundMarker) {
-    // Also check if there are positive sections AFTER the negative section?
-    // Complex parsing is risky. 
-    // Safer strategy: Assume negative keywords are at the end or clearly marked blocks.
-    // For now, let's try to remove just the negative blocks if possible, or cut off if simple.
-    
-    // Let's try a block removal strategy using regex
-    // Matches: MARKER: ... (until next double newline or end)
-    const regex = new RegExp(`(${negativeMarkers.join('|')})[:\\s].*?(\\n\\n|$)`, 'gis');
-    positiveCriteria = positiveCriteria.replace(regex, ' ');
-  }
+  // Only use text BEFORE the first negative marker
+  const positiveCriteria = userCriteria.substring(0, cutIndex);
+  
+  logger.debug('Extracted positive criteria for keywords', {
+    originalLength: userCriteria.length,
+    positiveLength: positiveCriteria.length,
+    cutAt: cutIndex < userCriteria.length ? cutIndex : 'no cut'
+  });
 
   // Extract criteria points from the cleaned text
   const criteria = extractCriteria(positiveCriteria);
@@ -125,17 +118,19 @@ export const extractKeywords = (userCriteria) => {
     // Russian common words
     'это', 'быть', 'или', 'как', 'его', 'для', 'так', 'уже', 'что',
     'можно', 'нужно', 'есть', 'был', 'была', 'были', 'буду', 'будет',
-    'если', 'того', 'тогда', 'теперь', 'потом', 'сейчас', 'здесь', 'там'
+    'если', 'того', 'тогда', 'теперь', 'потом', 'сейчас', 'здесь', 'там',
+    'score', 'лид', 'лида', 'лиды', 'горячий', 'тёплый', 'теплый'
   ]);
   
   const keywords = new Set();
   
-  // Extract from full criteria text (with transliterations applied)
-  const expandedCriteria = addTransliterations(userCriteria);
+  // Extract from CLEANED positive criteria text (with transliterations applied)
+  // FIX: Use positiveCriteria instead of userCriteria!
+  const expandedCriteria = addTransliterations(positiveCriteria);
   
   const words = expandedCriteria
     .toLowerCase()
-    .replace(/[^\w\s]/g, ' ') // Remove punctuation
+    .replace(/[^\w\sа-яёА-ЯЁ]/g, ' ') // Remove punctuation but keep cyrillic
     .split(/\s+/)
     .filter(word => word.length > 3)
     .filter(word => !commonWords.has(word));
