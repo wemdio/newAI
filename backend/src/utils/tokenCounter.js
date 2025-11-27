@@ -28,7 +28,7 @@ export const estimateTokens = (text) => {
  * Gemini 2.0 Flash: $0.10/1M input tokens, $0.40/1M output tokens
  * Gemini 3 Pro Preview: $2/M input tokens, $12/M output tokens
  */
-export const calculateCost = (inputTokens, outputTokens, model = 'deepseek/deepseek-chat-v3.1') => {
+export const calculateCost = (inputTokens, outputTokens, model = 'openai/gpt-4o-mini') => {
   const costs = {
     // GPT-4o-mini - good quality, reasonable cost
     'openai/gpt-4o-mini': {
@@ -60,7 +60,7 @@ export const calculateCost = (inputTokens, outputTokens, model = 'deepseek/deeps
     }
   };
   
-  const modelCosts = costs[model] || costs['deepseek/deepseek-chat-v3.1'];
+  const modelCosts = costs[model] || costs['openai/gpt-4o-mini'];
   
   const inputCost = inputTokens * modelCosts.input;
   const outputCost = outputTokens * modelCosts.output;

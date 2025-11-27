@@ -26,8 +26,7 @@
 
 .btn-refresh,
 .btn-delete,
-.btn-delete-all,
-.btn-copy-usernames {
+.btn-delete-all {
   padding: 8px 16px;
   background: transparent;
   border: 1px solid #444;
@@ -40,16 +39,6 @@
 
 .btn-refresh:hover {
   border-color: #fff;
-}
-
-.btn-copy-usernames {
-  border-color: #2a3e2a;
-  color: #7dd17d;
-}
-
-.btn-copy-usernames:hover {
-  border-color: #7dd17d;
-  background: #1a2e1a;
 }
 
 .btn-delete {

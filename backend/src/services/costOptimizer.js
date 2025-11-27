@@ -25,7 +25,7 @@ export const recordUsage = async (userId, usageData) => {
         cost: usageData.cost,
         input_tokens: usageData.inputTokens,
         output_tokens: usageData.outputTokens,
-        model_used: usageData.model || 'anthropic/claude-3-haiku'
+        model_used: usageData.model || 'openai/gpt-4o-mini'
       })
       .select()
       .single();
