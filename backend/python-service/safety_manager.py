@@ -2,7 +2,7 @@
 import asyncio
 import random
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
 from config import (
     MAX_MESSAGES_PER_DAY,
@@ -19,7 +19,9 @@ class SafetyManager:
     
     def __init__(self, supabase):
         self.supabase = supabase
-        self.account_usage = {}  # In-memory tracking
+        # In-memory tracking of messages sent per account TODAY
+        # Format: {account_id: {'count': int, 'date': str}}
+        self.account_usage_cache = {}
         self.last_reset_date = None
 
     async def get_available_account(self, user_id: str) -> Optional[Dict]:
@@ -75,28 +77,48 @@ class SafetyManager:
     
     def _is_daily_limit_reached(self, account: Dict) -> bool:
         """Check if account reached daily message limit"""
-        messages_today = account.get('messages_sent_today', 0)
+        account_id = str(account['id'])
+        today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        
+        # Get DB counter
+        db_messages_today = account.get('messages_sent_today', 0)
+        
+        # Check if DB counter is from today
+        last_used_at = account.get('last_used_at')
+        if last_used_at:
+            if isinstance(last_used_at, str):
+                last_used_at = datetime.fromisoformat(last_used_at.replace('Z', '+00:00'))
+            
+            # If last use was on a different day, DB counter is stale
+            if last_used_at.date() < datetime.now(timezone.utc).date():
+                db_messages_today = 0
+        
+        # Get in-memory cache counter (for messages sent in this session)
+        cache_entry = self.account_usage_cache.get(account_id, {'count': 0, 'date': today_str})
+        
+        # Reset cache if it's from a different day
+        if cache_entry.get('date') != today_str:
+            cache_entry = {'count': 0, 'date': today_str}
+            self.account_usage_cache[account_id] = cache_entry
+        
+        # Total messages = max of DB counter and cache counter
+        # (cache is more accurate during current session)
+        messages_today = max(db_messages_today, cache_entry['count'])
         
         # Use account specific limit or global default
         # Default to 3 if daily_limit is not set in DB (safe default)
         limit = account.get('daily_limit')
         if limit is None:
             limit = 3
-            
-        last_used_at = account.get('last_used_at')
         
-        # If account was last used on a different day, counter should reset
-        if last_used_at:
-            if isinstance(last_used_at, str):
-                last_used_at = datetime.fromisoformat(last_used_at.replace('Z', '+00:00'))
-            
-            now = datetime.now(last_used_at.tzinfo)
-            
-            # If last use was on a different day, limit is NOT reached (counter will reset)
-            if last_used_at.date() < now.date():
-                return False
+        is_reached = messages_today >= limit
         
-        return messages_today >= limit
+        if is_reached:
+            logger.debug(f"    📊 Account {account_id}: {messages_today}/{limit} messages (limit reached)")
+        else:
+            logger.debug(f"    📊 Account {account_id}: {messages_today}/{limit} messages")
+        
+        return is_reached
     
     def _needs_cooldown(self, account: Dict) -> bool:
         """Check if account needs cooldown period (20 min between messages)"""
@@ -142,10 +164,28 @@ class SafetyManager:
     
     async def mark_account_used(self, account_id: str):
         """
-        Mark account as used (update stats in database)
+        Mark account as used (update stats in database AND in-memory cache)
         """
+        today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        
+        # Update in-memory cache FIRST (immediate effect for next check)
+        if account_id not in self.account_usage_cache:
+            self.account_usage_cache[account_id] = {'count': 0, 'date': today_str}
+        
+        cache_entry = self.account_usage_cache[account_id]
+        
+        # Reset if different day
+        if cache_entry.get('date') != today_str:
+            cache_entry = {'count': 0, 'date': today_str}
+        
+        cache_entry['count'] += 1
+        self.account_usage_cache[account_id] = cache_entry
+        
+        print(f"📊 Account {account_id}: {cache_entry['count']} messages today (in-memory)")
+        
+        # Then update database (async, for persistence)
         await self.supabase.update_account_usage(account_id)
-        print(f"📊 Updated usage stats for account {account_id}")
+        print(f"📊 Updated usage stats for account {account_id} in DB")
     
     async def handle_flood_wait(self, account_id: str, wait_seconds: int):
         """

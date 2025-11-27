@@ -451,6 +451,22 @@ class LeadManager:
         
         print(f"   ✅ Hot lead saved: {hot_lead_id}")
     
+    def _escape_markdown(self, text: str) -> str:
+        """
+        Escape special Markdown characters to prevent parsing errors
+        """
+        if not text:
+            return text
+        
+        # Characters that need escaping in Telegram Markdown
+        special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        
+        escaped = text
+        for char in special_chars:
+            escaped = escaped.replace(char, f'\\{char}')
+        
+        return escaped
+    
     async def _post_hot_lead_to_channel(
         self,
         hot_lead_id: str,
@@ -482,40 +498,45 @@ class LeadManager:
             # 3. Generate AI Context/Summary
             summary = await self.ai.generate_lead_summary(lead_details, conversation_history)
             
-            # 4. Format Dialogue
+            # 4. Format Dialogue (escape special chars)
             dialogue_text = ""
             for msg in conversation_history:
                 role = "🤖" if msg['role'] == 'assistant' else "👤"
-                content = msg['content']
+                # Escape content to prevent Markdown parsing errors
+                content = self._escape_markdown(msg['content'])
                 dialogue_text += f"{role} {content}\n\n"
             
-            # 5. Construct Message (Markdown)
-            message = f"""
-🔥 *ГОРЯЧИЙ ЛИД НАЙДЕН!*
+            # Escape other dynamic text fields
+            chat_name_escaped = self._escape_markdown(chat_name)
+            original_text_escaped = self._escape_markdown(original_text)
+            summary_escaped = self._escape_markdown(summary)
+            
+            # 5. Construct Message (plain text - no Markdown to avoid parsing issues)
+            message = f"""🔥 ГОРЯЧИЙ ЛИД НАЙДЕН!
 
-👤 *Инфо о лиде:*
+👤 Инфо о лиде:
 User: @{username}
-ID: `{contact_info.get('telegram_user_id', 'N/A')}`
+ID: {contact_info.get('telegram_user_id', 'N/A')}
 Чат-источник: {chat_name}
 
-📝 *Изначальный запрос:*
+📝 Изначальный запрос:
 "{original_text}"
 
-🧠 *Анализ (почему подходит):*
+🧠 Анализ (почему подходит):
 {summary}
 
-💬 *Переписка:*
+💬 Переписка:
 {dialogue_text}
 
-🔗 ID лида в системе: `{hot_lead_id}`
+🔗 ID лида в системе: {hot_lead_id}
 """
             
-            # 6. Send via Telegram Bot API
+            # 6. Send via Telegram Bot API (without parse_mode to avoid Markdown issues)
             url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
             payload = {
                 'chat_id': channel_id,
-                'text': message,
-                'parse_mode': 'Markdown'
+                'text': message
+                # No parse_mode - send as plain text to avoid parsing errors
             }
             
             async with aiohttp.ClientSession() as session:
