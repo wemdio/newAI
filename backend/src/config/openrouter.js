@@ -62,7 +62,7 @@ export const getOpenRouter = (apiKey = null) => {
 export const testConnection = async (apiKey = null) => {
   try {
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'openai/gpt-4o-mini';
+    const model = process.env.AI_MODEL || 'deepseek/deepseek-chat-v3.1';
 
     // Simple test request
     const response = await client.chat.completions.create({
