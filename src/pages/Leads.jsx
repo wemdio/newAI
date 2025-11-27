@@ -113,6 +113,37 @@ function Leads() {
     }
   };
 
+  const copyAllUsernames = async () => {
+    // Extract usernames from leads, filter out empty/null values
+    const usernames = leads
+      .map(lead => lead.messages?.username || lead.username)
+      .filter(username => username && username.trim() !== '')
+      .map(username => username.startsWith('@') ? username : `@${username}`);
+    
+    if (usernames.length === 0) {
+      alert('Нет юзернеймов для копирования');
+      return;
+    }
+    
+    // Remove duplicates
+    const uniqueUsernames = [...new Set(usernames)];
+    const text = uniqueUsernames.join('\n');
+    
+    try {
+      await navigator.clipboard.writeText(text);
+      alert(`Скопировано ${uniqueUsernames.length} юзернеймов в буфер обмена`);
+    } catch (err) {
+      // Fallback for older browsers
+      const textArea = document.createElement('textarea');
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textArea);
+      alert(`Скопировано ${uniqueUsernames.length} юзернеймов в буфер обмена`);
+    }
+  };
+
   const getConfidenceColor = (score) => {
     if (score >= 80) return '#7dd17d';
     if (score >= 60) return '#f59e0b';
@@ -148,6 +179,9 @@ function Leads() {
         <div className="header-actions">
         <button onClick={loadLeads} className="btn-refresh">
             Обновить
+          </button>
+          <button onClick={copyAllUsernames} className="btn-copy-usernames">
+            📋 Копировать юзернеймы
           </button>
           {selectedLeads.size > 0 && (
             <button onClick={handleDeleteSelected} className="btn-delete">
