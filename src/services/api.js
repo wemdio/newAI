@@ -12,13 +12,13 @@ const getApiBaseUrl = () => {
   // Production domain
   if (window.location.hostname === 'telegram-scanner.ru') {
     console.log('Detected telegram-scanner.ru domain');
-    return 'https://wemdio-newai-back-f239.twc1.net/api';
+    return 'https://wemdio-newai-f239.twc1.net/api';
   }
   
   // Timeweb Cloud fallback (*.twc1.net)
   if (window.location.hostname.includes('twc1.net')) {
     console.log('Detected twc1.net domain, using hardcoded API URL');
-    return 'https://wemdio-newai-back-f239.twc1.net/api';
+    return 'https://wemdio-newai-f239.twc1.net/api';
   }
   
   // Default to localhost for local development
