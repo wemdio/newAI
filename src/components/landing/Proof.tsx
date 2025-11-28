@@ -27,7 +27,7 @@ const Proof: React.FC = () => {
   ];
 
   return (
-    <section id="proof" className="py-32 bg-dark-950 relative overflow-hidden">
+    <section id="proof" className="py-32 bg-dark-950 relative overflow-hidden scroll-mt-20">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
         
         <div className="grid lg:grid-cols-2 gap-20 items-start">

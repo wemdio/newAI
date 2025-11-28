@@ -84,7 +84,7 @@ const PricingCard = ({ item, index }: { item: typeof pricingData[0], index: numb
 
 const Pricing: React.FC = () => {
   return (
-    <section id="pricing" className="py-32 bg-dark-950 relative overflow-hidden">
+    <section id="pricing" className="py-32 bg-dark-950 relative overflow-hidden scroll-mt-20">
         {/* Background ambient glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-brand-900/5 rounded-full blur-[120px] pointer-events-none" />
 
@@ -109,7 +109,7 @@ const Pricing: React.FC = () => {
           </motion.p>
         </div>
 
-        <div className="flex flex-col md:flex-row justify-center items-center gap-8 mb-16 relative">
+        <div className="flex flex-col md:flex-row justify-center items-stretch gap-8 mb-16 relative">
           <PricingCard item={pricingData[0]} index={0} />
           
           {/* Connector */}
@@ -118,7 +118,7 @@ const Pricing: React.FC = () => {
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
             transition={{ delay: 0.2 }}
-            className="flex-shrink-0 w-12 h-12 rounded-full bg-[#0a0a0a] border border-white/10 flex items-center justify-center z-20 text-gray-500 rotate-90 md:rotate-0"
+            className="flex-shrink-0 w-12 h-12 rounded-full bg-[#0a0a0a] border border-white/10 flex items-center justify-center z-20 text-gray-500 rotate-90 md:rotate-0 self-center"
           >
             <Plus className="w-6 h-6" />
           </motion.div>
