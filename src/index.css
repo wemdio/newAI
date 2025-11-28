@@ -2,9 +2,9 @@
 
 @theme {
   /* Fonts */
-  --font-sans: 'Inter', 'sans-serif';
-  --font-mono: 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', 'monospace';
-  --font-display: 'Bebas Neue', 'Oswald', 'sans-serif';
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'Liberation Mono', 'Courier New', monospace;
+  --font-display: 'Bebas Neue', 'Oswald', sans-serif;
 
   /* Colors */
   --color-brand-50: #fff7ed;
