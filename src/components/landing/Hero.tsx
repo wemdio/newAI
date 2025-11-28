@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, Terminal, Activity, Search, User, MessageSquare, Edit3, Loader2 } from 'lucide-react';
+import { ArrowRight, Terminal, Activity, Search, User, Edit3, Loader2 } from 'lucide-react';
 
 // Mock data for the simulation
 const LOG_MESSAGES = [

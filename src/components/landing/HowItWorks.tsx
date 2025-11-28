@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Settings, Search, MessageSquare, CheckCircle, Radio, Users, Zap, BarChart3, Send, FileText, Bot, ChevronRight, Loader2, Bell, ArrowRight } from 'lucide-react';
+import { Search, CheckCircle, Radio, BarChart3, Send, FileText, Bot, Loader2, Bell, ArrowRight, Zap } from 'lucide-react';
 
 const steps = [
   {
@@ -87,7 +87,7 @@ const Visualizer = ({ activeStep }: { activeStep: number }) => {
     
     // Step 5: Sending (Auto-Outreach)
     // We want the "Sending" button AND the "Success Overlay" here
-    const showSending = activeStep === 5;
+    // const showSending = activeStep === 5; // Removed unused variable
 
     // Step 6: Transfer (Lead replied)
     const showTransfer = activeStep === 6;
