@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
-import { motion, useInView } from 'framer-motion';
+import { motion } from 'framer-motion';
 
 const steps = [
   {
@@ -42,7 +42,6 @@ const steps = [
 const SpotlightCard = ({ children, className = "", fullWidth = false }: { children: React.ReactNode, className?: string, fullWidth?: boolean }) => {
     const divRef = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState({ x: 0, y: 0 });
-    const [opacity, setOpacity] = useState(0);
 
     const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
         if (!divRef.current) return;
@@ -50,8 +49,8 @@ const SpotlightCard = ({ children, className = "", fullWidth = false }: { childr
         setPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top });
     };
 
-    const handleMouseEnter = () => setOpacity(1);
-    const handleMouseLeave = () => setOpacity(0);
+    const handleMouseEnter = () => {}; // Removed unused opacity state
+    const handleMouseLeave = () => {};
 
     return (
         <motion.div
