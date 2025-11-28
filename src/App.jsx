@@ -246,7 +246,23 @@ function App() {
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        // If token is invalid/expired, Supabase might return 401/403
+        // We should still clear the local session
+        console.warn('Supabase signOut error (continuing to local cleanup):', error);
+      }
+    } catch (error) {
+      console.error('Unexpected error during signOut:', error);
+    } finally {
+      setSession(null);
+      // Clear any persisted state if necessary
+      if (!isTelegram) {
+        // Force reload to clear any in-memory state
+        window.location.href = '/';
+      }
+    }
   };
 
   if (loading) {
