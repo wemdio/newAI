@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import supabase from './supabaseClient';
 import './App.css';
 import './styles/telegram.css';
@@ -8,8 +8,102 @@ import Leads from './pages/Leads';
 import Login from './pages/Login';
 import AIMessaging from './pages/AIMessaging';
 import LeadAudit from './pages/LeadAudit';
+import LandingPage from './pages/LandingPage';
 import { isTelegramWebApp, initTelegram, getTelegramUser, getTelegramInitData } from './utils/telegram';
 import axios from 'axios';
+
+// Component for the authenticated application layout
+const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setActiveTab }) => {
+  return (
+    <div className={`app ${isTelegram ? 'telegram-mode' : 'browser-mode'}`}>
+      {/* Navigation - hidden in Telegram */}
+      {!isTelegram && (
+        <nav className="app-nav">
+          <div className="container">
+            <div className="nav-links">
+              <Link 
+                to="/leads" 
+                className={`nav-link ${activeTab === 'leads' ? 'active' : ''}`}
+                onClick={() => setActiveTab('leads')}
+              >
+                Лиды
+              </Link>
+              <Link 
+                to="/messaging" 
+                className={`nav-link ${activeTab === 'messaging' ? 'active' : ''}`}
+                onClick={() => setActiveTab('messaging')}
+              >
+                AI Рассылки
+              </Link>
+              <Link 
+                to="/config" 
+                className={`nav-link ${activeTab === 'config' ? 'active' : ''}`}
+                onClick={() => setActiveTab('config')}
+              >
+                Настройки
+              </Link>
+            </div>
+            <div className="user-info">
+              <span className="user-email">{session.user.email}</span>
+              <button onClick={handleSignOut} className="btn-signout">
+                Выйти
+              </button>
+            </div>
+          </div>
+        </nav>
+      )}
+
+      {/* Telegram Navigation (alternative for Telegram) */}
+      {isTelegram && (
+        <nav className="telegram-nav">
+          <Link 
+            to="/leads" 
+            className={`telegram-nav-item ${activeTab === 'leads' ? 'active' : ''}`}
+            onClick={() => setActiveTab('leads')}
+          >
+            Лиды
+          </Link>
+          <Link 
+            to="/messaging" 
+            className={`telegram-nav-item ${activeTab === 'messaging' ? 'active' : ''}`}
+            onClick={() => setActiveTab('messaging')}
+          >
+            AI Рассылки
+          </Link>
+          <Link 
+            to="/config" 
+            className={`telegram-nav-item ${activeTab === 'config' ? 'active' : ''}`}
+            onClick={() => setActiveTab('config')}
+          >
+            Настройки
+          </Link>
+        </nav>
+      )}
+
+      {/* Main Content */}
+      <main className="app-main">
+        <div className="container">
+          <Routes>
+            <Route path="/leads" element={<Leads />} />
+            <Route path="/config" element={<Configuration />} />
+            <Route path="/messaging" element={<AIMessaging />} />
+            <Route path="/audit" element={<LeadAudit />} />
+            <Route path="*" element={<Navigate to="/leads" replace />} />
+          </Routes>
+        </div>
+      </main>
+
+      {/* Footer - hidden in Telegram */}
+      {!isTelegram && (
+        <footer className="app-footer">
+          <div className="container">
+            <p>Сканер и анализатор лидов в Telegram © 2025</p>
+          </div>
+        </footer>
+      )}
+    </div>
+  );
+};
 
 function App() {
   const [session, setSession] = useState(null);
@@ -164,12 +258,7 @@ function App() {
     );
   }
 
-  // Show login for browser users (not Telegram)
-  if (!session && !isTelegram) {
-    return <Login supabase={supabase} />;
-  }
-
-  // Show loading if in Telegram but not authenticated yet
+  // Telegram Loading Screen (authenticated but waiting for session)
   if (!session && isTelegram) {
     return (
       <div className="app loading-screen">
@@ -194,93 +283,31 @@ function App() {
 
   return (
     <Router>
-      <div className={`app ${isTelegram ? 'telegram-mode' : 'browser-mode'}`}>
-        {/* Navigation - hidden in Telegram */}
-        {!isTelegram && (
-          <nav className="app-nav">
-            <div className="container">
-              <div className="nav-links">
-                <Link 
-                  to="/" 
-                  className={`nav-link ${activeTab === 'leads' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('leads')}
-                >
-                  Лиды
-                </Link>
-                <Link 
-                  to="/messaging" 
-                  className={`nav-link ${activeTab === 'messaging' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('messaging')}
-                >
-                  AI Рассылки
-                </Link>
-                <Link 
-                  to="/config" 
-                  className={`nav-link ${activeTab === 'config' ? 'active' : ''}`}
-                  onClick={() => setActiveTab('config')}
-                >
-                  Настройки
-                </Link>
-              </div>
-              <div className="user-info">
-                <span className="user-email">{session.user.email}</span>
-                <button onClick={handleSignOut} className="btn-signout">
-                  Выйти
-                </button>
-              </div>
-            </div>
-          </nav>
-        )}
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/" element={
+           !session && !isTelegram ? <LandingPage /> : <Navigate to="/leads" replace />
+        } />
+        
+        <Route path="/login" element={
+           !session && !isTelegram ? <Login supabase={supabase} /> : <Navigate to="/leads" replace />
+        } />
 
-        {/* Telegram Navigation (alternative for Telegram) */}
-        {isTelegram && (
-          <nav className="telegram-nav">
-            <Link 
-              to="/" 
-              className={`telegram-nav-item ${activeTab === 'leads' ? 'active' : ''}`}
-              onClick={() => setActiveTab('leads')}
-            >
-              Лиды
-            </Link>
-            <Link 
-              to="/messaging" 
-              className={`telegram-nav-item ${activeTab === 'messaging' ? 'active' : ''}`}
-              onClick={() => setActiveTab('messaging')}
-            >
-              AI Рассылки
-            </Link>
-            <Link 
-              to="/config" 
-              className={`telegram-nav-item ${activeTab === 'config' ? 'active' : ''}`}
-              onClick={() => setActiveTab('config')}
-            >
-              Настройки
-            </Link>
-          </nav>
-        )}
-
-        {/* Main Content */}
-        <main className="app-main">
-          <div className="container">
-            <Routes>
-              <Route path="/" element={<Leads />} />
-              <Route path="/config" element={<Configuration />} />
-              <Route path="/messaging" element={<AIMessaging />} />
-              <Route path="/audit" element={<LeadAudit />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </div>
-        </main>
-
-        {/* Footer - hidden in Telegram */}
-        {!isTelegram && (
-          <footer className="app-footer">
-            <div className="container">
-              <p>Сканер и анализатор лидов в Telegram © 2025</p>
-            </div>
-          </footer>
-        )}
-      </div>
+        {/* Protected Routes */}
+        <Route path="/*" element={
+           session || isTelegram ? (
+             <AuthenticatedApp 
+               session={session} 
+               isTelegram={isTelegram} 
+               handleSignOut={handleSignOut} 
+               activeTab={activeTab} 
+               setActiveTab={setActiveTab} 
+             />
+           ) : (
+             <Navigate to="/login" replace />
+           )
+        } />
+      </Routes>
     </Router>
   );
 }
