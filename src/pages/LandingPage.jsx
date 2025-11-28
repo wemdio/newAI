@@ -101,12 +101,6 @@ const Navbar = () => {
           >
             Войти
           </button>
-          <button 
-            onClick={handleLogin}
-            className="text-white bg-brand-600 hover:bg-brand-500 border border-brand-500/50 hover:shadow-[0_0_15px_rgba(249,115,22,0.4)] font-bold rounded-full text-[10px] uppercase tracking-wider px-4 py-1.5 transition-all duration-300 hidden md:block transform hover:-translate-y-0.5 whitespace-nowrap"
-          >
-            Начать
-          </button>
           
           <button 
             onClick={() => setIsOpen(!isOpen)}
@@ -159,4 +153,5 @@ export default function LandingPage() {
     </div>
   );
 }
+
 
