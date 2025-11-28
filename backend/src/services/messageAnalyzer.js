@@ -45,7 +45,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     });
     
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'openai/gpt-4o-mini';
+    const model = process.env.AI_MODEL || 'openai/gpt-5-mini';
     
     logger.info('Making OpenRouter API call', {
       messageId: message.id,
@@ -106,7 +106,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     const isValidMatch = 
       validation.valid && 
       aiResponse.is_match &&
-      aiResponse.confidence_score >= 70;
+      aiResponse.confidence_score >= 80;
     
     // Prepare result
     const result = {
@@ -133,7 +133,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
       isMatch: isValidMatch,
       confidence: aiResponse.confidence_score,
       validationPassed: validation.valid,
-      meetsThreshold: aiResponse.confidence_score >= 70,
+      meetsThreshold: aiResponse.confidence_score >= 80,
       duration,
       cost: cost.totalCost
     });
@@ -219,7 +219,7 @@ ${JSON.stringify(messagesArray, null, 2)}
 
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'openai/gpt-4o-mini';
+    const model = process.env.AI_MODEL || 'openai/gpt-5-mini';
     
     // Estimate tokens
     const estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt);
@@ -443,7 +443,7 @@ ${JSON.stringify(messagesArray, null, 2)}
         isMatch: result.isMatch,
         confidence: result.aiResponse.confidence_score,
         validationPassed: validation.valid,
-        meetsThreshold: result.aiResponse.confidence_score >= 70,
+        meetsThreshold: result.aiResponse.confidence_score >= 80,
         duration: Math.round(duration / batchSize),
         cost: costPerMessage
       });
