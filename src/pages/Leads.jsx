@@ -72,7 +72,7 @@ function Leads() {
       return;
     }
     
-    if (!confirm(Удалить  выбранных лидов?)) return;
+    if (!confirm(`Удалить ${selectedLeads.size} выбранных лидов?`)) return;
     
     try {
       await leadsApi.deleteBulk(Array.from(selectedLeads));
@@ -118,7 +118,7 @@ function Leads() {
     const usernames = leads
       .map(lead => lead.messages?.username || lead.username)
       .filter(username => username && username.trim() !== '')
-      .map(username => username.startsWith('@') ? username : @);
+      .map(username => username.startsWith('@') ? username : `@${username}`);
     
     if (usernames.length === 0) {
       alert('Нет юзернеймов для копирования');
@@ -131,7 +131,7 @@ function Leads() {
     
     try {
       await navigator.clipboard.writeText(text);
-      alert(Скопировано  юзернеймов в буфер обмена);
+      alert(`Скопировано ${uniqueUsernames.length} юзернеймов в буфер обмена`);
     } catch (err) {
       // Fallback for older browsers
       const textArea = document.createElement('textarea');
@@ -140,7 +140,7 @@ function Leads() {
       textArea.select();
       document.execCommand('copy');
       document.body.removeChild(textArea);
-      alert(Скопировано  юзернеймов в буфер обмена);
+      alert(`Скопировано ${uniqueUsernames.length} юзернеймов в буфер обмена`);
     }
   };
 
@@ -181,7 +181,7 @@ function Leads() {
             Обновить
           </button>
           <button onClick={copyAllUsernames} className="btn-copy-usernames">
-             Копировать юзернеймы
+            📋 Копировать юзернеймы
           </button>
           {selectedLeads.size > 0 && (
             <button onClick={handleDeleteSelected} className="btn-delete">
@@ -262,7 +262,7 @@ function Leads() {
       ) : (
         <div className="leads-list">
           {leads.map((lead) => (
-            <div key={lead.id} className={lead-card }>
+            <div key={lead.id} className={`lead-card ${selectedLeads.has(lead.id) ? 'selected' : ''}`}>
               <div className="lead-header">
                 <div className="lead-header-left">
                   <input
@@ -311,21 +311,21 @@ function Leads() {
               <div className="lead-actions">
                   <button
                   onClick={() => handleUpdateStatus(lead.id, 'lead')}
-                  className={tn-status }
+                  className={`btn-status ${lead.lead_status === 'lead' ? 'active' : ''}`}
                   disabled={lead.lead_status === 'lead'}
                   >
                   Лид
                   </button>
                 <button
                   onClick={() => handleUpdateStatus(lead.id, 'not_lead')}
-                  className={tn-status }
+                  className={`btn-status ${lead.lead_status === 'not_lead' ? 'active' : ''}`}
                   disabled={lead.lead_status === 'not_lead'}
                 >
                   Не лид
                 </button>
                     <button
                   onClick={() => handleUpdateStatus(lead.id, 'sale')}
-                  className={tn-status }
+                  className={`btn-status ${lead.lead_status === 'sale' ? 'active' : ''}`}
                   disabled={lead.lead_status === 'sale'}
                     >
                   Продажа
