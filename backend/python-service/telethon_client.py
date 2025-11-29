@@ -148,23 +148,40 @@ class TelethonManager:
                         print(f"   ❌ Invalid StringSession format: {e}")
                         return False
             
-            # Parse proxy if provided
-            proxy = self._parse_proxy(account.get('proxy_url'))
+            # PROXY IS MANDATORY - Check if proxy is configured
+            proxy_url = account.get('proxy_url')
+            if not proxy_url:
+                print(f"❌ No proxy configured for account {account['account_name']}")
+                print(f"   ⚠️ PROXY IS MANDATORY - accounts without proxy cannot be used")
+                await self.supabase.mark_account_error(
+                    account_id,
+                    "No proxy configured. Proxy is required for all accounts."
+                )
+                return False
             
-            # Check proxy connection if proxy is configured
-            if proxy:
-                proxy_works = await self._check_proxy(proxy)
-                if not proxy_works:
-                    print(f"❌ Proxy verification failed for account {account['account_name']}")
-                    print(f"   Cannot connect to Telegram through proxy: {account.get('proxy_url')}")
-                    # Mark account as error in database
-                    await self.supabase.mark_account_error(
-                        account_id,
-                        f"Proxy connection failed: {account.get('proxy_url')}"
-                    )
-                    return False
-            else:
-                print(f"⚠️ No proxy configured for account {account['account_name']} - using direct connection")
+            # Parse proxy
+            proxy = self._parse_proxy(proxy_url)
+            if not proxy:
+                print(f"❌ Invalid proxy format for account {account['account_name']}: {proxy_url}")
+                await self.supabase.mark_account_error(
+                    account_id,
+                    f"Invalid proxy format: {proxy_url}"
+                )
+                return False
+            
+            # Check proxy connection before proceeding
+            proxy_works = await self._check_proxy(proxy)
+            if not proxy_works:
+                print(f"❌ Proxy verification failed for account {account['account_name']}")
+                print(f"   Cannot connect to Telegram through proxy: {proxy_url}")
+                # Mark account as error in database
+                await self.supabase.mark_account_error(
+                    account_id,
+                    f"Proxy connection failed: {proxy_url}"
+                )
+                return False
+            
+            print(f"✅ Proxy verified: {proxy['addr']}:{proxy['port']}")
             
             # Create client
             client = TelegramClient(
@@ -453,7 +470,7 @@ class TelethonManager:
                 'message': f'Error: {str(e)}'
             }
     
-    async def send_message(self, account_id: str, username: str, message: str) -> bool:
+    async def send_message(self, account_id: str, username: str, message: str, account: Dict = None) -> bool:
         """
         Send message to user
         
@@ -461,6 +478,7 @@ class TelethonManager:
             account_id: Account to use
             username: Target username (without @)
             message: Message text
+            account: Account dict with proxy info (optional, for re-verification)
         
         Returns:
             True if sent successfully, False otherwise
@@ -469,6 +487,19 @@ class TelethonManager:
         if not client:
             print(f"❌ Client {account_id} not initialized")
             return False
+        
+        # Re-verify proxy before sending if account info provided
+        if account and account.get('proxy_url'):
+            proxy = self._parse_proxy(account.get('proxy_url'))
+            if proxy:
+                proxy_works = await self._check_proxy(proxy)
+                if not proxy_works:
+                    print(f"❌ Proxy check failed before sending - marking account as error")
+                    await self.supabase.mark_account_error(
+                        account_id,
+                        f"Proxy stopped working: {account.get('proxy_url')}"
+                    )
+                    return False
         
         try:
             # Send message

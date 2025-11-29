@@ -154,11 +154,12 @@ class LeadManager:
             
             print(f"      💬 Generated message: {first_message[:100]}...")
             
-            # Send message via Telethon
+            # Send message via Telethon (with proxy verification)
             success = await self.telethon.send_message(
                 account_id,
                 username,
-                first_message
+                first_message,
+                account=account  # Pass account for proxy verification
             )
             
             if not success:
