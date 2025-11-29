@@ -3,11 +3,15 @@ import axios from 'axios';
 import supabase from '../supabaseClient';
 import './AIMessaging.css';
 
+// Daily message limit constant
+const DAILY_MESSAGE_LIMIT = 5;
+
 const AIMessaging = () => {
-  // UI Version 2.2 - Minimal & Compact
+  // UI Version 2.3 - With refresh and proxy validation
   const [session, setSession] = useState(null);
   const [sessionLoading, setSessionLoading] = useState(true);
-  
+  const [refreshing, setRefreshing] = useState(false);
+
   // State management
   const [accounts, setAccounts] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
@@ -153,11 +157,12 @@ const AIMessaging = () => {
     
     initializeAndLoad();
     
+    // Refresh every 30 seconds for real-time stats
     const interval = setInterval(() => {
       if (isMounted) {
         loadData().catch(err => console.error('Auto-refresh failed:', err));
       }
-    }, 300000);
+    }, 30000);
     
     return () => {
       isMounted = false;
@@ -165,8 +170,18 @@ const AIMessaging = () => {
     };
   }, [session, sessionLoading]);
 
+  // Manual refresh handler
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await loadData();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   // --- HANDLERS ---
-  
+
   const handleCreateAccount = async (e) => {
     e.preventDefault();
     try {
@@ -437,9 +452,18 @@ const AIMessaging = () => {
       <section className="section accounts-section">
         <div className="section-header">
           <h2>Telegram Аккаунты</h2>
-          <button className="btn btn-primary" onClick={() => setShowAddAccount(true)}>
-            Добавить аккаунт
-          </button>
+          <div className="section-actions">
+            <button 
+              className={`btn btn-secondary btn-small ${refreshing ? 'refreshing' : ''}`}
+              onClick={handleRefresh}
+              disabled={refreshing}
+            >
+              {refreshing ? '🔄' : '↻'} Обновить
+            </button>
+            <button className="btn btn-primary" onClick={() => setShowAddAccount(true)}>
+              Добавить аккаунт
+            </button>
+          </div>
         </div>
         
         {accounts.length === 0 ? (
@@ -453,21 +477,31 @@ const AIMessaging = () => {
               <div key={account.id} className={`account-card ${account.status}`}>
                 <div className="account-header">
                   <h3>{account.account_name}</h3>
-                  <span className={`status-badge ${account.status}`}>
-                    {account.status === 'active' ? 'Активен' : 
-                     account.status === 'paused' ? 'Пауза' :
-                     account.status === 'banned' ? 'Забанен' : 'Ошибка'}
-                  </span>
+<span className={`status-badge ${account.status}`}>
+                      {account.status === 'active' ? 'Активен' :
+                       account.status === 'paused' ? 'Пауза' :
+                       account.status === 'banned' ? 'Забанен' :
+                       account.status === 'frozen' ? 'Заморожен' :
+                       account.status === 'error' ? 'Ошибка' : 'Неизвестно'}
+                    </span>
                 </div>
                 
                 <div className="account-info">
                   <div className="info-row">
                     <span className="label">Прокси:</span>
-                    <span className="value">{account.proxy_url ? 'Да' : 'Нет'}</span>
+                    <span className="value">
+                      {account.proxy_url ? (
+                        <span style={{ color: '#7dd17d' }}>✓ Настроен</span>
+                      ) : (
+                        <span style={{ color: '#d17d7d' }}>✗ Не указан</span>
+                      )}
+                    </span>
                   </div>
                   <div className="info-row">
                     <span className="label">Сообщений сегодня:</span>
-                    <span className="value">{account.messages_sent_today || 0} / {account.daily_limit || 3}</span>
+                    <span className={`value ${(account.messages_sent_today || 0) >= DAILY_MESSAGE_LIMIT ? 'limit-reached' : ''}`}>
+                        {account.messages_sent_today || 0} / {DAILY_MESSAGE_LIMIT}
+                      </span>
                   </div>
                   <div className="info-row">
                     <span className="label">Использован:</span>
@@ -838,14 +872,15 @@ const AIMessaging = () => {
                 </div>
                 
                 <div className="form-group">
-                  <label>Proxy URL (опционально)</label>
+                  <label>Proxy URL *</label>
                   <input
                     type="text"
-                    placeholder="http://user:pass@ip:port"
+                    placeholder="socks5://user:pass@1.2.3.4:1080"
                     value={newAccount.proxy_url}
                     onChange={e => setNewAccount({...newAccount, proxy_url: e.target.value})}
+                    required
                   />
-                  <small>Рекомендуется использовать мобильные прокси для предотвращения банов</small>
+                  <small>Обязательно! Формат: protocol://user:pass@host:port (socks5, socks4, http)</small>
                 </div>
 
                 <div className="form-group">

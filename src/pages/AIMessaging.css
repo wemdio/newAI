@@ -143,6 +143,31 @@
   letter-spacing: -0.3px;
 }
 
+.section-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.btn.refreshing {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.btn.refreshing:disabled {
+  opacity: 0.7;
+}
+
+.value.limit-reached {
+  color: #d17d7d;
+  font-weight: 600;
+}
+
 .count-badge {
   background: #1a1a1a;
   color: #888;
@@ -320,6 +345,12 @@
   background: #1a1010;
   color: #d17d7d;
   border-color: #3e1a1a;
+}
+
+.status-badge.frozen {
+  background: #101a1a;
+  color: #7dd1d1;
+  border-color: #1a3e3e;
 }
 
 .status-badge.running {
