@@ -345,6 +345,23 @@ router.post('/accounts/import-session', async (req, res) => {
       });
     }
     
+    // PROXY IS MANDATORY - validate proxy_url
+    if (!proxy_url) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Proxy is required! All accounts must have a proxy configured for security.' 
+      });
+    }
+    
+    // Validate proxy URL format
+    const proxyPattern = /^(socks5|socks4|http|https):\/\/([^:]+:[^@]+@)?[\w.-]+:\d+$/i;
+    if (!proxyPattern.test(proxy_url)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid proxy URL format. Expected: protocol://user:pass@host:port (e.g., socks5://login:password@1.2.3.4:1080)' 
+      });
+    }
+    
     // Use default Telegram API credentials if not provided
     // These are public Telegram Desktop credentials
     const finalApiId = api_id || '2496';
@@ -354,7 +371,8 @@ router.post('/accounts/import-session', async (req, res) => {
       userId, 
       accountNameLength: account_name?.length || 0,
       usingDefaultCredentials: !api_id,
-      hasProxy: !!proxy_url
+      hasProxy: true,
+      proxyProvided: !!proxy_url
     });
     
     // Generate session filename
@@ -404,7 +422,7 @@ router.post('/accounts/import-session', async (req, res) => {
         session_string: cleanSessionString, // Store cleaned hex string for worker
         api_id: parseInt(finalApiId),
         api_hash: finalApiHash,
-        proxy_url: proxy_url || null, // Optional proxy
+        proxy_url: proxy_url, // MANDATORY proxy
         phone_number: null, // Will be filled when session is used
         status: 'active',
         is_available: true // Make account available for Python Worker
