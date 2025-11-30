@@ -258,85 +258,66 @@
 .criterion-tag {
   display: inline-block;
   padding: 4px 10px;
-  background: #1a1a1a;
-  border: 1px solid #333;
+  background: #222;
   border-radius: 2px;
   font-size: 12px;
-  color: #888;
+  color: #aaa;
+  border: 1px solid #333;
 }
 
-/* Lead Actions */
+/* Actions */
 .lead-actions {
   display: flex;
-  gap: 8px;
-  padding-top: 12px;
-  border-top: 1px solid #222;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
 .btn-status,
 .btn-delete-single {
-  padding: 6px 14px;
-  background: transparent;
-  border: 1px solid #333;
+  padding: 6px 12px;
+  font-size: 13px;
   border-radius: 2px;
-  font-size: 12px;
-  color: #e0e0e0;
   cursor: pointer;
+  background: transparent;
   transition: all 0.15s ease;
 }
 
+.btn-status {
+  border: 1px solid #444;
+  color: #888;
+}
+
 .btn-status:hover:not(:disabled) {
-  border-color: #fff;
+  border-color: #666;
+  color: #e0e0e0;
 }
 
 .btn-status.active {
-  border-color: #fff;
-  background: #1a1a1a;
+  border-color: #7dd17d;
+  color: #7dd17d;
+  background: #1a2e1a;
+  cursor: default;
 }
 
-.btn-status:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+.btn-status.active:nth-child(2) { /* Not Lead */
+  border-color: #d17d7d;
+  color: #d17d7d;
+  background: #2e1a1a;
+}
+
+.btn-status.active:nth-child(3) { /* Sale */
+  border-color: #7dd17d;
+  color: #7dd17d;
+  background: #1a2e1a;
 }
 
 .btn-delete-single {
   margin-left: auto;
-  border-color: #3e2a2a;
+  border: 1px solid #3e2a2a;
   color: #d17d7d;
 }
 
 .btn-delete-single:hover {
-  border-color: #d17d7d;
   background: #2e1a1a;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-  .filters {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .leads-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
-  .header-actions {
-    width: 100%;
-  }
-
-  .lead-card {
-    padding: 16px;
-  }
-
-  .lead-actions {
-    flex-direction: column;
-  }
-
-  .btn-delete-single {
-    margin-left: 0;
-  }
 }
 
