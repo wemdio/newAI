@@ -143,15 +143,23 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
   } catch (error) {
     const duration = Date.now() - startTime;
     
-    logger.error('AI analysis failed', {
+    // ENHANCED ERROR LOGGING
+    const errorDetails = {
       messageId: message.id,
-      error: error.message,
+      message: error.message,
+      code: error.status || error.code,
+      type: error.type,
+      headers: error.response?.headers, // Check for x-ratelimit-remaining
+      data: error.response?.data || error.error, // OpenRouter detailed error
       duration
-    });
+    };
+
+    logger.error('AI analysis failed', errorDetails);
     
     throw new AIServiceError('Failed to analyze message', {
       messageId: message.id,
       originalError: error.message,
+      details: errorDetails, // Pass details up
       duration
     });
   }
@@ -462,11 +470,16 @@ ${JSON.stringify(messagesArray, null, 2)}
     return results;
     
   } catch (error) {
-    logger.error('Batch AI analysis failed', {
+    // ENHANCED BATCH ERROR LOGGING
+    const errorDetails = {
       batchSize,
       messageIds: messages.map(m => m.id),
-      error: error.message
-    });
+      message: error.message,
+      code: error.status || error.code,
+      data: error.response?.data || error.error // Log OpenRouter details
+    };
+
+    logger.error('Batch AI analysis failed', errorDetails);
     
     // Fallback: analyze individually if batch fails
     logger.warn('Falling back to individual analysis');
@@ -478,7 +491,8 @@ ${JSON.stringify(messagesArray, null, 2)}
       } catch (individualError) {
         logger.error('Individual analysis also failed', {
           messageId: message.id,
-          error: individualError.message
+          error: individualError.message,
+          data: individualError.details?.data // Use details from analyzeMessage
         });
         results.push(null);
       }
@@ -699,4 +713,3 @@ export default {
   analyzeBatch,
   testAnalysis
 };
-

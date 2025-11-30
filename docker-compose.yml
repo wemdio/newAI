@@ -17,9 +17,9 @@ services:
       - FRONTEND_URL=${FRONTEND_URL}
       - USE_BATCH_API=${USE_BATCH_API}
       - BATCH_SIZE=${BATCH_SIZE}
-      # OpenRouter headers (required for some providers)
+      # OpenRouter headers
       - YOUR_SITE_URL=${FRONTEND_URL}
-      - YOUR_SITE_NAME="Telegram Lead Scanner"
+      - YOUR_SITE_NAME=Telegram Lead Scanner
     restart: always
 
   worker:
