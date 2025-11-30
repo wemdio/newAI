@@ -1,7 +1,8 @@
 """Safety Manager - Anti-ban system with account rotation and limits"""
 import asyncio
 import random
-from datetime import datetime, timedelta
+import logging
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict
 from config import (
     MAX_MESSAGES_PER_DAY,
@@ -10,55 +11,54 @@ from config import (
     ACCOUNT_COOLDOWN
 )
 
+logger = logging.getLogger('SafetyManager')
+
 
 class SafetyManager:
     """Manages account rotation, limits, and delays to prevent bans"""
     
     def __init__(self, supabase):
         self.supabase = supabase
-        self.account_usage = {}  # In-memory tracking
-    
+        # In-memory tracking of messages sent per account TODAY
+        # Format: {account_id: {'count': int, 'date': str}}
+        self.account_usage_cache = {}
+        self.last_reset_date = None
+
     async def get_available_account(self, user_id: str) -> Optional[Dict]:
         """
         Get next available account for user with round-robin rotation
         Accounts are rotated automatically (sorted by last_used_at)
         Returns None if no accounts available
         """
+        # Fetch all active accounts (filtering is done in Python to support individual limits)
         accounts = await self.supabase.get_accounts_for_user(user_id)
         
         if not accounts:
-            print(f"❌ No accounts found for user {user_id}")
+            logger.warning(f"❌ No available accounts found for user {user_id} (none active)")
             return None
         
-        print(f"🔄 Round-robin rotation: checking {len(accounts)} accounts...")
+        logger.debug(f"🔄 Checking {len(accounts)} accounts for availability...")
         
         for idx, account in enumerate(accounts, 1):
             account_id = str(account['id'])
             account_name = account.get('account_name', account_id[:8])
-            messages_today = account.get('messages_sent_today', 0)
-            last_used = account.get('last_used_at', 'Never')
             
-            print(f"  Account {idx}: {account_name}")
-            print(f"    Messages today: {messages_today}/{MAX_MESSAGES_PER_DAY}")
-            print(f"    Last used: {last_used}")
-            
-            # Check daily limit
+            # Check daily limit (individual)
             if self._is_daily_limit_reached(account):
-                print(f"    ❌ Daily limit reached")
+                logger.debug(f"    ⏭️ Account {account_name} reached daily limit")
                 continue
             
             # Check cooldown period (20 min between messages from same account)
             if self._needs_cooldown(account):
                 cooldown_left = self._get_cooldown_time_left(account)
-                print(f"    ⏳ Cooldown: {cooldown_left:.0f}s remaining (20 min rule)")
+                logger.debug(f"    ⏳ Account {account_name} in cooldown: {cooldown_left:.0f}s remaining")
                 continue
             
             # Found available account - automatically rotated!
-            print(f"    ✅ SELECTED (rotation: account {idx} of {len(accounts)})")
+            logger.info(f"    ✅ SELECTED Account: {account_name}")
             return account
         
-        print(f"⚠️ All accounts in cooldown or reached daily limit")
-        print(f"   💡 Next account available in: {self._get_next_available_time(accounts):.0f}s")
+        logger.warning(f"⚠️ All {len(accounts)} accounts are currently unavailable (limit or cooldown)")
         return None
     
     def _get_next_available_time(self, accounts: list) -> float:
@@ -77,21 +77,48 @@ class SafetyManager:
     
     def _is_daily_limit_reached(self, account: Dict) -> bool:
         """Check if account reached daily message limit"""
-        messages_today = account.get('messages_sent_today', 0)
-        last_used_at = account.get('last_used_at')
+        account_id = str(account['id'])
+        today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
         
-        # If account was last used on a different day, counter should reset
+        # Get DB counter
+        db_messages_today = account.get('messages_sent_today', 0)
+        
+        # Check if DB counter is from today
+        last_used_at = account.get('last_used_at')
         if last_used_at:
             if isinstance(last_used_at, str):
                 last_used_at = datetime.fromisoformat(last_used_at.replace('Z', '+00:00'))
             
-            now = datetime.now(last_used_at.tzinfo)
-            
-            # If last use was on a different day, limit is NOT reached (counter will reset)
-            if last_used_at.date() < now.date():
-                return False
+            # If last use was on a different day, DB counter is stale
+            if last_used_at.date() < datetime.now(timezone.utc).date():
+                db_messages_today = 0
         
-        return messages_today >= MAX_MESSAGES_PER_DAY
+        # Get in-memory cache counter (for messages sent in this session)
+        cache_entry = self.account_usage_cache.get(account_id, {'count': 0, 'date': today_str})
+        
+        # Reset cache if it's from a different day
+        if cache_entry.get('date') != today_str:
+            cache_entry = {'count': 0, 'date': today_str}
+            self.account_usage_cache[account_id] = cache_entry
+        
+        # Total messages = max of DB counter and cache counter
+        # (cache is more accurate during current session)
+        messages_today = max(db_messages_today, cache_entry['count'])
+        
+        # Use account specific limit or global default
+        # Default to 3 if daily_limit is not set in DB (safe default)
+        limit = account.get('daily_limit')
+        if limit is None:
+            limit = 3
+        
+        is_reached = messages_today >= limit
+        
+        if is_reached:
+            logger.debug(f"    📊 Account {account_id}: {messages_today}/{limit} messages (limit reached)")
+        else:
+            logger.debug(f"    📊 Account {account_id}: {messages_today}/{limit} messages")
+        
+        return is_reached
     
     def _needs_cooldown(self, account: Dict) -> bool:
         """Check if account needs cooldown period (20 min between messages)"""
@@ -137,10 +164,28 @@ class SafetyManager:
     
     async def mark_account_used(self, account_id: str):
         """
-        Mark account as used (update stats in database)
+        Mark account as used (update stats in database AND in-memory cache)
         """
+        today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        
+        # Update in-memory cache FIRST (immediate effect for next check)
+        if account_id not in self.account_usage_cache:
+            self.account_usage_cache[account_id] = {'count': 0, 'date': today_str}
+        
+        cache_entry = self.account_usage_cache[account_id]
+        
+        # Reset if different day
+        if cache_entry.get('date') != today_str:
+            cache_entry = {'count': 0, 'date': today_str}
+        
+        cache_entry['count'] += 1
+        self.account_usage_cache[account_id] = cache_entry
+        
+        print(f"📊 Account {account_id}: {cache_entry['count']} messages today (in-memory)")
+        
+        # Then update database (async, for persistence)
         await self.supabase.update_account_usage(account_id)
-        print(f"📊 Updated usage stats for account {account_id}")
+        print(f"📊 Updated usage stats for account {account_id} in DB")
     
     async def handle_flood_wait(self, account_id: str, wait_seconds: int):
         """
@@ -165,13 +210,21 @@ class SafetyManager:
     async def check_and_reset_daily_counters(self):
         """
         Check if it's time to reset daily counters (call at startup and hourly)
+        Only runs once per day at 00:00 UTC
         """
-        current_hour = datetime.utcnow().hour
+        now = datetime.utcnow()
         
         # Reset at midnight UTC
-        if current_hour == 0:
-            print("🔄 Resetting daily message counters")
-            await self.supabase.reset_daily_counters()
+        if now.hour == 0:
+            today_str = now.strftime('%Y-%m-%d')
+            
+            # Check if already reset today to avoid spamming logs/DB every minute
+            if self.last_reset_date != today_str:
+                logger.info(f"🔄 Resetting daily message counters (New day: {today_str})")
+                await self.supabase.reset_daily_counters()
+                self.last_reset_date = today_str
+            else:
+                logger.debug("ℹ️ Daily counters already reset for today")
 
 
 

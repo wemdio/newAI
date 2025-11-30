@@ -327,7 +327,7 @@ function Leads() {
                   onClick={() => handleUpdateStatus(lead.id, 'sale')}
                   className={`btn-status ${lead.lead_status === 'sale' ? 'active' : ''}`}
                   disabled={lead.lead_status === 'sale'}
-                    >
+                  >
                   Продажа
                     </button>
                     <button

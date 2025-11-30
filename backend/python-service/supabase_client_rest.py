@@ -160,6 +160,42 @@ class SupabaseClient:
         except Exception as e:
             print(f"❌ Error getting uncontacted leads: {e}")
             return []
+            
+    async def get_lead_details(self, lead_id: int) -> Optional[Dict]:
+        """Get detailed lead info by ID"""
+        try:
+            # Get lead
+            url = f"{self.url}/rest/v1/detected_leads"
+            url += f"?select=*"
+            url += f"&id=eq.{lead_id}"
+            
+            async with self.session.get(url) as resp:
+                if resp.status != 200:
+                    return None
+                leads = await resp.json()
+                if not leads:
+                    return None
+                lead = leads[0]
+            
+            # Get associated message
+            msg_url = f"{self.url}/rest/v1/messages"
+            msg_url += f"?select=*"
+            msg_url += f"&id=eq.{lead['message_id']}"
+            
+            async with self.session.get(msg_url) as msg_resp:
+                if msg_resp.status == 200:
+                    messages = await msg_resp.json()
+                    if messages:
+                        message = messages[0]
+                        # Combine info
+                        lead['original_message'] = message
+                        return lead
+            
+            return lead
+            
+        except Exception as e:
+            print(f"❌ Error getting lead details: {e}")
+            return None
     
     async def mark_lead_contacted(self, lead_id: int):
         """Mark lead as contacted"""
@@ -168,28 +204,18 @@ class SupabaseClient:
     # ============= ACCOUNTS =============
     
     async def get_accounts_for_user(self, user_id: str) -> List[Dict]:
-        """Get available accounts with full statistics for smart rotation"""
-        print(f"🔍 DEBUG: Fetching accounts for user_id={user_id}")
-        
-        # Build URL for debugging
-        # Note: For boolean fields in Supabase REST API, use 'is.true' not 'eq.true'
-        # Select all fields including session_string for worker to recreate session files
+        """Get available accounts"""
+        # Build URL
         url = f"{self.url}/rest/v1/telegram_accounts?select=*"
         url += f"&user_id=eq.{user_id}"
         url += f"&status=eq.active"
-        url += f"&is_available=is.true"  # Fixed: use 'is.true' for boolean
-        url += f"&order=last_used_at.asc.nullsfirst"  # Simplify sorting for debugging
-        
-        print(f"🔍 DEBUG: Request URL: {url}")
+        url += f"&is_available=is.true"
+        # Removed db-side limit check to support individual account limits
+        url += f"&order=last_used_at.asc.nullsfirst"
         
         async with self.session.get(url) as resp:
-            print(f"🔍 DEBUG: Response status: {resp.status}")
             if resp.status == 200:
                 accounts = await resp.json()
-                print(f"🔍 DEBUG: Found {len(accounts)} accounts")
-                if accounts:
-                    has_session_string = bool(accounts[0].get('session_string'))
-                    print(f"🔍 DEBUG: First account: {accounts[0].get('account_name')} (is_available={accounts[0].get('is_available')}, has_session_string={has_session_string})")
                 return accounts
             else:
                 error_text = await resp.text()

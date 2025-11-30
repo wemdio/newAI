@@ -1,5 +1,7 @@
 """Lead Manager - Orchestrates the lead outreach workflow"""
 import asyncio
+import aiohttp
+import os
 from typing import Dict, List
 from datetime import datetime
 
@@ -13,6 +15,7 @@ class LeadManager:
         self.ai = ai_communicator
         self.telethon = telethon_manager
         self.active_conversations = {}  # {conversation_id: data}
+        self.pending_response_tasks = {}  # {conversation_id: asyncio.Task}
     
     async def process_campaign(self, campaign: Dict):
         """
@@ -67,7 +70,8 @@ class LeadManager:
                 campaign_id,
                 campaign,
                 account,
-                lead
+                lead,
+                user_id  # Pass user_id
             )
             
             if success:
@@ -78,11 +82,16 @@ class LeadManager:
                     campaign_id, 
                     leads_contacted=1
                 )
-            
-            # Wait before next lead (anti-spam delay)
-            if i < len(leads):  # Don't wait after last lead
-                delay = await self.safety.get_message_delay()
-                await asyncio.sleep(delay)
+                
+                # Wait before next lead ONLY IF successful (anti-spam delay)
+                if i < len(leads):  # Don't wait after last lead
+                    delay = await self.safety.get_message_delay()
+                    print(f"   ⏱️ Waiting {delay:.1f}s before next message")
+                    await asyncio.sleep(delay)
+            else:
+                # If skipped or failed, don't wait full delay
+                print(f"   ⏭️ Skipped/Failed, moving to next lead immediately")
+                await asyncio.sleep(1)
         
         print(f"\n   ✅ Campaign complete: contacted {contacted_count}/{len(leads)} leads")
     
@@ -91,7 +100,8 @@ class LeadManager:
         campaign_id: str,
         campaign: Dict,
         account: Dict, 
-        lead: Dict
+        lead: Dict,
+        user_id: str
     ) -> bool:
         """
         Process a single lead - send first message
@@ -104,7 +114,8 @@ class LeadManager:
         username = lead.get('username')
         
         if not username:
-            print(f"      ⚠️ Lead {lead_id} has no username, skipping")
+            print(f"      ⚠️ Lead {lead_id} has no username, marking as processed and skipping")
+            await self.supabase.mark_lead_contacted(lead_id)
             return False
         
         # Remove @ if present
@@ -143,11 +154,12 @@ class LeadManager:
             
             print(f"      💬 Generated message: {first_message[:100]}...")
             
-            # Send message via Telethon
+            # Send message via Telethon (with proxy verification)
             success = await self.telethon.send_message(
                 account_id,
                 username,
-                first_message
+                first_message,
+                account=account  # Pass account for proxy verification
             )
             
             if not success:
@@ -170,7 +182,9 @@ class LeadManager:
                 conversation_id,
                 campaign_id,
                 campaign,
-                telegram_user_id
+                telegram_user_id,
+                lead_id,
+                user_id  # Pass user_id
             )
             
             # Mark lead as contacted
@@ -192,7 +206,9 @@ class LeadManager:
         conversation_id: str,
         campaign_id: str,
         campaign: Dict,
-        peer_user_id: int
+        peer_user_id: int,
+        lead_id: int = 0,
+        user_id: str = None
     ):
         """
         Register handler for incoming messages in this conversation
@@ -218,18 +234,9 @@ class LeadManager:
                     await self.supabase.update_conversation_status(conversation_id, 'stopped')
                     return
                 
-                # Get conversation history
-                history = await self.supabase.get_conversation_history(conversation_id)
-                
-                # Add new message to history
                 new_message = event.message.text
-                await self.supabase.add_message_to_conversation(
-                    conversation_id,
-                    'user',
-                    new_message
-                )
                 
-                # 🛡️ AUTO-BOT DETECTION
+                # 🛡️ AUTO-BOT DETECTION (Immediate checks)
                 
                 # Check 1: Message mentions other bots (@...bot, @..._bot)
                 import re
@@ -238,15 +245,6 @@ class LeadManager:
                     print(f"   🤖 Message mentions bots {bot_mentions} - likely auto-responder, stopping")
                     await self.supabase.update_conversation_status(conversation_id, 'stopped')
                     return
-                
-                # Check 2: Detect repeated messages (same message sent twice)
-                user_messages = [msg['content'] for msg in history if msg['role'] == 'user']
-                if len(user_messages) >= 2:
-                    # Check if last 2 messages are very similar
-                    if user_messages[-1] == user_messages[-2]:
-                        print(f"   🤖 Detected identical repeated messages - likely bot, stopping")
-                        await self.supabase.update_conversation_status(conversation_id, 'stopped')
-                        return
                 
                 # Check 3: Detect spam/ad keywords
                 spam_keywords = [
@@ -266,55 +264,129 @@ class LeadManager:
                     print(f"   🤖 Message contains spam keywords - likely auto-responder, stopping")
                     await self.supabase.update_conversation_status(conversation_id, 'stopped')
                     return
-                
-                # Check 4: Conversation length limit (max 5 messages without hot lead)
-                if len(history) >= 10:  # 5 exchanges (5 user + 5 assistant)
-                    print(f"   ⚠️ Conversation reached 5 messages without becoming hot lead - stopping")
-                    await self.supabase.update_conversation_status(conversation_id, 'stopped')
-                    return
-                
-                # Generate AI response
-                response, is_hot_lead = await self.ai.generate_response(
-                    history,
+
+                # Add new message to history
+                await self.supabase.add_message_to_conversation(
+                    conversation_id,
+                    'user',
                     new_message
                 )
                 
-                print(f"   🤖 Generated response: {response[:100]}...")
+                # Cancel any existing pending response task (Debouncing)
+                if conversation_id in self.pending_response_tasks:
+                    print(f"   🔄 Cancelling pending response for {conversation_id} (user sent another message)")
+                    self.pending_response_tasks[conversation_id].cancel()
+                    try:
+                        await self.pending_response_tasks[conversation_id]
+                    except asyncio.CancelledError:
+                        pass
                 
-                # Human-like delay before sending response (10 sec - 3 min)
-                import random
-                delay = random.uniform(10, 180)
-                print(f"   ⏳ Waiting {delay:.0f}s before responding (human-like delay)")
-                await asyncio.sleep(delay)
-                
-                # Send response
-                await event.respond(response)
-                
-                # Save our response
-                await self.supabase.add_message_to_conversation(
-                    conversation_id,
-                    'assistant',
-                    response
-                )
-                
-                # Check if hot lead
-                if is_hot_lead:
-                    await self._handle_hot_lead(
-                        campaign_id,
-                        campaign,
-                        conversation_id,
-                        event.sender_id,
-                        history + [
-                            {'role': 'user', 'content': new_message},
-                            {'role': 'assistant', 'content': response}
-                        ]
-                    )
+                # Schedule new response task with delay
+                task = asyncio.create_task(self._process_delayed_response(
+                    account_id, conversation_id, campaign_id, campaign, peer_user_id, lead_id, user_id, event
+                ))
+                self.pending_response_tasks[conversation_id] = task
                 
             except Exception as e:
                 print(f"   ❌ Error handling message: {e}")
         
         # Register handler
         self.telethon.register_message_callback(account_id, message_handler)
+
+    async def _process_delayed_response(
+        self,
+        account_id: str,
+        conversation_id: str,
+        campaign_id: str,
+        campaign: Dict,
+        peer_user_id: int,
+        lead_id: int,
+        user_id: str,
+        last_event
+    ):
+        """
+        Process response generation after a delay (to batch user messages)
+        """
+        try:
+            # Wait 60 seconds to allow user to finish typing multiple messages
+            print(f"   ⏳ Waiting 60s for more messages from user...")
+            await asyncio.sleep(60)
+            
+            print(f"   🤖 Generating response for conversation {conversation_id}")
+            
+            # Get updated history (includes all recent user messages)
+            history = await self.supabase.get_conversation_history(conversation_id)
+            
+            # Check length limit
+            if len(history) >= 12: # 6 exchanges
+                 print(f"   ⚠️ Conversation reached limit without becoming hot lead - stopping")
+                 await self.supabase.update_conversation_status(conversation_id, 'stopped')
+                 return
+
+            # Check repeated messages (spam check on history)
+            user_messages = [msg['content'] for msg in history if msg['role'] == 'user']
+            if len(user_messages) >= 3:
+                 if user_messages[-1] == user_messages[-2]:
+                      print(f"   🤖 Detected identical repeated messages - likely bot, stopping")
+                      await self.supabase.update_conversation_status(conversation_id, 'stopped')
+                      return
+
+            # Prepare data for AI
+            if not history:
+                return
+                
+            last_message_content = history[-1]['content']
+            history_for_ai = history[:-1] # All except last
+            
+            # Generate AI response
+            response, is_hot_lead = await self.ai.generate_response(
+                history_for_ai,
+                last_message_content
+            )
+            
+            print(f"   🤖 Generated response: {response[:100]}...")
+            
+            # Check if hot lead - STOP IMMEDIATELY if true
+            if is_hot_lead:
+                print(f"   🔥 Hot lead detected! Stopping conversation immediately (no response sent).")
+                
+                # We don't send response, but we update history for the report
+                # The user message is already in history. We won't add assistant response.
+                
+                await self._handle_hot_lead(
+                    campaign_id,
+                    campaign,
+                    conversation_id,
+                    peer_user_id,
+                    history, # Pass current history without assistant response
+                    account_id,
+                    lead_id,
+                    user_id
+                )
+                return
+
+            # Human-like delay (additional small random delay)
+            import random
+            delay = random.uniform(5, 15)
+            await asyncio.sleep(delay)
+            
+            # Send response
+            await last_event.respond(response)
+            
+            # Save our response
+            await self.supabase.add_message_to_conversation(
+                conversation_id,
+                'assistant',
+                response
+            )
+            
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(f"   ❌ Error in delayed response processing: {e}")
+        finally:
+            if conversation_id in self.pending_response_tasks:
+                del self.pending_response_tasks[conversation_id]
     
     async def _handle_hot_lead(
         self, 
@@ -322,7 +394,10 @@ class LeadManager:
         campaign: Dict,
         conversation_id: str,
         peer_user_id: int,
-        full_history: List[Dict]
+        full_history: List[Dict],
+        account_id: str,
+        lead_id: int,
+        user_id: str
     ):
         """
         Handle hot lead detection
@@ -335,19 +410,27 @@ class LeadManager:
         # Update conversation status
         await self.supabase.update_conversation_status(conversation_id, 'hot_lead')
         
-        # Get lead info
-        conversation = await self.supabase.get_conversation_history(conversation_id)
+        # Get detailed lead info
+        lead_details = await self.supabase.get_lead_details(lead_id)
+        if not lead_details:
+             print(f"   ⚠️ Could not fetch lead details for lead_id {lead_id}, using minimal info")
+             pass
         
-        # Create hot lead record
+        # Construct contact info
+        username = 'unknown'
+        if lead_details and lead_details.get('original_message'):
+             username = lead_details['original_message'].get('username') or 'unknown'
+        
         contact_info = {
             'telegram_user_id': peer_user_id,
-            'username': conversation[0].get('peer_username', 'unknown')
+            'username': username,
+            'lead_details': lead_details
         }
         
         hot_lead_id = await self.supabase.create_hot_lead(
             campaign_id=campaign_id,
             conversation_id=conversation_id,
-            lead_id=0,  # Will be populated from conversation
+            lead_id=lead_id,
             conversation_history=full_history,
             contact_info=contact_info
         )
@@ -362,50 +445,110 @@ class LeadManager:
                 hot_lead_id,
                 target_channel,
                 contact_info,
-                full_history
+                full_history,
+                lead_details,
+                user_id
             )
         
         print(f"   ✅ Hot lead saved: {hot_lead_id}")
+    
+    def _escape_markdown(self, text: str) -> str:
+        """
+        Escape special Markdown characters to prevent parsing errors
+        """
+        if not text:
+            return text
+        
+        # Characters that need escaping in Telegram Markdown
+        special_chars = ['_', '*', '[', ']', '(', ')', '~', '`', '>', '#', '+', '-', '=', '|', '{', '}', '.', '!']
+        
+        escaped = text
+        for char in special_chars:
+            escaped = escaped.replace(char, f'\\{char}')
+        
+        return escaped
     
     async def _post_hot_lead_to_channel(
         self,
         hot_lead_id: str,
         channel_id: str,
         contact_info: Dict,
-        conversation_history: List[Dict]
+        conversation_history: List[Dict],
+        lead_details: Dict,
+        user_id: str
     ):
         """
-        Post hot lead notification to Telegram channel
+        Post hot lead notification to Telegram channel using Bot API
         """
         try:
-            # Format message
+            print(f"   📢 Generating report for channel {channel_id}...")
+            
+            # 1. Get Bot Token from environment variables
+            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            
+            if not bot_token:
+                print(f"   ⚠️ No TELEGRAM_BOT_TOKEN in env vars - cannot post to channel")
+                return
+
+            # 2. Get Lead Info
             username = contact_info.get('username', 'Unknown')
-            message = f"""
-🔥 **ГОРЯЧИЙ ЛИД**
+            original_msg = lead_details.get('original_message', {}) if lead_details else {}
+            chat_name = original_msg.get('chat_name', 'Unknown Chat')
+            original_text = original_msg.get('message', 'N/A')
+            
+            # 3. Generate AI Context/Summary
+            summary = await self.ai.generate_lead_summary(lead_details, conversation_history)
+            
+            # 4. Format Dialogue (escape special chars)
+            dialogue_text = ""
+            for msg in conversation_history:
+                role = "🤖" if msg['role'] == 'assistant' else "👤"
+                # Escape content to prevent Markdown parsing errors
+                content = self._escape_markdown(msg['content'])
+                dialogue_text += f"{role} {content}\n\n"
+            
+            # Escape other dynamic text fields
+            chat_name_escaped = self._escape_markdown(chat_name)
+            original_text_escaped = self._escape_markdown(original_text)
+            summary_escaped = self._escape_markdown(summary)
+            
+            # 5. Construct Message (plain text - no Markdown to avoid parsing issues)
+            message = f"""🔥 ГОРЯЧИЙ ЛИД НАЙДЕН!
 
-👤 Контакт: @{username}
-⏰ Дата: {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC
+👤 Инфо о лиде:
+User: @{username}
+ID: {contact_info.get('telegram_user_id', 'N/A')}
+Чат-источник: {chat_name}
 
-📝 **История диалога:**
+📝 Изначальный запрос:
+"{original_text}"
+
+🧠 Анализ (почему подходит):
+{summary}
+
+💬 Переписка:
+{dialogue_text}
+
+🔗 ID лида в системе: {hot_lead_id}
 """
             
-            # Add conversation (last 5 messages)
-            for msg in conversation_history[-5:]:
-                role = "🤖" if msg['role'] == 'assistant' else "👤"
-                content = msg['content'][:200]
-                message += f"\n{role} {content}\n"
+            # 6. Send via Telegram Bot API (without parse_mode to avoid Markdown issues)
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            payload = {
+                'chat_id': channel_id,
+                'text': message
+                # No parse_mode - send as plain text to avoid parsing errors
+            }
             
-            message += f"\n💼 ID лида: `{hot_lead_id}`"
-            
-            # Send to channel (use first available account)
-            # TODO: Implement channel posting
-            print(f"   📢 Would post to channel {channel_id}")
-            
-            # Mark as posted
-            await self.supabase.mark_hot_lead_posted(hot_lead_id)
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload) as resp:
+                    if resp.status == 200:
+                        # Mark as posted
+                        await self.supabase.mark_hot_lead_posted(hot_lead_id)
+                        print(f"   ✅ Posted hot lead report to channel {channel_id} via Bot")
+                    else:
+                        err_text = await resp.text()
+                        print(f"   ❌ Failed to send report via Bot: {resp.status} - {err_text}")
             
         except Exception as e:
             print(f"   ⚠️ Failed to post to channel: {e}")
-
-
-

@@ -7,14 +7,17 @@ import asyncio
 import sys
 from datetime import datetime
 from typing import List
+import logging
 
 # Import our modules
-from config import LOG_LEVEL, SUPABASE_URL, SUPABASE_KEY
+from config import LOG_LEVEL, SUPABASE_URL, SUPABASE_KEY, setup_logger
 from supabase_client_rest import SupabaseClient
 from safety_manager import SafetyManager
 from ai_communicator import AICommunicator
 from telethon_client import TelethonManager
 from lead_manager import LeadManager
+
+logger = setup_logger('MainService')
 
 
 class AIMessagingService:
@@ -29,15 +32,13 @@ class AIMessagingService:
     
     async def start(self):
         """Start the service"""
-        print("=" * 60)
-        print("🤖 AI Messaging Service")
-        print("=" * 60)
-        print(f"Started at: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
-        print()
+        logger.info("=" * 60)
+        logger.info("🤖 AI Messaging Service")
+        logger.info("=" * 60)
         
         try:
             # Initialize components
-            print("🔧 Initializing components...")
+            logger.info("🔧 Initializing components...")
             
             # Connect to Supabase (REST API)
             self.supabase = SupabaseClient(SUPABASE_URL, SUPABASE_KEY)
@@ -47,8 +48,7 @@ class AIMessagingService:
             self.safety = SafetyManager(self.supabase)
             self.telethon = TelethonManager(self.supabase, self.safety)
             
-            print("✅ All components initialized")
-            print()
+            logger.info("✅ All components initialized")
             
             # Check and reset daily counters if needed
             await self.safety.check_and_reset_daily_counters()
@@ -58,12 +58,10 @@ class AIMessagingService:
             await self.main_loop()
             
         except KeyboardInterrupt:
-            print("\n⚠️ Received interrupt signal")
+            logger.warning("⚠️ Received interrupt signal")
             await self.shutdown()
         except Exception as e:
-            print(f"\n❌ Fatal error: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.critical(f"❌ Fatal error: {e}", exc_info=True)
             await self.shutdown()
             sys.exit(1)
     
@@ -73,8 +71,7 @@ class AIMessagingService:
         
         while self.running:
             iteration += 1
-            print(f"\n{'='*60}")
-            print(f"🔄 Iteration #{iteration} - {datetime.utcnow().strftime('%H:%M:%S')} UTC")
+            logger.info(f"🔄 Iteration #{iteration}")
             
             # Clean up finished tasks
             finished_campaigns = []
@@ -85,17 +82,15 @@ class AIMessagingService:
                     try:
                         exc = task.exception()
                         if exc:
-                            print(f"❌ Campaign {campaign_id} task failed: {exc}")
+                            logger.error(f"❌ Campaign {campaign_id} task failed: {exc}")
                     except Exception as e:
-                        print(f"⚠️ Error checking task status: {e}")
+                        logger.error(f"⚠️ Error checking task status: {e}")
             
             for campaign_id in finished_campaigns:
                 del self.active_campaign_tasks[campaign_id]
                 
             if self.active_campaign_tasks:
-                print(f"ℹ️ Currently running campaigns: {len(self.active_campaign_tasks)}")
-            
-            print(f"{'='*60}\n")
+                logger.info(f"ℹ️ Currently running campaigns: {len(self.active_campaign_tasks)}")
             
             try:
                 # Check for accounts needing reconnection (e.g., proxy changed)
@@ -105,9 +100,9 @@ class AIMessagingService:
                 campaigns = await self.supabase.get_active_campaigns()
                 
                 if not campaigns:
-                    print("ℹ️ No active campaigns")
+                    logger.info("ℹ️ No active campaigns")
                 else:
-                    print(f"📋 Found {len(campaigns)} active campaign(s)")
+                    logger.info(f"📋 Found {len(campaigns)} active campaign(s)")
                     
                     # Process each campaign
                     for campaign in campaigns:
@@ -115,11 +110,11 @@ class AIMessagingService:
                         
                         # Check if already running
                         if campaign_id in self.active_campaign_tasks:
-                            print(f"🔄 Campaign {campaign['name']} is already running - skipping duplicate start")
+                            logger.debug(f"🔄 Campaign {campaign['name']} is already running - skipping duplicate start")
                             continue
                             
                         # Start background task for this campaign
-                        print(f"🚀 Starting background task for: {campaign['name']}")
+                        logger.info(f"🚀 Starting background task for: {campaign['name']}")
                         task = asyncio.create_task(self.process_campaign(campaign))
                         self.active_campaign_tasks[campaign_id] = task
                 
@@ -128,13 +123,11 @@ class AIMessagingService:
                 await self.safety.check_and_reset_daily_counters()
                 
             except Exception as e:
-                print(f"❌ Error in main loop: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.error(f"❌ Error in main loop: {e}", exc_info=True)
             
             # Wait before next iteration (60 seconds)
             # The campaigns run in background during this sleep!
-            print(f"\n⏸️ Main loop sleeping for 60 seconds...")
+            logger.debug(f"⏸️ Main loop sleeping for 60 seconds...")
             await asyncio.sleep(60)
     
     async def check_and_reconnect_accounts(self):
@@ -145,13 +138,13 @@ class AIMessagingService:
             if not accounts:
                 return  # Nothing to reconnect
             
-            print(f"\n🔄 Found {len(accounts)} account(s) needing reconnection")
+            logger.info(f"🔄 Found {len(accounts)} account(s) needing reconnection")
             
             for account in accounts:
                 account_id = str(account['id'])
                 account_name = account.get('account_name', f'Account {account_id}')
                 
-                print(f"\n🔄 Reconnecting {account_name} (new proxy: {account.get('proxy_url', 'none')})")
+                logger.info(f"🔄 Reconnecting {account_name} (new proxy: {account.get('proxy_url', 'none')})")
                 
                 # Reconnect the account
                 success = await self.telethon.reconnect_account(account_id, account)
@@ -159,13 +152,13 @@ class AIMessagingService:
                 if success:
                     # Clear the reconnect flag
                     await self.supabase.clear_reconnect_flag(account_id)
-                    print(f"   ✅ {account_name} reconnected successfully")
+                    logger.info(f"   ✅ {account_name} reconnected successfully")
                 else:
-                    print(f"   ❌ Failed to reconnect {account_name}")
+                    logger.error(f"   ❌ Failed to reconnect {account_name}")
                     # Keep the flag so we retry next iteration
                 
         except Exception as e:
-            print(f"⚠️ Error checking accounts for reconnection: {e}")
+            logger.error(f"⚠️ Error checking accounts for reconnection: {e}")
     
     async def process_campaign(self, campaign: dict):
         """Process a single campaign"""
@@ -176,8 +169,7 @@ class AIMessagingService:
             user_config = await self.supabase.get_user_config(user_id)
             
             if not user_config or not user_config.get('openrouter_api_key'):
-                print(f"⚠️ Campaign {campaign['id']}: User {user_id} has no OpenRouter API key configured")
-                print(f"   💡 User must add their API key in app settings")
+                logger.warning(f"⚠️ Campaign {campaign['id']}: User {user_id} has no OpenRouter API key configured")
                 return
             
             openrouter_api_key = user_config['openrouter_api_key']
@@ -201,19 +193,17 @@ class AIMessagingService:
             await lead_mgr.process_campaign(campaign)
             
         except Exception as e:
-            print(f"❌ Error processing campaign {campaign['id']}: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"❌ Error processing campaign {campaign['id']}: {e}", exc_info=True)
     
     async def shutdown(self):
         """Graceful shutdown"""
-        print("\n🛑 Shutting down...")
+        logger.info("🛑 Shutting down...")
         
         self.running = False
         
         # Cancel active campaign tasks
         if hasattr(self, 'active_campaign_tasks') and self.active_campaign_tasks:
-            print(f"⏳ Cancelling {len(self.active_campaign_tasks)} active campaign tasks...")
+            logger.info(f"⏳ Cancelling {len(self.active_campaign_tasks)} active campaign tasks...")
             for task in self.active_campaign_tasks.values():
                 task.cancel()
             
@@ -221,7 +211,7 @@ class AIMessagingService:
             try:
                 await asyncio.wait(self.active_campaign_tasks.values(), timeout=5)
             except Exception as e:
-                print(f"⚠️ Error waiting for tasks to cancel: {e}")
+                logger.error(f"⚠️ Error waiting for tasks to cancel: {e}")
         
         # Close Telethon clients
         if self.telethon:
@@ -231,7 +221,7 @@ class AIMessagingService:
         if self.supabase:
             await self.supabase.close()
         
-        print("✅ Shutdown complete")
+        logger.info("✅ Shutdown complete")
 
 
 def main():
