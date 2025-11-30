@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Terminal, Activity, Search, User, Edit3, Loader2 } from 'lucide-react';
 
 // Mock data for the simulation
@@ -87,9 +88,32 @@ const Hero: React.FC = () => {
             </p>
           </div>
 
+import { useNavigate } from 'react-router-dom';
+
+// ... inside Hero component ...
+
+const Hero: React.FC = () => {
+  const navigate = useNavigate();
+  // ... state ...
+
+  const handleCtaClick = () => {
+    // Track Yandex Metrika goal
+    if ((window as any).ym) {
+      (window as any).ym(105579261, 'reachGoal', 'CLICK_HERO_CTA');
+    }
+    navigate('/login');
+  };
+
+  // ... existing simulation effects ...
+
+  return (
+    // ...
            {/* Buttons */}
             <div className="flex flex-col items-center justify-center mt-6">
-                <button className="group relative px-8 py-3 bg-white text-black hover:bg-brand-500 hover:text-white rounded-full font-bold text-base shadow-[0_0_30px_-10px_rgba(255,255,255,0.3)] hover:shadow-[0_0_50px_-10px_rgba(249,115,22,0.6)] transition-all duration-300 hover:scale-105 active:scale-95 overflow-hidden min-w-[260px]">
+                <button 
+                  onClick={handleCtaClick}
+                  className="group relative px-8 py-3 bg-white text-black hover:bg-brand-500 hover:text-white rounded-full font-bold text-base shadow-[0_0_30px_-10px_rgba(255,255,255,0.3)] hover:shadow-[0_0_50px_-10px_rgba(249,115,22,0.6)] transition-all duration-300 hover:scale-105 active:scale-95 overflow-hidden min-w-[260px]"
+                >
                     <span className="relative flex items-center justify-center gap-3 z-20">
                         Получить 15 лидов бесплатно
                         <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />

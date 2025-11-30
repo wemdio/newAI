@@ -40,6 +40,10 @@ const Navbar = () => {
   const showFullMenu = !isScrolled || isHovered;
 
   const handleLogin = () => {
+    // Track Yandex Metrika goal
+    if (window.ym) {
+      window.ym(105579261, 'reachGoal', 'CLICK_LOGIN');
+    }
     navigate('/login');
   };
 
