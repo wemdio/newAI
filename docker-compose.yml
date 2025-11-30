@@ -10,11 +10,22 @@ services:
     environment:
       - PORT=3000
       - NODE_ENV=production
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - USE_BATCH_API=${USE_BATCH_API}
+      - BATCH_SIZE=${BATCH_SIZE}
     restart: always
 
   worker:
     build:
       context: ./backend/python-service
       dockerfile: Dockerfile
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      # Python config expects SUPABASE_ANON_KEY env var, but let's pass both just in case
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
     restart: always
-
