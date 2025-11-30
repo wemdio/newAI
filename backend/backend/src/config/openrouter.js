@@ -21,16 +21,24 @@ export const initializeOpenRouter = (apiKey = null) => {
       throw new AIServiceError('OpenRouter API key is required');
     }
 
+    // Ensure we have valid headers required by OpenRouter to avoid 403 errors
+    const siteUrl = process.env.YOUR_SITE_URL || 'https://telegram-scanner.ru';
+    const siteName = process.env.YOUR_SITE_NAME || 'Telegram Lead Scanner';
+
     openrouterClient = new OpenAI({
       baseURL: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
       apiKey: key,
       defaultHeaders: {
-        'HTTP-Referer': process.env.YOUR_SITE_URL || 'http://localhost:3000',
-        'X-Title': process.env.YOUR_SITE_NAME || 'Telegram Lead Analyzer'
+        'HTTP-Referer': siteUrl,
+        'X-Title': siteName,
       }
     });
 
-    logger.info('OpenRouter client initialized successfully');
+    logger.info('OpenRouter client initialized successfully', { 
+      siteUrl, 
+      siteName 
+    });
+    
     return openrouterClient;
   } catch (error) {
     logger.error('Failed to initialize OpenRouter client', { error: error.message });
@@ -145,4 +153,3 @@ export default {
   getAvailableModels,
   healthCheck
 };
-
