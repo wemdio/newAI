@@ -182,12 +182,7 @@ function App() {
       console.log('🔐 Authenticating via Telegram...', telegramUser);
 
       // Get API base URL
-      const apiUrl = (
-        window.location.hostname === 'telegram-scanner.ru' ||
-        window.location.hostname.includes('twc1.net')
-      )
-        ? 'https://wemdio-newai-f239.twc1.net/api'
-        : 'http://localhost:3000/api';
+      const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
       // Call backend to create/find user
       const response = await axios.post(`${apiUrl}/auth/telegram`, {
