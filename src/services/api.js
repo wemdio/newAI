@@ -3,27 +3,28 @@ import supabase from '../supabaseClient';
 
 // Auto-detect production URL based on current domain
 const getApiBaseUrl = () => {
-  // If VITE_API_URL is set during build, use it
+  // 1. Priority: Environment variable (set in Timeweb Dashboard)
   if (import.meta.env.VITE_API_URL) {
-    console.log('Using VITE_API_URL:', import.meta.env.VITE_API_URL);
-    return import.meta.env.VITE_API_URL;
+    const url = import.meta.env.VITE_API_URL;
+    console.log('Using configured API URL:', url);
+    return url;
   }
   
-  // Production domain
-  if (window.location.hostname === 'telegram-scanner.ru') {
-    console.log('Detected telegram-scanner.ru domain');
-    return 'https://wemdio-newai-f239.twc1.net/api';
+  // 2. Local development
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    console.log('Using localhost API URL');
+    return 'http://localhost:3000/api';
   }
+
+  // 3. Production fallback (relative path if API is on same domain)
+  // But in your case, API is on a different domain/subdomain usually.
+  // Let's try to guess based on common Timeweb patterns or fail gracefully.
   
-  // Timeweb Cloud fallback (*.twc1.net)
-  if (window.location.hostname.includes('twc1.net')) {
-    console.log('Detected twc1.net domain, using hardcoded API URL');
-    return 'https://wemdio-newai-f239.twc1.net/api';
-  }
+  console.warn('WARNING: VITE_API_URL is not set! API calls might fail.');
   
-  // Default to localhost for local development
-  console.log('Using localhost API URL');
-  return 'http://localhost:3000/api';
+  // If we are on telegram-scanner.ru, we might want to use api.telegram-scanner.ru or similar
+  // But better to just log error and return something
+  return '/api'; // Try relative path as last resort
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -38,15 +39,33 @@ const api = axios.create({
 
 // Add Supabase Auth token to all requests
 api.interceptors.request.use(async (config) => {
-  const { data: { session } } = await supabase.auth.getSession();
-  
-  if (session?.user) {
-    // Use user ID from Supabase Auth
-    config.headers['x-user-id'] = session.user.id;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    if (session?.user) {
+      // Use user ID from Supabase Auth
+      config.headers['x-user-id'] = session.user.id;
+    }
+  } catch (e) {
+    console.error('Error getting session for API request:', e);
   }
   
   return config;
 });
+
+// Response interceptor for debugging
+api.interceptors.response.use(
+  response => response,
+  error => {
+    console.error('API Request Failed:', {
+      url: error.config?.url,
+      baseURL: error.config?.baseURL,
+      status: error.response?.status,
+      data: error.response?.data
+    });
+    return Promise.reject(error);
+  }
+);
 
 // Configuration API
 export const configApi = {
@@ -81,6 +100,19 @@ export const scannerApi = {
   start: () => api.post('/scanner/start'),
   stop: () => api.post('/scanner/stop'),
   manualScan: () => api.post('/scanner/manual-scan'),
+};
+
+// Messaging API
+export const messagingApi = {
+  // Account management
+  getAccounts: () => api.get('/messaging/accounts'),
+  addAccount: (data) => api.post('/messaging/accounts', data),
+  updateAccount: (id, data) => api.put(`/messaging/accounts/${id}`, data),
+  deleteAccount: (id) => api.delete(`/messaging/accounts/${id}`),
+  pauseAccount: (id, paused) => api.post(`/messaging/accounts/${id}/pause`, { paused }),
+  
+  // Stats
+  getStats: () => api.get('/messaging/stats'),
 };
 
 // Audit API
