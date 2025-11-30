@@ -36,16 +36,9 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
       estimatedOutputTokens
     });
     
-    // Get OpenRouter client
-    logger.info('Getting OpenRouter client', {
-      messageId: message.id,
-      hasApiKey: !!apiKey,
-      apiKeyLength: apiKey ? apiKey.length : 0,
-      apiKeyPrefix: apiKey ? apiKey.substring(0, 10) + '...' : 'none'
-    });
-    
+    // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'google/gemini-flash-1.5';
+    const model = process.env.AI_MODEL || 'openai/gpt-5-mini';
     
     logger.info('Making OpenRouter API call', {
       messageId: message.id,
@@ -227,7 +220,7 @@ ${JSON.stringify(messagesArray, null, 2)}
 
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'google/gemini-flash-1.5';
+    const model = process.env.AI_MODEL || 'openai/gpt-5-mini';
     
     // Estimate tokens
     const estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt);
