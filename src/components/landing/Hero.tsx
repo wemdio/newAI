@@ -24,6 +24,8 @@ const FOUND_LEADS = [
 ];
 
 const Hero: React.FC = () => {
+  const navigate = useNavigate();
+  
   // Animation State
   const [logs, setLogs] = useState<string[]>(["Система инициализирована..."]);
   const [leads, setLeads] = useState<typeof FOUND_LEADS>([]);
@@ -57,6 +59,13 @@ const Hero: React.FC = () => {
     };
   }, []);
 
+  const handleCtaClick = () => {
+    // Track Yandex Metrika goal
+    if ((window as any).ym) {
+      (window as any).ym(105579261, 'reachGoal', 'CLICK_HERO_CTA');
+    }
+    navigate('/login');
+  };
 
   return (
     <section className="relative pt-24 pb-24 overflow-hidden min-h-[100vh] flex flex-col items-center bg-[#050505]">
@@ -88,26 +97,6 @@ const Hero: React.FC = () => {
             </p>
           </div>
 
-import { useNavigate } from 'react-router-dom';
-
-// ... inside Hero component ...
-
-const Hero: React.FC = () => {
-  const navigate = useNavigate();
-  // ... state ...
-
-  const handleCtaClick = () => {
-    // Track Yandex Metrika goal
-    if ((window as any).ym) {
-      (window as any).ym(105579261, 'reachGoal', 'CLICK_HERO_CTA');
-    }
-    navigate('/login');
-  };
-
-  // ... existing simulation effects ...
-
-  return (
-    // ...
            {/* Buttons */}
             <div className="flex flex-col items-center justify-center mt-6">
                 <button 
