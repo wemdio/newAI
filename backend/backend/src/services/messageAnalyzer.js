@@ -45,7 +45,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     });
     
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'anthropic/claude-3-haiku';
+    const model = process.env.AI_MODEL || 'google/gemini-flash-1.5';
     
     logger.info('Making OpenRouter API call', {
       messageId: message.id,
@@ -227,7 +227,7 @@ ${JSON.stringify(messagesArray, null, 2)}
 
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'anthropic/claude-3-haiku';
+    const model = process.env.AI_MODEL || 'google/gemini-flash-1.5';
     
     // Estimate tokens
     const estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt);

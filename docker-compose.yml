@@ -20,6 +20,7 @@ services:
       # OpenRouter headers
       - YOUR_SITE_URL=${FRONTEND_URL}
       - YOUR_SITE_NAME=Telegram Lead Scanner
+      - AI_MODEL=google/gemini-flash-1.5
     restart: always
 
   worker:
