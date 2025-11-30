@@ -17,7 +17,9 @@ services:
       - FRONTEND_URL=${FRONTEND_URL}
       - USE_BATCH_API=${USE_BATCH_API}
       - BATCH_SIZE=${BATCH_SIZE}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      # OpenRouter headers (required for some providers)
+      - YOUR_SITE_URL=${FRONTEND_URL}
+      - YOUR_SITE_NAME="Telegram Lead Scanner"
     restart: always
 
   worker:
@@ -27,6 +29,5 @@ services:
     environment:
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      # Python config expects SUPABASE_ANON_KEY env var, but let's pass both just in case
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
     restart: always
