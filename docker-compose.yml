@@ -17,6 +17,7 @@ services:
       - FRONTEND_URL=${FRONTEND_URL}
       - USE_BATCH_API=${USE_BATCH_API}
       - BATCH_SIZE=${BATCH_SIZE}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
     restart: always
 
   worker:
