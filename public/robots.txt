@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://telegram-scanner.ru/sitemap.xml
+
