@@ -1,16 +1,25 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import supabase from './supabaseClient';
 import './App.css';
 import './styles/telegram.css';
-import Configuration from './pages/Configuration';
-import Leads from './pages/Leads';
-import Login from './pages/Login';
-import AIMessaging from './pages/AIMessaging';
-import LeadAudit from './pages/LeadAudit';
-import LandingPage from './pages/LandingPage';
 import { isTelegramWebApp, initTelegram, getTelegramUser, getTelegramInitData } from './utils/telegram';
 import axios from 'axios';
+
+// Lazy load pages
+const Configuration = React.lazy(() => import('./pages/Configuration'));
+const Leads = React.lazy(() => import('./pages/Leads'));
+const Login = React.lazy(() => import('./pages/Login'));
+const AIMessaging = React.lazy(() => import('./pages/AIMessaging'));
+const LeadAudit = React.lazy(() => import('./pages/LeadAudit'));
+const LandingPage = React.lazy(() => import('./pages/LandingPage'));
+
+const LoadingSpinner = () => (
+  <div className="app loading-screen">
+    <div className="loading-spinner"></div>
+    <p>Загрузка...</p>
+  </div>
+);
 
 // Component for the authenticated application layout
 const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setActiveTab }) => {
@@ -83,13 +92,15 @@ const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setAc
       {/* Main Content */}
       <main className="app-main">
         <div className="container">
-          <Routes>
-            <Route path="/leads" element={<Leads />} />
-            <Route path="/config" element={<Configuration />} />
-            <Route path="/messaging" element={<AIMessaging />} />
-            <Route path="/audit" element={<LeadAudit />} />
-            <Route path="*" element={<Navigate to="/leads" replace />} />
-          </Routes>
+          <Suspense fallback={<LoadingSpinner />}>
+            <Routes>
+              <Route path="/leads" element={<Leads />} />
+              <Route path="/config" element={<Configuration />} />
+              <Route path="/messaging" element={<AIMessaging />} />
+              <Route path="/audit" element={<LeadAudit />} />
+              <Route path="*" element={<Navigate to="/leads" replace />} />
+            </Routes>
+          </Suspense>
         </div>
       </main>
 
@@ -301,31 +312,33 @@ function App() {
 
   return (
     <Router>
-      <Routes>
-        {/* Public Routes */}
-        <Route path="/" element={
-           !session && !isTelegram ? <LandingPage /> : <Navigate to="/leads" replace />
-        } />
-        
-        <Route path="/login" element={
-           !session && !isTelegram ? <Login supabase={supabase} /> : <Navigate to="/leads" replace />
-        } />
+      <Suspense fallback={<LoadingSpinner />}>
+        <Routes>
+          {/* Public Routes */}
+          <Route path="/" element={
+             !session && !isTelegram ? <LandingPage /> : <Navigate to="/leads" replace />
+          } />
+          
+          <Route path="/login" element={
+             !session && !isTelegram ? <Login supabase={supabase} /> : <Navigate to="/leads" replace />
+          } />
 
-        {/* Protected Routes */}
-        <Route path="/*" element={
-           session || isTelegram ? (
-             <AuthenticatedApp 
-               session={session} 
-               isTelegram={isTelegram} 
-               handleSignOut={handleSignOut} 
-               activeTab={activeTab} 
-               setActiveTab={setActiveTab} 
-             />
-           ) : (
-             <Navigate to="/login" replace />
-           )
-        } />
-      </Routes>
+          {/* Protected Routes */}
+          <Route path="/*" element={
+             session || isTelegram ? (
+               <AuthenticatedApp 
+                 session={session} 
+                 isTelegram={isTelegram} 
+                 handleSignOut={handleSignOut} 
+                 activeTab={activeTab} 
+                 setActiveTab={setActiveTab} 
+               />
+             ) : (
+               <Navigate to="/login" replace />
+             )
+          } />
+        </Routes>
+      </Suspense>
     </Router>
   );
 }
