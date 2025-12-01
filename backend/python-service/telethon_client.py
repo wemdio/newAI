@@ -248,13 +248,28 @@ class TelethonManager:
         """
         Parse proxy URL to Telethon proxy dict
         
-        Format: protocol://username:password@host:port
-        Example: socks5://user:pass@1.2.3.4:1080
+        Format: 
+        1. protocol://username:password@host:port (Standard URL)
+        2. ip:port:username:password (Common proxy format)
         """
         if not proxy_url:
             return None
         
         try:
+            # Check for ip:port:user:pass format first (if no protocol scheme)
+            if '://' not in proxy_url and proxy_url.count(':') == 3:
+                parts = proxy_url.split(':')
+                if len(parts) == 4:
+                    # Assume SOCKS5 as default for this format as it's most common for Telegram
+                    # But we can try to infer or just stick to socks5
+                    return {
+                        'proxy_type': 'socks5',
+                        'addr': parts[0],
+                        'port': int(parts[1]),
+                        'username': parts[2],
+                        'password': parts[3]
+                    }
+
             parsed = urlparse(proxy_url)
             
             # Map protocol
@@ -266,7 +281,14 @@ class TelethonManager:
             }
             
             proxy_type = protocol_map.get(parsed.scheme)
+            
+            # Fallback for common formats without scheme but not matching ip:port:user:pass
             if not proxy_type:
+                # If parsing failed to find scheme, maybe it is user:pass@ip:port
+                if '@' in proxy_url and not parsed.scheme:
+                     # Try adding socks5:// and re-parse
+                     return self._parse_proxy(f"socks5://{proxy_url}")
+
                 print(f"⚠️ Unsupported proxy protocol: {parsed.scheme}")
                 return None
             
