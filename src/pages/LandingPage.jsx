@@ -62,7 +62,7 @@ const Navbar = () => {
         `}
       >
         {/* Logo Section */}
-        <a href="#" className="flex items-center flex-shrink-0">
+        <a href="#" className="flex items-center flex-shrink-0" aria-label="Telegram Scanner Home">
           <div className="flex items-center group">
              {/* Icon Container */}
             <div className="relative w-8 h-8 flex items-center justify-center flex-shrink-0">

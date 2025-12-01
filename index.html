@@ -7,7 +7,7 @@
     <title>Telegram Lead Scanner</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Bebas+Neue&family=Oswald:wght@200..700&display=swap" rel="stylesheet">
     <!-- Telegram Web App SDK -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
     
     <!-- Yandex.Metrika counter -->
     <script type="text/javascript" >
@@ -24,10 +24,10 @@
             webvisor:true
        });
     </script>
-    <noscript><div><img src="https://mc.yandex.ru/watch/105579261" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
     <!-- /Yandex.Metrika counter -->
   </head>
   <body>
+    <noscript><div><img src="https://mc.yandex.ru/watch/105579261" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
