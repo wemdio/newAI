@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { Menu, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Hero from '../components/landing/Hero';
+import LazySection from '../components/LazySection';
 
 // Lazy load below-the-fold components
 const HowItWorks = React.lazy(() => import('../components/landing/HowItWorks'));
@@ -10,12 +11,6 @@ const Proof = React.lazy(() => import('../components/landing/Proof'));
 const UseCases = React.lazy(() => import('../components/landing/UseCases'));
 const Pricing = React.lazy(() => import('../components/landing/Pricing'));
 const Safety = React.lazy(() => import('../components/landing/Safety'));
-
-const LoadingFallback = () => (
-  <div className="w-full h-96 flex items-center justify-center text-gray-500">
-    <div className="animate-pulse">Загрузка...</div>
-  </div>
-);
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -155,14 +150,12 @@ export default function LandingPage() {
       <Navbar />
       <main className="relative z-10">
         <Hero />
-        <Suspense fallback={<LoadingFallback />}>
-          <HowItWorks />
-          <Features />
-          <Proof />
-          <Pricing />
-          <UseCases />
-          <Safety />
-        </Suspense>
+        <LazySection><HowItWorks /></LazySection>
+        <LazySection><Features /></LazySection>
+        <LazySection><Proof /></LazySection>
+        <LazySection><Pricing /></LazySection>
+        <LazySection><UseCases /></LazySection>
+        <LazySection><Safety /></LazySection>
       </main>
     </div>
   );
