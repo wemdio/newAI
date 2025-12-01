@@ -421,7 +421,6 @@ const AIMessaging = () => {
             <div className="stat-content">
               <div className="stat-label">Кампании</div>
               <div className="stat-value">{stats.campaigns.total}</div>
-              <div className="stat-detail">{stats.campaigns.running} активных</div>
             </div>
           </div>
           
@@ -429,7 +428,6 @@ const AIMessaging = () => {
             <div className="stat-content">
               <div className="stat-label">Аккаунты</div>
               <div className="stat-value">{stats.accounts.total}</div>
-              <div className="stat-detail">{stats.accounts.active} активных</div>
             </div>
           </div>
           
@@ -437,7 +435,6 @@ const AIMessaging = () => {
             <div className="stat-content">
               <div className="stat-label">Диалоги</div>
               <div className="stat-value">{stats.conversations.total}</div>
-              <div className="stat-detail">{stats.conversations.active} активных</div>
             </div>
           </div>
           
@@ -445,7 +442,6 @@ const AIMessaging = () => {
             <div className="stat-content">
               <div className="stat-label">Горячие лиды</div>
               <div className="stat-value">{allHotLeads.length}</div>
-              <div className="stat-detail">{allHotLeads.filter(l => !l.posted_to_channel).length} новых</div>
             </div>
           </div>
         </div>
