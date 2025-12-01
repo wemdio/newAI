@@ -20,20 +20,21 @@ export default defineConfig({
       output: {
         manualChunks(id) {
           if (id.includes('node_modules')) {
+            // Separate heavy libraries
             if (id.includes('@supabase')) {
               return 'supabase';
             }
             if (id.includes('framer-motion')) {
               return 'framer-motion';
             }
-            if (id.includes('lucide-react')) {
-              return 'icons';
-            }
+            
+            // Core React vendor chunk
             if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom')) {
               return 'vendor';
             }
-            // Let other chunks be generated automatically or put in a common vendor chunk if needed
-            // return 'vendor-misc'; 
+            
+            // Note: lucide-react is intentionally left out of manualChunks 
+            // to allow proper tree-shaking per component usage.
           }
         }
       }
