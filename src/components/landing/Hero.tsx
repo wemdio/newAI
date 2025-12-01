@@ -74,7 +74,7 @@ const Hero: React.FC = () => {
       <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[1000px] h-[1000px] bg-brand-500/5 rounded-full blur-[120px] z-0 pointer-events-none"></div>
       
       {/* Background Text "TELEGRAM SCANNER" - Huge, behind content */}
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full flex justify-center z-0 pointer-events-none opacity-[0.03] select-none overflow-hidden">
+      <div className="absolute top-0 inset-x-0 w-full flex justify-center z-0 pointer-events-none opacity-[0.03] select-none overflow-hidden">
         <h1 className="text-[12vw] font-display font-bold text-white leading-none whitespace-nowrap tracking-widest">
           TELEGRAM SCANNER
         </h1>
