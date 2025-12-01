@@ -1,13 +1,21 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { Menu, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Hero from '../components/landing/Hero';
-import HowItWorks from '../components/landing/HowItWorks';
-import Features from '../components/landing/Features';
-import Proof from '../components/landing/Proof';
-import UseCases from '../components/landing/UseCases';
-import Pricing from '../components/landing/Pricing';
-import Safety from '../components/landing/Safety';
+
+// Lazy load below-the-fold components
+const HowItWorks = React.lazy(() => import('../components/landing/HowItWorks'));
+const Features = React.lazy(() => import('../components/landing/Features'));
+const Proof = React.lazy(() => import('../components/landing/Proof'));
+const UseCases = React.lazy(() => import('../components/landing/UseCases'));
+const Pricing = React.lazy(() => import('../components/landing/Pricing'));
+const Safety = React.lazy(() => import('../components/landing/Safety'));
+
+const LoadingFallback = () => (
+  <div className="w-full h-96 flex items-center justify-center text-gray-500">
+    <div className="animate-pulse">Загрузка...</div>
+  </div>
+);
 
 const Navbar = () => {
   const [isOpen, setIsOpen] = useState(false);
@@ -147,12 +155,14 @@ export default function LandingPage() {
       <Navbar />
       <main className="relative z-10">
         <Hero />
-        <HowItWorks />
-        <Features />
-        <Proof />
-        <Pricing />
-        <UseCases />
-        <Safety />
+        <Suspense fallback={<LoadingFallback />}>
+          <HowItWorks />
+          <Features />
+          <Proof />
+          <Pricing />
+          <UseCases />
+          <Safety />
+        </Suspense>
       </main>
     </div>
   );
