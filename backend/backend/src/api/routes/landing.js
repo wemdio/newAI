@@ -22,9 +22,17 @@ router.post('/lead', async (req, res) => {
     logger.info('New landing lead received', { name, contact, type, contactMethod, utm, interest });
 
     // 1. Send notification to Telegram (Priority)
-    // Try to get ID from env vars, if not found - log warning but do not use hardcoded fallback to avoid confusion
-    // You must set TELEGRAM_NOTIFICATIONS_CHAT_ID in your environment variables
-    const targetChatId = (process.env.TELEGRAM_NOTIFICATIONS_CHAT_ID || process.env.TELEGRAM_ADMIN_ID || '').trim();
+    // Fallback to hardcoded ID if env vars are missing
+    let targetChatId = (process.env.TELEGRAM_NOTIFICATIONS_CHAT_ID || process.env.TELEGRAM_ADMIN_ID || '-1002006080281_3572').trim();
+    let threadId = null;
+
+    // Check if chat ID contains thread ID (format: chat_id_thread_id)
+    if (targetChatId.includes('_')) {
+      const parts = targetChatId.split('_');
+      targetChatId = parts[0];
+      threadId = parseInt(parts[1], 10);
+    }
+
     let telegramResult = null;
 
     // Map contact method to display string
@@ -72,8 +80,9 @@ _Пожалуйста, свяжитесь с клиентом как можно 
       `.trim();
 
       try {
-        telegramResult = await sendMessage(targetChatId, message);
-        logger.info('Lead notification sent to Telegram', { targetChatId });
+        const options = threadId ? { message_thread_id: threadId } : {};
+        telegramResult = await sendMessage(targetChatId, message, options);
+        logger.info('Lead notification sent to Telegram', { targetChatId, threadId });
       } catch (tgError) {
         logger.error('Failed to send Telegram notification', { error: tgError.message });
       }
