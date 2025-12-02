@@ -1,18 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, FormEvent } from 'react';
 import { X, Send, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-const LeadFormModal = ({ isOpen, onClose }) => {
+interface LeadFormModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+interface FormData {
+  name: string;
+  contact: string;
+  type: 'telegram' | 'phone';
+}
+
+const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose }) => {
   const [step, setStep] = useState(1); // 1: Form, 2: Success
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     name: '',
     contact: '', // Phone or Telegram
     type: 'telegram', // 'telegram' or 'phone'
   });
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
@@ -32,8 +43,8 @@ const LeadFormModal = ({ isOpen, onClose }) => {
       }
 
       // Track Yandex Metrika goal
-      if (window.ym) {
-        window.ym(105579261, 'reachGoal', 'LEAD_FORM_SUBMIT');
+      if ((window as any).ym) {
+        (window as any).ym(105579261, 'reachGoal', 'LEAD_FORM_SUBMIT');
       }
 
       setStep(2);
@@ -169,4 +180,3 @@ const LeadFormModal = ({ isOpen, onClose }) => {
 };
 
 export default LeadFormModal;
-
