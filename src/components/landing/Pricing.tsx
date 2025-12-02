@@ -19,7 +19,7 @@ const pricingData = [
   }
 ];
 
-const PricingCard = ({ item, index, onOpenLeadForm }: { item: typeof pricingData[0], index: number, onOpenLeadForm?: () => void }) => {
+const PricingCard = ({ item, index, onOpenLeadForm }: { item: typeof pricingData[0], index: number, onOpenLeadForm?: (interest: string) => void }) => {
     const divRef = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState({ x: 0, y: 0 });
     // const [opacity, setOpacity] = useState(0); // Removed unused variable
@@ -79,7 +79,7 @@ const PricingCard = ({ item, index, onOpenLeadForm }: { item: typeof pricingData
                 </p>
 
                 <button 
-                    onClick={onOpenLeadForm}
+                    onClick={() => onOpenLeadForm?.(item.title)}
                     className="w-full py-3.5 bg-white text-black hover:bg-brand-500 hover:text-white rounded-xl font-bold transition-all duration-300 mt-auto shadow-[0_0_20px_-5px_rgba(255,255,255,0.3)] hover:shadow-[0_0_30px_-5px_rgba(249,115,22,0.5)]"
                 >
                     Получить сейчас
@@ -89,7 +89,7 @@ const PricingCard = ({ item, index, onOpenLeadForm }: { item: typeof pricingData
     );
 };
 
-const Pricing: React.FC<{ onOpenLeadForm?: () => void }> = ({ onOpenLeadForm }) => {
+const Pricing: React.FC<{ onOpenLeadForm?: (interest?: string) => void }> = ({ onOpenLeadForm }) => {
   return (
     <section id="pricing" className="py-32 bg-dark-950 relative overflow-hidden scroll-mt-20">
         {/* Background ambient glow */}

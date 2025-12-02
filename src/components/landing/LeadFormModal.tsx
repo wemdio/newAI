@@ -5,13 +5,15 @@ import { motion, AnimatePresence } from 'framer-motion';
 interface LeadFormModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialInterest?: string;
 }
 
 interface FormData {
   name: string;
   contact: string;
-  type: 'telegram' | 'phone'; // Kept for backward compatibility if needed, or just derived
+  type: 'telegram' | 'phone';
   contactMethod: 'telegram' | 'whatsapp' | 'call';
+  interest?: string;
   utm?: {
     source: string | null;
     medium: string | null;
@@ -21,7 +23,7 @@ interface FormData {
   };
 }
 
-const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose }) => {
+const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose, initialInterest }) => {
   const [step, setStep] = useState(1); // 1: Form, 2: Success
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -30,6 +32,7 @@ const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose }) => {
     contact: '',
     type: 'telegram',
     contactMethod: 'telegram',
+    interest: '',
     utm: {
       source: null,
       medium: null,
@@ -38,6 +41,13 @@ const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose }) => {
       content: null
     }
   });
+
+  // Update interest when prop changes
+  React.useEffect(() => {
+    if (initialInterest) {
+      setFormData(prev => ({ ...prev, interest: initialInterest }));
+    }
+  }, [initialInterest]);
 
   // Capture UTM parameters on component mount
   React.useEffect(() => {

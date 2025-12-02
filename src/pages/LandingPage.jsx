@@ -147,8 +147,10 @@ const Navbar = () => {
 
 export default function LandingPage() {
   const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
+  const [selectedInterest, setSelectedInterest] = useState('');
 
-  const handleOpenLeadForm = () => {
+  const handleOpenLeadForm = (interest = '') => {
+    setSelectedInterest(interest);
     setIsLeadFormOpen(true);
   };
 
@@ -156,9 +158,9 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[#050505] text-slate-50 selection:bg-brand-500/30 font-sans overflow-x-hidden">
       <Navbar />
       <main className="relative z-10">
-        <Hero onOpenLeadForm={handleOpenLeadForm} />
+        <Hero onOpenLeadForm={() => handleOpenLeadForm('Hero CTA')} />
         <LazySection><HowItWorks /></LazySection>
-        <LazySection><Features onOpenLeadForm={handleOpenLeadForm} /></LazySection>
+        <LazySection><Features onOpenLeadForm={() => handleOpenLeadForm('Features CTA')} /></LazySection>
         <LazySection><Proof /></LazySection>
         <LazySection><Pricing onOpenLeadForm={handleOpenLeadForm} /></LazySection>
         <LazySection><UseCases /></LazySection>
@@ -167,7 +169,8 @@ export default function LandingPage() {
       
       <LeadFormModal 
         isOpen={isLeadFormOpen} 
-        onClose={() => setIsLeadFormOpen(false)} 
+        onClose={() => setIsLeadFormOpen(false)}
+        initialInterest={selectedInterest}
       />
     </div>
   );

@@ -13,13 +13,13 @@ const escapeMarkdown = (text) => {
 
 router.post('/lead', async (req, res) => {
   try {
-    const { name, contact, type, contactMethod, utm } = req.body;
+    const { name, contact, type, contactMethod, utm, interest } = req.body;
 
     if (!name || !contact) {
       return res.status(400).json({ error: 'Name and contact are required' });
     }
 
-    logger.info('New landing lead received', { name, contact, type, contactMethod, utm });
+    logger.info('New landing lead received', { name, contact, type, contactMethod, utm, interest });
 
     // 1. Send notification to Telegram (Priority)
     // Fallback to hardcoded ID if env vars are missing
@@ -53,12 +53,19 @@ router.post('/lead', async (req, res) => {
     }
 
     if (targetChatId) {
-      const message = `
+      let message = `
 🚀 *Новая заявка с лендинга*
 
 👤 *Имя:* ${escapeMarkdown(name)}
 📞 *Контакт:* \`${escapeMarkdown(contact)}\`
-📱 *Связь:* ${escapeMarkdown(methodDisplay)}
+📱 *Связь:* ${escapeMarkdown(methodDisplay)}`;
+
+      if (interest) {
+        message += `
+🎯 *Интерес:* ${escapeMarkdown(interest)}`;
+      }
+
+      message += `
 ${utmString}
 
 _Пожалуйста, свяжитесь с клиентом как можно скорее\\._
