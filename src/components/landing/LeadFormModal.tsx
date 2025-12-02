@@ -1,5 +1,4 @@
-import React, { useState } from 'react';
-import type { FormEvent } from 'react';
+import React, { useState, type FormEvent } from 'react';
 import { X, Send, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
