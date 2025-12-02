@@ -22,10 +22,10 @@ router.post('/lead', async (req, res) => {
     logger.info('New landing lead received', { name, contact, type });
 
     // 1. Send notification to Telegram (Priority)
-    const adminId = process.env.TELEGRAM_ADMIN_ID;
+    const targetChatId = process.env.TELEGRAM_NOTIFICATIONS_CHAT_ID || process.env.TELEGRAM_ADMIN_ID;
     let telegramResult = null;
 
-    if (adminId) {
+    if (targetChatId) {
       const message = `
 🚀 *Новая заявка с лендинга*
 
@@ -37,13 +37,13 @@ _Пожалуйста, свяжитесь с клиентом как можно 
       `.trim();
 
       try {
-        telegramResult = await sendMessage(adminId, message);
-        logger.info('Lead notification sent to Telegram');
+        telegramResult = await sendMessage(targetChatId, message);
+        logger.info('Lead notification sent to Telegram', { targetChatId });
       } catch (tgError) {
         logger.error('Failed to send Telegram notification', { error: tgError.message });
       }
     } else {
-      logger.warn('TELEGRAM_ADMIN_ID not set. Skipping Telegram notification.');
+      logger.warn('TELEGRAM_NOTIFICATIONS_CHAT_ID not set. Skipping Telegram notification.');
     }
 
     // 2. Send to AmoCRM (Optional/Secondary)
