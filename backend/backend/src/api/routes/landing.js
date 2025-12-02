@@ -13,13 +13,13 @@ const escapeMarkdown = (text) => {
 
 router.post('/lead', async (req, res) => {
   try {
-    const { name, contact, type, contactMethod } = req.body;
+    const { name, contact, type, contactMethod, utm } = req.body;
 
     if (!name || !contact) {
       return res.status(400).json({ error: 'Name and contact are required' });
     }
 
-    logger.info('New landing lead received', { name, contact, type, contactMethod });
+    logger.info('New landing lead received', { name, contact, type, contactMethod, utm });
 
     // 1. Send notification to Telegram (Priority)
     // Fallback to hardcoded ID if env vars are missing
@@ -34,6 +34,24 @@ router.post('/lead', async (req, res) => {
     };
     const methodDisplay = methodMap[contactMethod] || (type === 'telegram' ? 'Telegram' : 'Телефон');
 
+    // Format UTM string if present
+    let utmString = '';
+    if (utm && (utm.source || utm.campaign)) {
+      const source = escapeMarkdown(utm.source || 'direct');
+      const medium = escapeMarkdown(utm.medium || '-');
+      const campaign = escapeMarkdown(utm.campaign || '-');
+      const content = escapeMarkdown(utm.content || '-');
+      const term = escapeMarkdown(utm.term || '-');
+      
+      utmString = `
+📊 *Маркетинг (UTM)*
+• *Source:* ${source}
+• *Medium:* ${medium}
+• *Campaign:* ${campaign}
+• *Content:* ${content}
+• *Term:* ${term}`;
+    }
+
     if (targetChatId) {
       const message = `
 🚀 *Новая заявка с лендинга*
@@ -41,6 +59,7 @@ router.post('/lead', async (req, res) => {
 👤 *Имя:* ${escapeMarkdown(name)}
 📞 *Контакт:* \`${escapeMarkdown(contact)}\`
 📱 *Связь:* ${escapeMarkdown(methodDisplay)}
+${utmString}
 
 _Пожалуйста, свяжитесь с клиентом как можно скорее\\._
       `.trim();
