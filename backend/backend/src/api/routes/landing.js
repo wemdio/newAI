@@ -13,18 +13,26 @@ const escapeMarkdown = (text) => {
 
 router.post('/lead', async (req, res) => {
   try {
-    const { name, contact, type } = req.body;
+    const { name, contact, type, contactMethod } = req.body;
 
     if (!name || !contact) {
       return res.status(400).json({ error: 'Name and contact are required' });
     }
 
-    logger.info('New landing lead received', { name, contact, type });
+    logger.info('New landing lead received', { name, contact, type, contactMethod });
 
     // 1. Send notification to Telegram (Priority)
     // Fallback to hardcoded ID if env vars are missing
     const targetChatId = (process.env.TELEGRAM_NOTIFICATIONS_CHAT_ID || process.env.TELEGRAM_ADMIN_ID || '-1003240986074').trim();
     let telegramResult = null;
+
+    // Map contact method to display string
+    const methodMap = {
+      'telegram': 'Telegram',
+      'whatsapp': 'WhatsApp',
+      'call': 'Позвонить'
+    };
+    const methodDisplay = methodMap[contactMethod] || (type === 'telegram' ? 'Telegram' : 'Телефон');
 
     if (targetChatId) {
       const message = `
@@ -32,7 +40,7 @@ router.post('/lead', async (req, res) => {
 
 👤 *Имя:* ${escapeMarkdown(name)}
 📞 *Контакт:* \`${escapeMarkdown(contact)}\`
-📱 *Тип:* ${escapeMarkdown(type === 'telegram' ? 'Telegram' : 'Телефон')}
+📱 *Связь:* ${escapeMarkdown(methodDisplay)}
 
 _Пожалуйста, свяжитесь с клиентом как можно скорее\\._
       `.trim();

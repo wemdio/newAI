@@ -10,7 +10,8 @@ interface LeadFormModalProps {
 interface FormData {
   name: string;
   contact: string;
-  type: 'telegram' | 'phone';
+  type: 'telegram' | 'phone'; // Kept for backward compatibility if needed, or just derived
+  contactMethod: 'telegram' | 'whatsapp' | 'call';
 }
 
 const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose }) => {
@@ -19,8 +20,9 @@ const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose }) => {
   const [error, setError] = useState('');
   const [formData, setFormData] = useState<FormData>({
     name: '',
-    contact: '', // Phone or Telegram
-    type: 'telegram', // 'telegram' or 'phone'
+    contact: '',
+    type: 'telegram',
+    contactMethod: 'telegram'
   });
 
   const handleSubmit = async (e: FormEvent) => {
@@ -35,7 +37,10 @@ const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose }) => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          type: formData.contactMethod === 'telegram' ? 'telegram' : 'phone' // Map for backend compatibility logic
+        }),
       });
 
       if (!response.ok) {
@@ -57,6 +62,12 @@ const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose }) => {
   };
 
   if (!isOpen) return null;
+
+  const contactMethods = [
+    { id: 'telegram', label: 'Telegram' },
+    { id: 'whatsapp', label: 'WhatsApp' },
+    { id: 'call', label: 'Позвоните мне' },
+  ] as const;
 
   return (
     <AnimatePresence>
@@ -95,7 +106,7 @@ const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose }) => {
                   </p>
                 </div>
 
-                <form onSubmit={handleSubmit} className="space-y-4">
+                <form onSubmit={handleSubmit} className="space-y-5">
                   {/* Name Field */}
                   <div>
                     <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
@@ -111,10 +122,33 @@ const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose }) => {
                     />
                   </div>
 
+                  {/* Contact Method Selection */}
+                  <div>
+                    <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                      Как с вами связаться?
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {contactMethods.map((method) => (
+                        <button
+                          key={method.id}
+                          type="button"
+                          onClick={() => setFormData({...formData, contactMethod: method.id})}
+                          className={`py-2 px-1 rounded-lg text-sm font-medium transition-all border ${
+                            formData.contactMethod === method.id
+                              ? 'bg-brand-500/10 border-brand-500 text-brand-400'
+                              : 'bg-white/5 border-transparent text-gray-400 hover:bg-white/10'
+                          }`}
+                        >
+                          {method.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Contact Field */}
                   <div>
                     <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-1.5">
-                      Telegram или Телефон
+                      {formData.contactMethod === 'telegram' ? 'Telegram username' : 'Номер телефона'}
                     </label>
                     <div className="relative">
                         <input
@@ -123,7 +157,9 @@ const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose }) => {
                         value={formData.contact}
                         onChange={(e) => setFormData({...formData, contact: e.target.value})}
                         className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-brand-500/50 focus:ring-1 focus:ring-brand-500/50 transition-all"
-                        placeholder="@username или +7..."
+                        placeholder={
+                          formData.contactMethod === 'telegram' ? '@username' : '+7 (999) 000-00-00'
+                        }
                         />
                     </div>
                   </div>
