@@ -23,7 +23,7 @@ const FOUND_LEADS = [
   { name: "Елена В.", role: "Маркетолог", company: "Creative A.", avatar: "ЕВ" },
 ];
 
-const Hero: React.FC = () => {
+const Hero: React.FC<{ onOpenLeadForm?: () => void }> = ({ onOpenLeadForm }) => {
   const navigate = useNavigate();
   
   // Animation State
@@ -64,7 +64,12 @@ const Hero: React.FC = () => {
     if ((window as any).ym) {
       (window as any).ym(105579261, 'reachGoal', 'CLICK_HERO_CTA');
     }
-    navigate('/login');
+    
+    if (onOpenLeadForm) {
+      onOpenLeadForm();
+    } else {
+      navigate('/login');
+    }
   };
 
   return (

@@ -3,6 +3,7 @@ import { Menu, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Hero from '../components/landing/Hero';
 import LazySection from '../components/LazySection';
+import LeadFormModal from '../components/landing/LeadFormModal';
 
 // Lazy load below-the-fold components
 const HowItWorks = React.lazy(() => import('../components/landing/HowItWorks'));
@@ -145,18 +146,29 @@ const Navbar = () => {
 };
 
 export default function LandingPage() {
+  const [isLeadFormOpen, setIsLeadFormOpen] = useState(false);
+
+  const handleOpenLeadForm = () => {
+    setIsLeadFormOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-[#050505] text-slate-50 selection:bg-brand-500/30 font-sans overflow-x-hidden">
       <Navbar />
       <main className="relative z-10">
-        <Hero />
+        <Hero onOpenLeadForm={handleOpenLeadForm} />
         <LazySection><HowItWorks /></LazySection>
         <LazySection><Features /></LazySection>
         <LazySection><Proof /></LazySection>
-        <LazySection><Pricing /></LazySection>
+        <LazySection><Pricing onOpenLeadForm={handleOpenLeadForm} /></LazySection>
         <LazySection><UseCases /></LazySection>
         <LazySection><Safety /></LazySection>
       </main>
+      
+      <LeadFormModal 
+        isOpen={isLeadFormOpen} 
+        onClose={() => setIsLeadFormOpen(false)} 
+      />
     </div>
   );
 }

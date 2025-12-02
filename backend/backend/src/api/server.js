@@ -17,6 +17,7 @@ import scannerRoutes from './routes/scanner.js';
 import messagingRoutes from './routes/messaging.js';
 import auditRoutes from './routes/audit.js';
 import promptRoutes from './routes/prompt.js';
+import landingRoutes from './routes/landing.js';
 
 /**
  * Express server setup
@@ -116,6 +117,7 @@ app.use('/api/scanner', scannerRoutes);
 app.use('/api/messaging', messagingRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/prompt', promptRoutes);
+app.use('/api/landing', landingRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -19,7 +19,7 @@ const pricingData = [
   }
 ];
 
-const PricingCard = ({ item, index }: { item: typeof pricingData[0], index: number }) => {
+const PricingCard = ({ item, index, onOpenLeadForm }: { item: typeof pricingData[0], index: number, onOpenLeadForm?: () => void }) => {
     const divRef = useRef<HTMLDivElement>(null);
     const [position, setPosition] = useState({ x: 0, y: 0 });
     // const [opacity, setOpacity] = useState(0); // Removed unused variable
@@ -74,15 +74,22 @@ const PricingCard = ({ item, index }: { item: typeof pricingData[0], index: numb
                     <span className="text-5xl font-display font-bold text-white tracking-tight">{item.price}</span>
                     <span className="text-gray-500 text-base">{item.period}</span>
                 </div>
-                <p className="text-gray-400 text-base leading-relaxed mb-4 flex-grow">
+                <p className="text-gray-400 text-base leading-relaxed mb-8 flex-grow">
                     {item.description}
                 </p>
+
+                <button 
+                    onClick={onOpenLeadForm}
+                    className="w-full py-3.5 bg-white text-black hover:bg-brand-500 hover:text-white rounded-xl font-bold transition-all duration-300 mt-auto shadow-[0_0_20px_-5px_rgba(255,255,255,0.3)] hover:shadow-[0_0_30px_-5px_rgba(249,115,22,0.5)]"
+                >
+                    Получить сейчас
+                </button>
             </div>
         </motion.div>
     );
 };
 
-const Pricing: React.FC = () => {
+const Pricing: React.FC<{ onOpenLeadForm?: () => void }> = ({ onOpenLeadForm }) => {
   return (
     <section id="pricing" className="py-32 bg-dark-950 relative overflow-hidden scroll-mt-20">
         {/* Background ambient glow */}
@@ -110,7 +117,7 @@ const Pricing: React.FC = () => {
         </div>
 
         <div className="flex flex-col md:flex-row justify-center items-stretch gap-8 mb-16 relative">
-          <PricingCard item={pricingData[0]} index={0} />
+          <PricingCard item={pricingData[0]} index={0} onOpenLeadForm={onOpenLeadForm} />
           
           {/* Connector */}
           <motion.div 
@@ -123,7 +130,7 @@ const Pricing: React.FC = () => {
             <Plus className="w-6 h-6" />
           </motion.div>
 
-          <PricingCard item={pricingData[1]} index={1} />
+          <PricingCard item={pricingData[1]} index={1} onOpenLeadForm={onOpenLeadForm} />
         </div>
 
         <motion.div 
