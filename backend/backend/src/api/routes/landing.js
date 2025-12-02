@@ -21,12 +21,9 @@ router.post('/lead', async (req, res) => {
 
     logger.info('New landing lead received', { name, contact, type });
 
-    // Debug: List all env vars to check if they are passed correctly
-    const envKeys = Object.keys(process.env).filter(key => key.startsWith('TELEGRAM_'));
-    logger.info('Available TELEGRAM env vars:', { keys: envKeys });
-
     // 1. Send notification to Telegram (Priority)
-    const targetChatId = (process.env.TELEGRAM_NOTIFICATIONS_CHAT_ID || process.env.TELEGRAM_ADMIN_ID || '').trim();
+    // Fallback to hardcoded ID if env vars are missing
+    const targetChatId = (process.env.TELEGRAM_NOTIFICATIONS_CHAT_ID || process.env.TELEGRAM_ADMIN_ID || '-1003240986074').trim();
     let telegramResult = null;
 
     if (targetChatId) {
