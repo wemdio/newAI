@@ -12,6 +12,13 @@ interface FormData {
   contact: string;
   type: 'telegram' | 'phone'; // Kept for backward compatibility if needed, or just derived
   contactMethod: 'telegram' | 'whatsapp' | 'call';
+  utm?: {
+    source: string | null;
+    medium: string | null;
+    campaign: string | null;
+    term: string | null;
+    content: string | null;
+  };
 }
 
 const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose }) => {
@@ -22,8 +29,30 @@ const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose }) => {
     name: '',
     contact: '',
     type: 'telegram',
-    contactMethod: 'telegram'
+    contactMethod: 'telegram',
+    utm: {
+      source: null,
+      medium: null,
+      campaign: null,
+      term: null,
+      content: null
+    }
   });
+
+  // Capture UTM parameters on component mount
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setFormData(prev => ({
+      ...prev,
+      utm: {
+        source: params.get('utm_source') || null,
+        medium: params.get('utm_medium') || null,
+        campaign: params.get('utm_campaign') || null,
+        term: params.get('utm_term') || null,
+        content: params.get('utm_content') || null
+      }
+    }));
+  }, []);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
