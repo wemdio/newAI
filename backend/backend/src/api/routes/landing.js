@@ -22,8 +22,9 @@ router.post('/lead', async (req, res) => {
     logger.info('New landing lead received', { name, contact, type, contactMethod, utm, interest });
 
     // 1. Send notification to Telegram (Priority)
-    // Fallback to hardcoded ID if env vars are missing
-    const targetChatId = (process.env.TELEGRAM_NOTIFICATIONS_CHAT_ID || process.env.TELEGRAM_ADMIN_ID || '-1003240986074').trim();
+    // Try to get ID from env vars, if not found - log warning but do not use hardcoded fallback to avoid confusion
+    // You must set TELEGRAM_NOTIFICATIONS_CHAT_ID in your environment variables
+    const targetChatId = (process.env.TELEGRAM_NOTIFICATIONS_CHAT_ID || process.env.TELEGRAM_ADMIN_ID || '').trim();
     let telegramResult = null;
 
     // Map contact method to display string
@@ -44,7 +45,6 @@ router.post('/lead', async (req, res) => {
       const term = escapeMarkdown(utm.term || '-');
       
       utmString = `
-📊 *Маркетинг \\(UTM\\)*
 • *Source:* ${source}
 • *Medium:* ${medium}
 • *Campaign:* ${campaign}
