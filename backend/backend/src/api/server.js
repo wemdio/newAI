@@ -34,8 +34,8 @@ app.set('trust proxy', 1);
 // CORS configuration - MUST BE BEFORE HELMET!
 // Allow all origins for Timeweb deployment
 app.use(cors({
-  origin: true, // Allow all origins in production
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  origin: '*', // Allow ANY origin to fix CORS issues
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
   credentials: false,
   optionsSuccessStatus: 200
