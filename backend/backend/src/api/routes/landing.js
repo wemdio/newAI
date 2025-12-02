@@ -1,8 +1,15 @@
 import express from 'express';
 import amoCrmService from '../../services/amoCrm.js';
+import { sendMessage } from '../../config/telegram.js';
 import logger from '../../utils/logger.js';
 
 const router = express.Router();
+
+// Helper to escape MarkdownV2 characters
+const escapeMarkdown = (text) => {
+  if (!text) return '';
+  return text.replace(/([_*\[\]()~`>#+\-=|{}.!\\])/g, '\\$1');
+};
 
 router.post('/lead', async (req, res) => {
   try {
@@ -12,11 +19,48 @@ router.post('/lead', async (req, res) => {
       return res.status(400).json({ error: 'Name and contact are required' });
     }
 
-    // Send to AmoCRM (fire and forget or wait?)
-    // We'll wait to log the result properly, but we could make it async
-    const result = await amoCrmService.createLead({ name, contact, type });
+    logger.info('New landing lead received', { name, contact, type });
 
-    res.json({ success: true, result });
+    // 1. Send notification to Telegram (Priority)
+    const adminId = process.env.TELEGRAM_ADMIN_ID;
+    let telegramResult = null;
+
+    if (adminId) {
+      const message = `
+🚀 *Новая заявка с лендинга*
+
+👤 *Имя:* ${escapeMarkdown(name)}
+📞 *Контакт:* \`${escapeMarkdown(contact)}\`
+📱 *Тип:* ${escapeMarkdown(type === 'telegram' ? 'Telegram' : 'Телефон')}
+
+_Пожалуйста, свяжитесь с клиентом как можно скорее\\._
+      `.trim();
+
+      try {
+        telegramResult = await sendMessage(adminId, message);
+        logger.info('Lead notification sent to Telegram');
+      } catch (tgError) {
+        logger.error('Failed to send Telegram notification', { error: tgError.message });
+      }
+    } else {
+      logger.warn('TELEGRAM_ADMIN_ID not set. Skipping Telegram notification.');
+    }
+
+    // 2. Send to AmoCRM (Optional/Secondary)
+    // We don't await this to keep the UI fast, or we catch errors so it doesn't fail the request
+    let crmResult = null;
+    try {
+      crmResult = await amoCrmService.createLead({ name, contact, type });
+    } catch (crmError) {
+      logger.error('AmoCRM submission failed', { error: crmError.message });
+    }
+
+    res.json({ 
+      success: true, 
+      telegram: !!telegramResult,
+      crm: crmResult 
+    });
+
   } catch (error) {
     logger.error('Error processing landing lead', { error: error.message });
     res.status(500).json({ error: 'Internal server error' });
@@ -24,4 +68,3 @@ router.post('/lead', async (req, res) => {
 });
 
 export default router;
-
