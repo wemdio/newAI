@@ -44,7 +44,7 @@ router.post('/lead', async (req, res) => {
       const term = escapeMarkdown(utm.term || '-');
       
       utmString = `
-📊 *Маркетинг (UTM)*
+📊 *Маркетинг \\(UTM\\)*
 • *Source:* ${source}
 • *Medium:* ${medium}
 • *Campaign:* ${campaign}
