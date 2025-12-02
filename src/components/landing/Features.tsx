@@ -85,7 +85,20 @@ const SpotlightCard = ({ children, className = "", fullWidth = false }: { childr
     );
 };
 
-const Features: React.FC = () => {
+const Features: React.FC<{ onOpenLeadForm?: () => void }> = ({ onOpenLeadForm }) => {
+  const handleCtaClick = () => {
+    // Track Yandex Metrika goal
+    if ((window as any).ym) {
+      (window as any).ym(105579261, 'reachGoal', 'CLICK_FEATURES_CTA');
+    }
+    
+    if (onOpenLeadForm) {
+      onOpenLeadForm();
+    } else {
+      window.location.href = '/login';
+    }
+  };
+
   return (
     <section id="features" className="py-32 bg-[#050505] relative overflow-hidden">
       {/* Top Gradient for smooth transition */}
@@ -162,6 +175,7 @@ const Features: React.FC = () => {
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
             whileHover={{ scale: 1.02 }}
+            onClick={handleCtaClick}
             className="p-8 rounded-3xl bg-gradient-to-br from-brand-600 to-brand-700 flex flex-col justify-center items-center text-center shadow-2xl relative overflow-hidden group cursor-pointer border border-brand-500/50"
           >
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-soft-light"></div>

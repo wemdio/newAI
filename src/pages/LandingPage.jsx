@@ -158,7 +158,7 @@ export default function LandingPage() {
       <main className="relative z-10">
         <Hero onOpenLeadForm={handleOpenLeadForm} />
         <LazySection><HowItWorks /></LazySection>
-        <LazySection><Features /></LazySection>
+        <LazySection><Features onOpenLeadForm={handleOpenLeadForm} /></LazySection>
         <LazySection><Proof /></LazySection>
         <LazySection><Pricing onOpenLeadForm={handleOpenLeadForm} /></LazySection>
         <LazySection><UseCases /></LazySection>
