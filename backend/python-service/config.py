@@ -6,10 +6,14 @@ load_dotenv()
 
 # Supabase Configuration (REST API - no database password needed!)
 SUPABASE_URL = os.getenv('SUPABASE_URL')
-SUPABASE_KEY = os.getenv('SUPABASE_ANON_KEY')
+# Prefer Service Role Key (admin) if available, otherwise fallback to Anon Key
+SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY') or os.getenv('SUPABASE_ANON_KEY')
 
 if not SUPABASE_URL or not SUPABASE_KEY:
-    raise ValueError("SUPABASE_URL and SUPABASE_ANON_KEY must be set")
+    raise ValueError("SUPABASE_URL and SUPABASE_KEY (or ANNON/SERVICE_ROLE) must be set")
+
+print(f"🔧 Config: Using Supabase Key ending in ...{SUPABASE_KEY[-4:] if SUPABASE_KEY else 'None'}")
+
 
 # OpenRouter Configuration (AI Model)
 # NOTE: API key is now user-specific and loaded from database (user_config table)

@@ -207,6 +207,43 @@ class SafetyManager:
         print(f"🔒 Account {account_id} BANNED - marking as unavailable")
         await self.supabase.mark_account_banned(account_id)
     
+    async def check_and_recover_accounts(self):
+        """
+        Check for accounts that are active but unavailable for too long (stuck)
+        and automatically recover them.
+        """
+        try:
+            stuck_accounts = await self.supabase.get_stuck_accounts()
+            if not stuck_accounts:
+                return
+
+            logger.info(f"🔄 Found {len(stuck_accounts)} unavailable accounts. Checking for recovery...")
+            
+            now = datetime.now(timezone.utc)
+            recover_threshold = timedelta(minutes=30) # Auto-recover after 30 mins of silence
+
+            for account in stuck_accounts:
+                account_id = str(account['id'])
+                account_name = account.get('account_name', account_id[:8])
+                updated_at = account.get('updated_at')
+                
+                if not updated_at:
+                    continue
+                    
+                if isinstance(updated_at, str):
+                    updated_at = datetime.fromisoformat(updated_at.replace('Z', '+00:00'))
+                
+                time_since_update = now - updated_at
+                
+                if time_since_update > recover_threshold:
+                    logger.info(f"    🩹 Auto-recovering stuck account {account_name} (inactive for {time_since_update.total_seconds()/60:.1f} min)")
+                    await self.supabase.unpause_account(account_id)
+                else:
+                    logger.debug(f"    ⏳ Account {account_name} still in cool-down/pause ({time_since_update.total_seconds()/60:.1f} min)")
+                    
+        except Exception as e:
+            logger.error(f"⚠️ Error recovering accounts: {e}")
+
     async def check_and_reset_daily_counters(self):
         """
         Check if it's time to reset daily counters (call at startup and hourly)

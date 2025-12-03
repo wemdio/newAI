@@ -121,6 +121,9 @@ class AIMessagingService:
                 # Check if need to reset daily counters
                 # NOTE: Ideally this should be moved to pg_cron or separate worker as discussed
                 await self.safety.check_and_reset_daily_counters()
+
+                # Check and recover stuck accounts (auto-healing)
+                await self.safety.check_and_recover_accounts()
                 
             except Exception as e:
                 logger.error(f"❌ Error in main loop: {e}", exc_info=True)

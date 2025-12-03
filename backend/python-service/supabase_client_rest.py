@@ -1,8 +1,11 @@
 """Supabase REST API client for AI Messaging Service (no database password needed)"""
 import aiohttp
 import json
+import logging
 from datetime import datetime, timezone, timedelta
 from typing import List, Dict, Optional
+
+logger = logging.getLogger('SupabaseClient')
 
 
 class SupabaseClient:
@@ -21,7 +24,7 @@ class SupabaseClient:
     async def connect(self):
         """Initialize HTTP session"""
         self.session = aiohttp.ClientSession(headers=self.headers)
-        print("✅ Connected to Supabase (REST API)")
+        logger.info("✅ Connected to Supabase (REST API)")
     
     async def close(self):
         """Close HTTP session"""
@@ -106,8 +109,8 @@ class SupabaseClient:
             # Calculate timestamp for 24 hours ago
             twenty_four_hours_ago = (datetime.utcnow() - timedelta(hours=24)).isoformat()
             
-            print(f"🔍 Fetching uncontacted leads for user {user_id}")
-            print(f"   ⏰ From: {twenty_four_hours_ago} (last 24 hours)")
+            logger.info(f"🔍 Fetching uncontacted leads for user {user_id}")
+            logger.info(f"   ⏰ From: {twenty_four_hours_ago} (last 24 hours)")
             
             # Get uncontacted detected_leads for this user (last 24 hours only)
             url = f"{self.url}/rest/v1/detected_leads"
@@ -120,7 +123,7 @@ class SupabaseClient:
             
             async with self.session.get(url) as resp:
                 if resp.status != 200:
-                    print(f"⚠️ Failed to get uncontacted leads: {resp.status}")
+                    logger.warning(f"⚠️ Failed to get uncontacted leads: {resp.status}")
                     return []
                 
                 detected_leads = await resp.json()
@@ -158,7 +161,7 @@ class SupabaseClient:
                 return result
                 
         except Exception as e:
-            print(f"❌ Error getting uncontacted leads: {e}")
+            logger.error(f"❌ Error getting uncontacted leads: {e}")
             return []
             
     async def get_lead_details(self, lead_id: int) -> Optional[Dict]:
@@ -194,7 +197,7 @@ class SupabaseClient:
             return lead
             
         except Exception as e:
-            print(f"❌ Error getting lead details: {e}")
+            logger.error(f"❌ Error getting lead details: {e}")
             return None
     
     async def mark_lead_contacted(self, lead_id: int):
@@ -204,22 +207,43 @@ class SupabaseClient:
     # ============= ACCOUNTS =============
     
     async def get_accounts_for_user(self, user_id: str) -> List[Dict]:
-        """Get available accounts"""
-        # Build URL
+        """Get available accounts - fetches all and filters in Python for better debugging"""
+        # Build URL - Fetch ALL accounts for user to debug why they aren't being picked up
         url = f"{self.url}/rest/v1/telegram_accounts?select=*"
         url += f"&user_id=eq.{user_id}"
-        url += f"&status=eq.active"
-        url += f"&is_available=is.true"
         # Removed db-side limit check to support individual account limits
         url += f"&order=last_used_at.asc.nullsfirst"
         
         async with self.session.get(url) as resp:
             if resp.status == 200:
-                accounts = await resp.json()
-                return accounts
+                all_accounts = await resp.json()
+                
+                # Filter in Python
+                active_accounts = []
+                for acc in all_accounts:
+                    # Check status
+                    if acc.get('status') != 'active':
+                        # logger.debug(f"⚠️ Account {acc.get('account_name')} skipped: status is '{acc.get('status')}'")
+                        continue
+                        
+                    # Check availability
+                    # Allow None to be treated as available (default behavior)
+                    if acc.get('is_available') is False:
+                         logger.warning(f"⚠️ Account {acc.get('account_name')} skipped: is_available is False (paused/cooldown)")
+                         continue
+                         
+                    active_accounts.append(acc)
+                
+                if all_accounts and not active_accounts:
+                    logger.warning(f"❌ Found {len(all_accounts)} accounts for user but NONE are active/available!")
+                    # Log reasons for the first few to help debug
+                    for acc in all_accounts[:3]:
+                        logger.info(f"   - {acc.get('account_name')}: status={acc.get('status')}, is_available={acc.get('is_available')}")
+                    
+                return active_accounts
             else:
                 error_text = await resp.text()
-                print(f"❌ DEBUG: Error response: {error_text}")
+                logger.error(f"❌ DEBUG: Error response: {error_text}")
                 return []
     
     async def update_account_usage(self, account_id: str):
@@ -242,7 +266,7 @@ class SupabaseClient:
             # If last use was on a different day, reset counter
             if last_used_dt.date() < now.date():
                 messages_today = 0
-                print(f"   🔄 Reset daily counter for account {account_id} (new day)")
+                logger.info(f"   🔄 Reset daily counter for account {account_id} (new day)")
         
         # Increment counters
         messages_today = messages_today + 1
@@ -276,7 +300,7 @@ class SupabaseClient:
     
     async def mark_account_error(self, account_id: str, error_reason: str = 'Connection error'):
         """Mark account as having an error (e.g., proxy failure)"""
-        print(f"⚠️ Marking account {account_id} as error: {error_reason}")
+        logger.warning(f"⚠️ Marking account {account_id} as error: {error_reason}")
         return await self._patch('telegram_accounts', {'id': account_id}, {
             'status': 'error',
             'is_available': False,
@@ -290,6 +314,25 @@ class SupabaseClient:
             'updated_at': datetime.utcnow().isoformat()
         })
     
+    async def get_stuck_accounts(self) -> List[Dict]:
+        """Get accounts that might be stuck in unavailable state"""
+        # status='active' but is_available=false
+        url = f"{self.url}/rest/v1/telegram_accounts?select=*"
+        url += f"&status=eq.active"
+        url += f"&is_available=is.false"
+        
+        async with self.session.get(url) as resp:
+            if resp.status == 200:
+                return await resp.json()
+            return []
+
+    async def unpause_account(self, account_id: str):
+        """Unpause account (make available again)"""
+        return await self._patch('telegram_accounts', {'id': account_id}, {
+            'is_available': True,
+            'updated_at': datetime.utcnow().isoformat()
+        })
+
     async def get_accounts_needing_reconnect(self) -> List[Dict]:
         """Get accounts that need reconnection (e.g., proxy changed)"""
         url = f"{self.url}/rest/v1/telegram_accounts?select=*"
@@ -326,7 +369,7 @@ class SupabaseClient:
                     return len(data) > 0
                 return False
         except Exception as e:
-            print(f"⚠️ Error checking existing conversation: {e}")
+            logger.error(f"⚠️ Error checking existing conversation: {e}")
             return False  # On error, assume no conversation (safer to message)
     
     async def create_conversation(
