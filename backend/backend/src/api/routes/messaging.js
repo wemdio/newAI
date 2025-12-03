@@ -230,6 +230,14 @@ router.put('/accounts/:id', async (req, res) => {
     const { id } = req.params;
     const updates = req.body;
 
+    // Force reset status to active/available on manual update
+    // This allows users to fix "Error" status by just clicking Save
+    if (!updates.status || updates.status === 'error') {
+       updates.status = 'active';
+    }
+    updates.is_available = true;
+    updates.needs_reconnect = false;
+
     const supabase = getSupabase();
     const { data, error } = await supabase
       .from('telegram_accounts')
