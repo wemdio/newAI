@@ -39,7 +39,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'openai/gpt-5-mini';
+    const model = process.env.AI_MODEL || 'deepseek/deepseek-v3.2';
     
     logger.info('Making OpenRouter API call', {
       messageId: message.id,
@@ -221,7 +221,7 @@ ${JSON.stringify(messagesArray, null, 2)}
 
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'openai/gpt-5-mini';
+    const model = process.env.AI_MODEL || 'deepseek/deepseek-v3.2';
     
     // Estimate tokens
     const estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt);
