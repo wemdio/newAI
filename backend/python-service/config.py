@@ -12,7 +12,10 @@ SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_ROLE_KEY') or os.getenv('SUPABASE_ANO
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise ValueError("SUPABASE_URL and SUPABASE_KEY (or ANNON/SERVICE_ROLE) must be set")
 
+TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+
 print(f"🔧 Config: Using Supabase Key ending in ...{SUPABASE_KEY[-4:] if SUPABASE_KEY else 'None'}")
+print(f"🔧 Config: Telegram Bot Token found: {'Yes' if TELEGRAM_BOT_TOKEN else 'No'}")
 
 
 # OpenRouter Configuration (AI Model)

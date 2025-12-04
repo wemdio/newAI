@@ -4,6 +4,7 @@ import aiohttp
 import os
 from typing import Dict, List
 from datetime import datetime
+from config import TELEGRAM_BOT_TOKEN
 
 
 class LeadManager:
@@ -483,8 +484,8 @@ class LeadManager:
         try:
             print(f"   📢 Generating report for channel {channel_id}...")
             
-            # 1. Get Bot Token from environment variables
-            bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+            # 1. Get Bot Token from config
+            bot_token = TELEGRAM_BOT_TOKEN
             
             if not bot_token:
                 print(f"   ⚠️ No TELEGRAM_BOT_TOKEN in env vars - cannot post to channel")
