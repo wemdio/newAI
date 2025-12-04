@@ -58,7 +58,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
         top_p: 1, // Disable nucleus sampling for consistency
         seed: 12345, // Fixed seed for reproducibility
         response_format: { type: 'json_object' },
-        max_tokens: 500
+        max_tokens: 1000 // Increased to allow for reasoning
       });
     }, 3, 1000);
     
@@ -244,7 +244,7 @@ ${JSON.stringify(messagesArray, null, 2)}
         top_p: 1,
         seed: 12345,
         // Don't use response_format for arrays - Gemini returns plain JSON array
-        max_tokens: 2000 // Increased for batch
+        max_tokens: 4000 // Increased for batch + reasoning
       });
     }, 3, 1000);
     

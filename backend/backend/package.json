@@ -36,6 +36,7 @@
     "node-cron": "^3.0.3",
     "node-telegram-bot-api": "^0.64.0",
     "openai": "^4.24.1",
+    "p-queue": "^8.0.0",
     "winston": "^3.11.0"
   },
   "devDependencies": {
