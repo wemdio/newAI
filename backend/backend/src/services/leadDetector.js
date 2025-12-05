@@ -304,7 +304,9 @@ export const detectLeads = async (userId, userConfig, options = {}) => {
       messagesToAnalyze,
       userConfig.lead_prompt,
       userConfig.openrouter_api_key,
-      { maxConcurrent: 3 }
+      { 
+        maxConcurrent: parseInt(process.env.AI_CONCURRENCY || '20', 10) 
+      }
     );
     
     results.messagesAnalyzed = analysisResult.stats.analyzed;
