@@ -29,6 +29,8 @@ const AIMessaging = () => {
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [editingCampaign, setEditingCampaign] = useState(null);
   const [editingAccount, setEditingAccount] = useState(null); // Added for account editing
+  const [messageInput, setMessageInput] = useState(''); // For manual messaging
+  const [sending, setSending] = useState(false);
   
   const [uploading, setUploading] = useState(false);
   const [sessionString, setSessionString] = useState('');
@@ -337,6 +339,67 @@ const AIMessaging = () => {
       setShowEditAccount(false);
       setEditingAccount(null);
       loadData();
+    } catch (error) {
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!messageInput.trim()) return;
+
+    try {
+      setSending(true);
+      const userId = getUserId();
+      
+      // Send manual message
+      await axios.post(
+        `${apiUrl}/messaging/conversations/${selectedConversation.id}/send`,
+        { content: messageInput },
+        { headers: { 'x-user-id': userId } }
+      );
+
+      // Update local state
+      const newMessage = {
+        role: 'assistant',
+        content: messageInput,
+        timestamp: new Date().toISOString()
+      };
+      
+      setSelectedConversation({
+        ...selectedConversation,
+        conversation_history: [...(selectedConversation.conversation_history || []), newMessage],
+        status: 'manual' // Sending a message automatically switches to manual
+      });
+      
+      setMessageInput('');
+      
+    } catch (error) {
+      alert('Ошибка отправки: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleTakeover = async () => {
+    if (!confirm('Переключить диалог в ручной режим? AI перестанет отвечать, но вы сможете писать вручную.')) return;
+    
+    try {
+      const userId = getUserId();
+      await axios.post(
+        `${apiUrl}/messaging/conversations/${selectedConversation.id}/takeover`,
+        {},
+        { headers: { 'x-user-id': userId } }
+      );
+      
+      setSelectedConversation({
+        ...selectedConversation,
+        status: 'manual'
+      });
+      
+      // Also refresh main list
+      loadData();
+      
     } catch (error) {
       alert('Ошибка: ' + (error.response?.data?.error || error.message));
     }
@@ -1149,6 +1212,36 @@ const AIMessaging = () => {
                     <div className="message-content">{msg.content}</div>
                   </div>
                 ))}
+              </div>
+
+              {/* Manual Messaging Input */}
+              <div className="manual-input-area">
+                <form onSubmit={handleSendMessage} className="chat-form">
+                  <input
+                    type="text"
+                    value={messageInput}
+                    onChange={(e) => setMessageInput(e.target.value)}
+                    placeholder="Введите сообщение..."
+                    disabled={sending}
+                    className="chat-input"
+                  />
+                  <button type="submit" className="btn btn-primary" disabled={sending || !messageInput.trim()}>
+                    {sending ? '...' : 'Отправить'}
+                  </button>
+                </form>
+                
+                {selectedConversation.status !== 'manual' && (
+                  <div className="takeover-section">
+                    <button 
+                      type="button" 
+                      onClick={handleTakeover} 
+                      className="btn btn-small btn-warning takeover-btn"
+                      title="Остановить AI и переключить в ручной режим"
+                    >
+                      ✋ Взять в работу (Остановить AI)
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

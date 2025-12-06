@@ -948,3 +948,42 @@
     grid-template-columns: 1fr 1fr;
   }
 }
+
+/* Manual Messaging Area */
+.manual-input-area {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #222;
+}
+
+.chat-form {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.chat-input {
+  flex: 1;
+  padding: 10px;
+  background: #0a0a0a;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 13px;
+}
+
+.chat-input:focus {
+  border-color: #555;
+  outline: none;
+}
+
+.takeover-btn {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.takeover-section {
+  margin-top: 12px;
+  border-top: 1px solid #1a1a1a;
+  padding-top: 12px;
+}
