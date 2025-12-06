@@ -167,6 +167,14 @@ export default function LandingPage() {
         <LazySection><Safety /></LazySection>
       </main>
       
+      <footer className="relative z-10 py-8 bg-[#050505] border-t border-white/5 text-center">
+         <div className="max-w-7xl mx-auto px-4">
+           <p className="text-gray-600 text-sm">
+             © 2025 Telegram Lead Scanner. All rights reserved.
+           </p>
+         </div>
+      </footer>
+
       <LeadFormModal 
         isOpen={isLeadFormOpen} 
         onClose={() => setIsLeadFormOpen(false)}
