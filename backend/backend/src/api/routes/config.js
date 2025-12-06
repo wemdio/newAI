@@ -56,10 +56,10 @@ router.post('/', authenticateUser, asyncHandler(async (req, res) => {
   } = req.body;
   
   // Validate required fields
-  if (!lead_prompt || !telegram_channel_id) {
+  if (!lead_prompt) {
     return res.status(400).json({
       error: 'Validation error',
-      message: 'lead_prompt and telegram_channel_id are required'
+      message: 'lead_prompt is required'
     });
   }
   

@@ -71,10 +71,7 @@ function Configuration() {
       setError('Критерии определения лидов обязательны');
       return;
     }
-    if (!config.telegramChannelId.trim()) {
-      setError('ID Telegram канала обязателен');
-      return;
-    }
+    // Telegram Channel ID is now optional
     
     // API key is required only for new configs OR if user wants to update it
     const isUpdatingApiKey = config.openrouterApiKey.trim().length > 0;
@@ -227,12 +224,11 @@ function Configuration() {
             type="text"
             value={config.telegramChannelId}
             onChange={(e) => setConfig({ ...config, telegramChannelId: e.target.value })}
-            placeholder="@your_channel или -100123456789"
+            placeholder="@your_channel или -100123456789 (необязательно)"
             className="form-input"
-            required
           />
           <small className="form-hint">
-            Формат: @имя_канала или числовой ID (например, -100123456789)
+            Оставьте пустым, если хотите просматривать лиды только в приложении
           </small>
         </div>
 

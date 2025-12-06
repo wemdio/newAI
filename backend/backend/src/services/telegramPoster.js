@@ -111,6 +111,20 @@ export const checkDuplicateLead = async (lead, userId, daysBack = 7) => {
  */
 export const postLeadToChannel = async (lead, analysis, channelId, botToken = null, userId = null, messageSuggestion = null) => {
   try {
+    // Check if channel ID is provided
+    if (!channelId || !channelId.trim()) {
+      logger.info('Skipping Telegram post - no channel configured', {
+        leadId: lead.id,
+        userId
+      });
+      return {
+        success: true, // Treated as success to avoid error logs
+        skipped: true,
+        reason: 'no_channel_configured',
+        leadId: lead.id
+      };
+    }
+
     logger.info('Posting lead to Telegram', {
       leadId: lead.id,
       channelId,
