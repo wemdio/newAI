@@ -3,6 +3,8 @@
  * Manages Telegram accounts, campaigns, conversations, and hot leads
  */
 import express from 'express';
+import path from 'path';
+import fs from 'fs/promises';
 import { getSupabase } from '../../config/database.js';
 import logger from '../../utils/logger.js';
 
