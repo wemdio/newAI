@@ -308,6 +308,11 @@ class SupabaseClient:
             return results[0]['conversation_history']
         return []
     
+    async def get_conversation(self, conversation_id: str) -> Optional[Dict]:
+        """Get conversation details including status"""
+        results = await self._get('ai_conversations', {'id': conversation_id}, select='*')
+        return results[0] if results else None
+
     async def update_conversation_status(self, conversation_id: str, status: str):
         """Update conversation status"""
         return await self._patch('ai_conversations', {'id': conversation_id}, {

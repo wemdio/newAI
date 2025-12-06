@@ -199,6 +199,23 @@ class LeadManager:
             print(f"\n📨 Received message in conversation {conversation_id}")
             
             try:
+                # Get conversation status first
+                conversation_data = await self.supabase.get_conversation(conversation_id)
+                status = conversation_data.get('status') if conversation_data else 'unknown'
+                
+                # If status is 'manual', 'stopped', or 'hot_lead', DO NOT REPLY automatically
+                if status in ['manual', 'stopped', 'hot_lead']:
+                    print(f"   🛑 Status is '{status}' - skipping AI reply")
+                    
+                    # Just add the user message to history so manager can see it
+                    new_message = event.message.text
+                    await self.supabase.add_message_to_conversation(
+                        conversation_id,
+                        'user',
+                        new_message
+                    )
+                    return
+
                 # Get conversation history
                 history = await self.supabase.get_conversation_history(conversation_id)
                 

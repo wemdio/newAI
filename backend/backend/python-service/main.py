@@ -15,6 +15,7 @@ from safety_manager import SafetyManager
 from ai_communicator import AICommunicator
 from telethon_client import TelethonManager
 from lead_manager import LeadManager
+from manual_messaging import ManualMessagingManager
 
 
 class AIMessagingService:
@@ -24,6 +25,7 @@ class AIMessagingService:
         self.supabase = None
         self.safety = None
         self.telethon = None
+        self.manual_messenger = None
         self.running = False
     
     async def start(self):
@@ -45,6 +47,7 @@ class AIMessagingService:
             # Initialize managers
             self.safety = SafetyManager(self.supabase)
             self.telethon = TelethonManager(self.supabase, self.safety)
+            self.manual_messenger = ManualMessagingManager(self.supabase, self.telethon)
             
             print("✅ All components initialized")
             print()
@@ -77,7 +80,10 @@ class AIMessagingService:
             print(f"{'='*60}\n")
             
             try:
-                # Get active campaigns
+                # 1. Process manual message queue (High Priority)
+                await self.manual_messenger.process_queue()
+                
+                # 2. Get active campaigns
                 campaigns = await self.supabase.get_active_campaigns()
                 
                 if not campaigns:

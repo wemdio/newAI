@@ -619,6 +619,120 @@ router.get('/conversations/:id', async (req, res) => {
   }
 });
 
+// ============= MANUAL MESSAGING =============
+
+/**
+ * POST /api/messaging/conversations/:id/send
+ * Send a manual message to a conversation (stops AI)
+ */
+router.post('/conversations/:id/send', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    const { id } = req.params;
+    const { content } = req.body;
+
+    if (!content) {
+      return res.status(400).json({ success: false, error: 'Message content required' });
+    }
+
+    const supabase = getSupabase();
+
+    // 1. Get conversation details to ensure it exists and belongs to user
+    const { data: conversation, error: convError } = await supabase
+      .from('ai_conversations')
+      .select(`
+        id, 
+        account_id, 
+        peer_username, 
+        status,
+        messaging_campaigns!inner(user_id)
+      `)
+      .eq('id', id)
+      .eq('messaging_campaigns.user_id', userId)
+      .single();
+
+    if (convError || !conversation) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+
+    // 2. Update status to 'manual' to stop AI
+    if (conversation.status !== 'manual' && conversation.status !== 'stopped') {
+      await supabase
+        .from('ai_conversations')
+        .update({ status: 'manual', updated_at: new Date().toISOString() })
+        .eq('id', id);
+        
+      logger.info('Switched conversation to manual mode', { userId, conversationId: id });
+    }
+
+    // 3. Add to message_queue for Python worker
+    const { data: queuedMsg, error: queueError } = await supabase
+      .from('message_queue')
+      .insert({
+        conversation_id: id,
+        account_id: conversation.account_id,
+        peer_username: conversation.peer_username,
+        content: content,
+        status: 'pending'
+      })
+      .select()
+      .single();
+
+    if (queueError) throw queueError;
+
+    logger.info('Queued manual message', { userId, conversationId: id, queueId: queuedMsg.id });
+
+    res.json({ success: true, message: 'Message queued', queueId: queuedMsg.id });
+
+  } catch (error) {
+    logger.error('Failed to send manual message', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * POST /api/messaging/conversations/:id/takeover
+ * Switch conversation to manual mode (stops AI)
+ */
+router.post('/conversations/:id/takeover', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    const { id } = req.params;
+
+    const supabase = getSupabase();
+
+    // Verify ownership
+    const { data: conversation, error: convError } = await supabase
+      .from('ai_conversations')
+      .select('messaging_campaigns!inner(user_id)')
+      .eq('id', id)
+      .eq('messaging_campaigns.user_id', userId)
+      .single();
+
+    if (convError || !conversation) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+
+    // Update status
+    const { error } = await supabase
+      .from('ai_conversations')
+      .update({ 
+        status: 'manual',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (error) throw error;
+
+    logger.info('Manual takeover activated', { userId, conversationId: id });
+    res.json({ success: true, message: 'Switched to manual mode' });
+
+  } catch (error) {
+    logger.error('Failed to takeover conversation', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ============= HOT LEADS =============
 
 /**
