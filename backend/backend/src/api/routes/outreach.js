@@ -1,8 +1,9 @@
 import express from 'express';
-import { supabase } from '../../config/database.js';
+import { getSupabase } from '../../config/database.js';
 import logger from '../../utils/logger.js';
 
 const router = express.Router();
+const supabase = getSupabase();
 
 // Middleware to get user_id from request (assuming auth middleware sets req.user)
 // But since I don't see explicit auth middleware in server.js globally, I should check how other routes do it.
