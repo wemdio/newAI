@@ -18,6 +18,7 @@ import messagingRoutes from './routes/messaging.js';
 import auditRoutes from './routes/audit.js';
 import promptRoutes from './routes/prompt.js';
 import landingRoutes from './routes/landing.js';
+import outreachRoutes from './routes/outreach.js';
 
 /**
  * Express server setup
@@ -118,6 +119,7 @@ app.use('/api/messaging', messagingRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/prompt', promptRoutes);
 app.use('/api/landing', landingRoutes);
+app.use('/api/outreach', outreachRoutes);
 
 // 404 handler
 app.use((req, res) => {

@@ -548,55 +548,55 @@ export const analyzeBatch = async (messages, userCriteria, apiKey, options = {})
       
       // Add task to queue
       tasks.push(async () => {
-        try {
-          // Single API call for all messages in chunk
-          const chunkResults = await analyzeMessageBatch(chunk, userCriteria, apiKey);
+      try {
+        // Single API call for all messages in chunk
+        const chunkResults = await analyzeMessageBatch(chunk, userCriteria, apiKey);
+        
+        // Process results
+        for (let j = 0; j < chunk.length; j++) {
+          const message = chunk[j];
+          const result = chunkResults[j];
           
-          // Process results
-          for (let j = 0; j < chunk.length; j++) {
-            const message = chunk[j];
-            const result = chunkResults[j];
+          if (result) {
+            results.analyzed.push(result);
+            results.stats.analyzed++;
+            results.stats.totalCost += result.metadata.cost;
+            results.stats.totalTokens += result.metadata.tokens.total;
             
-            if (result) {
-              results.analyzed.push(result);
-              results.stats.analyzed++;
-              results.stats.totalCost += result.metadata.cost;
-              results.stats.totalTokens += result.metadata.tokens.total;
-              
-              if (result.isMatch) {
-                results.matches.push({
-                  message,
-                  analysis: result
-                });
-                results.stats.matches++;
-              }
-            } else {
-              results.failed.push({
+            if (result.isMatch) {
+              results.matches.push({
                 message,
-                error: 'Null result from batch API'
+                analysis: result
               });
-              results.stats.failed++;
+              results.stats.matches++;
             }
-          }
-        } catch (error) {
-          logger.error('Batch API call failed for chunk', {
-            chunkSize: chunk.length,
-            error: error.message
-          });
-          
-          // Mark all messages in chunk as failed
-          for (const message of chunk) {
+          } else {
             results.failed.push({
               message,
-              error: error.message
+              error: 'Null result from batch API'
             });
             results.stats.failed++;
           }
-          
-          if (stopOnError) {
-            throw error;
-          }
         }
+      } catch (error) {
+        logger.error('Batch API call failed for chunk', {
+          chunkSize: chunk.length,
+          error: error.message
+        });
+        
+        // Mark all messages in chunk as failed
+        for (const message of chunk) {
+          results.failed.push({
+            message,
+            error: error.message
+          });
+          results.stats.failed++;
+        }
+        
+        if (stopOnError) {
+          throw error;
+        }
+      }
       });
     }
 
@@ -607,38 +607,38 @@ export const analyzeBatch = async (messages, userCriteria, apiKey, options = {})
     // OLD: Process messages individually
     // Also using queue for consistency
     const tasks = messages.map(message => async () => {
-      try {
-        const result = await analyzeMessage(message, userCriteria, apiKey);
-        
-        results.analyzed.push(result);
-        results.stats.analyzed++;
-        results.stats.totalCost += result.metadata.cost;
-        results.stats.totalTokens += result.metadata.tokens.total;
-        
-        if (result.isMatch) {
-          results.matches.push({
+        try {
+          const result = await analyzeMessage(message, userCriteria, apiKey);
+          
+          results.analyzed.push(result);
+          results.stats.analyzed++;
+          results.stats.totalCost += result.metadata.cost;
+          results.stats.totalTokens += result.metadata.tokens.total;
+          
+          if (result.isMatch) {
+            results.matches.push({
+              message,
+              analysis: result
+            });
+            results.stats.matches++;
+          }
+          
+          return result;
+        } catch (error) {
+          results.failed.push({
             message,
-            analysis: result
+            error: error.message
           });
-          results.stats.matches++;
+          results.stats.failed++;
+          
+          if (stopOnError) {
+            throw error;
+          }
+          
+          return null;
         }
-        
-        return result;
-      } catch (error) {
-        results.failed.push({
-          message,
-          error: error.message
-        });
-        results.stats.failed++;
-        
-        if (stopOnError) {
-          throw error;
-        }
-        
-        return null;
-      }
-    });
-
+      });
+      
     await queue.addAll(tasks);
   }
   

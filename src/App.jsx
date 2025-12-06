@@ -12,6 +12,7 @@ const Leads = React.lazy(() => import('./pages/Leads'));
 const Login = React.lazy(() => import('./pages/Login'));
 const AIMessaging = React.lazy(() => import('./pages/AIMessaging'));
 const LeadAudit = React.lazy(() => import('./pages/LeadAudit'));
+const Outreach = React.lazy(() => import('./pages/Outreach'));
 const LandingPage = React.lazy(() => import('./pages/LandingPage'));
 
 const LoadingSpinner = () => (
@@ -43,6 +44,13 @@ const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setAc
                 onClick={() => setActiveTab('messaging')}
               >
                 AI Рассылки
+              </Link>
+              <Link 
+                to="/outreach" 
+                className={`nav-link ${activeTab === 'outreach' ? 'active' : ''}`}
+                onClick={() => setActiveTab('outreach')}
+              >
+                TG Outreach
               </Link>
               <Link 
                 to="/config" 
@@ -80,6 +88,13 @@ const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setAc
             AI Рассылки
           </Link>
           <Link 
+            to="/outreach" 
+            className={`telegram-nav-item ${activeTab === 'outreach' ? 'active' : ''}`}
+            onClick={() => setActiveTab('outreach')}
+          >
+            TG Outreach
+          </Link>
+          <Link 
             to="/config" 
             className={`telegram-nav-item ${activeTab === 'config' ? 'active' : ''}`}
             onClick={() => setActiveTab('config')}
@@ -97,6 +112,7 @@ const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setAc
               <Route path="/leads" element={<Leads />} />
               <Route path="/config" element={<Configuration />} />
               <Route path="/messaging" element={<AIMessaging />} />
+              <Route path="/outreach" element={<Outreach />} />
               <Route path="/audit" element={<LeadAudit />} />
               <Route path="*" element={<Navigate to="/leads" replace />} />
             </Routes>
