@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import './Outreach.css'; // We'll create this next
-import { API_URL } from '../services/api';
+import api from '../services/api';
+import './Outreach.css';
 
 const Outreach = () => {
   const [activeTab, setActiveTab] = useState('accounts');
@@ -35,26 +34,12 @@ const Outreach = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const headers = {
-        'Content-Type': 'application/json',
-        'x-user-id': (await import('../supabaseClient')).default.auth.getUser().then(u => u.data.user.id)
-      };
-
-      // Note: In real app, use proper auth token. 
-      // For now, we assume Supabase auth header or x-user-id is handled.
-      // Let's use the existing axios instance or fetch if possible.
-      // But I see 'axios' import.
-      // I need to attach user ID.
-      
-      const user = (await import('../supabaseClient')).default.auth.getSession().then(s => s.data.session?.user);
-      if (!user) return;
-
       if (activeTab === 'accounts') {
-        const res = await axios.get(`${API_URL}/outreach/accounts`, { headers: { 'x-user-id': user.id } });
-        setAccounts(res.data);
+        const res = await api.get('/outreach/accounts');
+        setAccounts(res.data.accounts || []);
       } else if (activeTab === 'campaigns') {
-        const res = await axios.get(`${API_URL}/outreach/campaigns`, { headers: { 'x-user-id': user.id } });
-        setCampaigns(res.data);
+        const res = await api.get('/outreach/campaigns');
+        setCampaigns(res.data.campaigns || []);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -66,28 +51,26 @@ const Outreach = () => {
   const handleAddAccount = async (e) => {
     e.preventDefault();
     try {
-      const user = (await import('../supabaseClient')).default.auth.getSession().then(s => s.data.session?.user);
-      await axios.post(`${API_URL}/outreach/accounts`, accountForm, { headers: { 'x-user-id': user.id } });
+      await api.post('/outreach/accounts', accountForm);
       setAccountForm({ phone_number: '', api_id: '', api_hash: '', session_string: '', proxy_url: '' });
       fetchData();
       alert('Account added!');
     } catch (error) {
-      alert('Error adding account: ' + error.message);
+      alert('Error adding account: ' + (error.response?.data?.error || error.message));
     }
   };
 
   const handleCreateCampaign = async (e) => {
     e.preventDefault();
     try {
-      const user = (await import('../supabaseClient')).default.auth.getSession().then(s => s.data.session?.user);
       // Account selection logic needed (checkboxes). For now, use ALL accounts or none.
       // Let's just pass empty array for now.
-      await axios.post(`${API_URL}/outreach/campaigns`, campaignForm, { headers: { 'x-user-id': user.id } });
+      await api.post('/outreach/campaigns', { ...campaignForm, account_ids: [] });
       setCampaignForm({ name: '', message_template: '' });
       fetchData();
       alert('Campaign created!');
     } catch (error) {
-      alert('Error creating campaign: ' + error.message);
+      alert('Error creating campaign: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -102,12 +85,11 @@ const Outreach = () => {
     });
 
     try {
-      const user = (await import('../supabaseClient')).default.auth.getSession().then(s => s.data.session?.user);
-      await axios.post(`${API_URL}/outreach/campaigns/${selectedCampaignId}/targets`, { targets }, { headers: { 'x-user-id': user.id } });
+      await api.post(`/outreach/campaigns/${selectedCampaignId}/targets`, { targets });
       setTargetText('');
       alert(`Uploaded ${targets.length} targets!`);
     } catch (error) {
-      alert('Error uploading targets: ' + error.message);
+      alert('Error uploading targets: ' + (error.response?.data?.error || error.message));
     }
   };
 
@@ -115,76 +97,82 @@ const Outreach = () => {
     <div className="outreach-page">
       <h1>TG Outreach Manager</h1>
       
-      <div className="tabs">
-        <button className={activeTab === 'accounts' ? 'active' : ''} onClick={() => setActiveTab('accounts')}>Accounts</button>
-        <button className={activeTab === 'campaigns' ? 'active' : ''} onClick={() => setActiveTab('campaigns')}>Campaigns</button>
+      <div className="outreach-tabs">
+        <button className={`tab-button ${activeTab === 'accounts' ? 'active' : ''}`} onClick={() => setActiveTab('accounts')}>Accounts</button>
+        <button className={`tab-button ${activeTab === 'campaigns' ? 'active' : ''}`} onClick={() => setActiveTab('campaigns')}>Campaigns</button>
       </div>
 
       <div className="tab-content">
         {activeTab === 'accounts' && (
-          <div className="accounts-section">
-            <form onSubmit={handleAddAccount} className="add-form">
-              <h3>Add Account</h3>
-              <input placeholder="Phone (+1...)" value={accountForm.phone_number} onChange={e => setAccountForm({...accountForm, phone_number: e.target.value})} required />
-              <input placeholder="API ID" value={accountForm.api_id} onChange={e => setAccountForm({...accountForm, api_id: e.target.value})} />
-              <input placeholder="API Hash" value={accountForm.api_hash} onChange={e => setAccountForm({...accountForm, api_hash: e.target.value})} />
-              <input placeholder="Session String" value={accountForm.session_string} onChange={e => setAccountForm({...accountForm, session_string: e.target.value})} required />
-              <input placeholder="Proxy (socks5://user:pass@host:port)" value={accountForm.proxy_url} onChange={e => setAccountForm({...accountForm, proxy_url: e.target.value})} />
-              <button type="submit">Add Account</button>
+          <section className="outreach-section">
+            <div className="section-header">
+                <h2>Manage Accounts</h2>
+            </div>
+            <form onSubmit={handleAddAccount} className="add-form" style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px', maxWidth: '500px' }}>
+              <input placeholder="Phone (+1...)" value={accountForm.phone_number} onChange={e => setAccountForm({...accountForm, phone_number: e.target.value})} required className="chat-input" />
+              <input placeholder="API ID" value={accountForm.api_id} onChange={e => setAccountForm({...accountForm, api_id: e.target.value})} className="chat-input" />
+              <input placeholder="API Hash" value={accountForm.api_hash} onChange={e => setAccountForm({...accountForm, api_hash: e.target.value})} className="chat-input" />
+              <input placeholder="Session String" value={accountForm.session_string} onChange={e => setAccountForm({...accountForm, session_string: e.target.value})} required className="chat-input" />
+              <input placeholder="Proxy (socks5://user:pass@host:port)" value={accountForm.proxy_url} onChange={e => setAccountForm({...accountForm, proxy_url: e.target.value})} className="chat-input" />
+              <button type="submit" className="btn btn-primary">Add Account</button>
             </form>
 
-            <div className="list">
-              <h3>Your Accounts</h3>
+            <div className="accounts-list">
               {loading ? <p>Loading...</p> : (
-                <ul>
-                  {accounts.map(acc => (
-                    <li key={acc.id}>{acc.phone_number} - {acc.status}</li>
-                  ))}
-                </ul>
+                accounts.length === 0 ? <p>No accounts found.</p> :
+                accounts.map(acc => (
+                  <div key={acc.id} className="account-card">
+                    <h3>{acc.phone_number}</h3>
+                    <p>Status: {acc.status}</p>
+                    {acc.proxy_url && <p>Proxy: {acc.proxy_url}</p>}
+                  </div>
+                ))
               )}
             </div>
-          </div>
+          </section>
         )}
 
         {activeTab === 'campaigns' && (
-          <div className="campaigns-section">
-            <form onSubmit={handleCreateCampaign} className="add-form">
-              <h3>Create Campaign</h3>
-              <input placeholder="Campaign Name" value={campaignForm.name} onChange={e => setCampaignForm({...campaignForm, name: e.target.value})} required />
-              <textarea placeholder="Message Template" value={campaignForm.message_template} onChange={e => setCampaignForm({...campaignForm, message_template: e.target.value})} required />
-              <button type="submit">Create Campaign</button>
+          <section className="outreach-section">
+             <div className="section-header">
+                <h2>Manage Campaigns</h2>
+            </div>
+            <form onSubmit={handleCreateCampaign} className="add-form" style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px', maxWidth: '500px' }}>
+              <input placeholder="Campaign Name" value={campaignForm.name} onChange={e => setCampaignForm({...campaignForm, name: e.target.value})} required className="chat-input" />
+              <textarea placeholder="Message Template" value={campaignForm.message_template} onChange={e => setCampaignForm({...campaignForm, message_template: e.target.value})} required className="chat-input" style={{ minHeight: '100px' }} />
+              <button type="submit" className="btn btn-primary">Create Campaign</button>
             </form>
 
-            <div className="list">
-              <h3>Your Campaigns</h3>
+            <div className="campaigns-list">
               {loading ? <p>Loading...</p> : (
-                <ul>
-                  {campaigns.map(camp => (
-                    <li key={camp.id} className="campaign-item">
-                      <strong>{camp.name}</strong> ({camp.status})
-                      <br/>
-                      <small>{camp.message_template}</small>
-                      
-                      <div className="target-upload">
-                        <h4>Add Targets</h4>
-                        <textarea 
-                          placeholder="@username1&#10;@username2" 
-                          onChange={e => {
-                            setTargetText(e.target.value);
-                            setSelectedCampaignId(camp.id);
-                          }}
-                          disabled={selectedCampaignId !== null && selectedCampaignId !== camp.id && targetText !== ''}
-                        />
-                        {selectedCampaignId === camp.id && targetText && (
-                          <button onClick={handleUploadTargets}>Upload Targets</button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                campaigns.length === 0 ? <p>No campaigns found.</p> :
+                campaigns.map(camp => (
+                  <div key={camp.id} className="campaign-card">
+                    <h3>{camp.name} ({camp.status})</h3>
+                    <p className="template-preview">{camp.message_template}</p>
+                    
+                    <div className="target-upload" style={{ marginTop: '15px', borderTop: '1px solid #333', paddingTop: '10px' }}>
+                      <h4>Add Targets</h4>
+                      <textarea 
+                        placeholder="@username1&#10;@username2" 
+                        className="chat-input"
+                        style={{ width: '100%', minHeight: '60px', marginBottom: '10px' }}
+                        onChange={e => {
+                          setTargetText(e.target.value);
+                          setSelectedCampaignId(camp.id);
+                        }}
+                        disabled={selectedCampaignId !== null && selectedCampaignId !== camp.id && targetText !== ''}
+                        value={selectedCampaignId === camp.id ? targetText : ''}
+                      />
+                      {selectedCampaignId === camp.id && targetText && (
+                        <button onClick={handleUploadTargets} className="btn btn-secondary">Upload Targets</button>
+                      )}
+                    </div>
+                  </div>
+                ))
               )}
             </div>
-          </div>
+          </section>
         )}
       </div>
     </div>
@@ -192,4 +180,3 @@ const Outreach = () => {
 };
 
 export default Outreach;
-
