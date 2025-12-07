@@ -41,10 +41,11 @@ const Outreach = () => {
     try {
       if (activeTab === 'accounts') {
         const res = await api.get('/outreach/accounts');
-        setAccounts(res.data.accounts || []);
+        // Backend returns array directly for list endpoints
+        setAccounts(Array.isArray(res.data) ? res.data : (res.data.accounts || []));
       } else if (activeTab === 'campaigns') {
         const res = await api.get('/outreach/campaigns');
-        setCampaigns(res.data.campaigns || []);
+        setCampaigns(Array.isArray(res.data) ? res.data : (res.data.campaigns || []));
       }
     } catch (error) {
       console.error('Error fetching data:', error);
