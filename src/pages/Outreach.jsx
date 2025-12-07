@@ -6,6 +6,7 @@ const Outreach = () => {
   const [activeTab, setActiveTab] = useState('accounts');
   const [accounts, setAccounts] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
+  const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
 
   // Accounts Form State
@@ -46,6 +47,9 @@ const Outreach = () => {
       } else if (activeTab === 'campaigns') {
         const res = await api.get('/outreach/campaigns');
         setCampaigns(Array.isArray(res.data) ? res.data : (res.data.campaigns || []));
+      } else if (activeTab === 'logs') {
+        const res = await api.get('/outreach/logs');
+        setLogs(Array.isArray(res.data) ? res.data : []);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -142,6 +146,7 @@ const Outreach = () => {
       <div className="outreach-tabs">
         <button className={`tab-button ${activeTab === 'accounts' ? 'active' : ''}`} onClick={() => setActiveTab('accounts')}>Accounts</button>
         <button className={`tab-button ${activeTab === 'campaigns' ? 'active' : ''}`} onClick={() => setActiveTab('campaigns')}>Campaigns</button>
+        <button className={`tab-button ${activeTab === 'logs' ? 'active' : ''}`} onClick={() => setActiveTab('logs')}>Logs</button>
       </div>
 
       <div className="tab-content">
@@ -232,6 +237,32 @@ const Outreach = () => {
                   </div>
                 ))
               )}
+            </div>
+          </section>
+        )}
+
+        {activeTab === 'logs' && (
+          <section className="outreach-section">
+            <div className="section-header">
+                <h2>Worker Logs</h2>
+                <button className="btn btn-secondary" onClick={fetchData}>Refresh</button>
+            </div>
+            <div className="logs-container" style={{ maxHeight: '500px', overflowY: 'auto', background: '#111', padding: '15px', borderRadius: '8px', border: '1px solid #333' }}>
+                {logs.length === 0 ? <p style={{color: '#666'}}>No logs found.</p> : logs.map(log => (
+                    <div key={log.id} style={{ marginBottom: '8px', fontFamily: 'monospace', fontSize: '13px', borderBottom: '1px solid #222', paddingBottom: '4px' }}>
+                        <span style={{ color: '#666', marginRight: '10px' }}>{new Date(log.created_at).toLocaleTimeString()}</span>
+                        <span style={{ 
+                            color: log.level === 'ERROR' ? '#ff4444' : 
+                                   log.level === 'SUCCESS' ? '#7dd17d' : 
+                                   log.level === 'INFO' ? '#4fc3f7' : '#ddd',
+                            fontWeight: 'bold',
+                            marginRight: '10px',
+                            display: 'inline-block',
+                            minWidth: '60px'
+                        }}>[{log.level}]</span>
+                        <span style={{ color: '#ccc' }}>{log.message}</span>
+                    </div>
+                ))}
             </div>
           </section>
         )}

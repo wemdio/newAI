@@ -315,5 +315,28 @@ router.post('/campaigns/:id/targets', async (req, res) => {
   }
 });
 
+// ================= LOGS =================
+
+// GET /api/outreach/logs
+router.get('/logs', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const { data, error } = await supabase
+      .from('outreach_logs')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    logger.error('Error fetching logs', { error: error.message });
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
 export default router;
 
