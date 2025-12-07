@@ -1,97 +1,205 @@
 .outreach-page {
-  padding: 20px;
-  color: var(--text-primary);
+    padding: 20px;
+    max-width: 1200px;
+    margin: 0 auto;
+    color: #e0e0e0;
 }
 
-.tabs {
-  display: flex;
-  gap: 10px;
-  margin-bottom: 20px;
+.outreach-page h1 {
+    font-size: 24px;
+    color: #fff;
+    margin-bottom: 25px;
 }
 
-.tabs button {
-  padding: 10px 20px;
-  border: none;
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  border-radius: 8px;
+.outreach-tabs {
+    display: flex;
+    margin-bottom: 25px;
+    border-bottom: 1px solid #333;
 }
 
-.tabs button.active {
-  background: var(--accent-color);
-  color: white;
+.tab-button {
+    background: none;
+    border: none;
+    padding: 12px 25px;
+    cursor: pointer;
+    font-size: 16px;
+    color: #888;
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+    font-weight: 500;
 }
 
+.tab-button:hover {
+    color: #ddd;
+}
+
+.tab-button.active {
+    color: #7dd17d; /* Matches the green accent */
+    border-bottom-color: #7dd17d;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.section-header h2 {
+    font-size: 20px;
+    color: #fff;
+    margin: 0;
+}
+
+/* Forms */
 .add-form {
-  background: var(--bg-secondary);
-  padding: 20px;
-  border-radius: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-bottom: 20px;
-  max-width: 500px;
+    background: #1e1e1e; /* Slightly lighter than page bg */
+    border: 1px solid #333;
+    padding: 20px;
+    border-radius: 10px;
 }
 
-.add-form input, .add-form textarea {
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-  background: var(--bg-primary);
-  color: var(--text-primary);
+.add-form h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: #ddd;
+    font-size: 16px;
 }
 
-.add-form button {
-  padding: 10px;
-  background: var(--accent-color);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
+.chat-input {
+    width: 100%;
+    padding: 12px;
+    background: #2a2a2a;
+    border: 1px solid #444;
+    border-radius: 6px;
+    color: #fff;
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+    box-sizing: border-box; /* Fix input overflow */
 }
 
-.list ul {
-  list-style: none;
-  padding: 0;
+.chat-input:focus {
+    border-color: #7dd17d;
 }
 
-.list li {
-  background: var(--bg-secondary);
-  padding: 15px;
-  margin-bottom: 10px;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
+/* Lists */
+.accounts-list, .campaigns-list {
+    display: grid;
+    gap: 15px;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    margin-top: 20px;
 }
 
-.campaign-item {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.account-card, .campaign-card {
+    background: #1e1e1e;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 15px;
+    transition: transform 0.2s, border-color 0.2s;
 }
 
-.target-upload {
-  margin-top: 10px;
-  padding-top: 10px;
-  border-top: 1px solid var(--border-color);
+.account-card:hover, .campaign-card:hover {
+    border-color: #555;
+    transform: translateY(-2px);
 }
 
-.target-upload textarea {
-  width: 100%;
-  height: 80px;
-  margin-bottom: 5px;
-  background: var(--bg-primary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
+.account-card h3, .campaign-card h3 {
+    margin: 0 0 10px 0;
+    color: #7dd17d;
+    font-size: 18px;
 }
 
-.target-upload button {
-  background: var(--success-color, #28a745);
-  color: white;
-  border: none;
-  padding: 5px 10px;
-  border-radius: 4px;
-  cursor: pointer;
+.account-card p {
+    margin: 5px 0;
+    color: #aaa;
+    font-size: 14px;
 }
 
+.template-preview {
+    background: #111;
+    padding: 10px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 13px;
+    color: #ccc;
+    margin: 10px 0;
+    white-space: pre-wrap;
+}
+
+/* Buttons */
+.btn {
+    padding: 10px 16px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: background-color 0.2s;
+}
+
+.btn-primary {
+    background: #7dd17d;
+    color: #1a1a1a;
+}
+
+.btn-primary:hover {
+    background: #6cb26c;
+}
+
+.btn-primary:disabled {
+    background: #4a664a;
+    cursor: not-allowed;
+}
+
+.btn-secondary {
+    background: #333;
+    color: #e0e0e0;
+}
+
+.btn-secondary:hover {
+    background: #444;
+}
+
+/* Modal */
+.modal-overlay {
+    position: fixed; /* Fixed position is crucial for overlays */
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(0, 0, 0, 0.75); /* Darker backdrop */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000; /* Ensure it's on top */
+    backdrop-filter: blur(3px); /* Nice blur effect */
+}
+
+.modal {
+    background: #1e1e1e;
+    border: 1px solid #444;
+    padding: 30px;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+.modal h2 {
+    margin-top: 0;
+    color: #fff;
+    margin-bottom: 10px;
+}
+
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
