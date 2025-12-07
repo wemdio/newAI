@@ -6,7 +6,7 @@ import base64
 import os
 import string
 import sys
-import python_socks
+import socks
 from urllib.parse import urlparse
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -57,23 +57,25 @@ def parse_proxy(proxy_url):
         if parsed.scheme not in ['socks5', 'http', 'https']:
             return None
 
-        # Determine proxy type using python_socks constants
+        # Determine proxy type using PySocks constants
         if parsed.scheme == 'socks5':
-            p_type = python_socks.ProxyType.SOCKS5
-        elif parsed.scheme == 'http' or parsed.scheme == 'https':
-            p_type = python_socks.ProxyType.HTTP
+            p_type = socks.SOCKS5
         else:
-            return None
+            p_type = socks.HTTP
             
         # RETURN A TUPLE OF 5 ELEMENTS: (type, host, port, user, pass)
-        # This fixes "too many values to unpack (expected 5)"
-        return (
+        # Explicitly checking values
+        proxy_tuple = (
             p_type,
             parsed.hostname,
-            parsed.port,
+            int(parsed.port),
             parsed.username,
             parsed.password
         )
+        # Log (hide password)
+        logger.info(f"Parsed proxy: ({p_type}, {parsed.hostname}, {parsed.port}, {parsed.username}, ***)")
+        return proxy_tuple
+
     except Exception as e:
         logger.error(f"Proxy parse error: {e}")
         return None
@@ -94,10 +96,11 @@ async def convert_session_file(session_blob_b64, api_id, api_hash, phone, proxy_
         
         # Connect
         try:
-            # Note: Telethon handles the proxy tuple correctly if it matches expected signature
+            logger.info(f"Connecting with proxy: {bool(proxy)}")
             client = TelegramClient(temp_name, int(api_id), api_hash, proxy=proxy)
             await client.connect()
         except Exception as e:
+             logger.error(f"Client connect exception: {e}")
              return None, f"Connect error: {e}"
         
         if not await client.is_user_authorized():
