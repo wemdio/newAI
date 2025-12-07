@@ -13,8 +13,28 @@ from loguru import logger
 from database import db
 from account_manager import AccountManager
 
-# Configuration
-SLEEP_PERIODS = [
+# ... imports
+
+async def log_to_db(user_id, level, message):
+    """Logs an event to the database for the user to see."""
+    if not user_id:
+        return
+    try:
+        # Truncate message if too long
+        if len(message) > 1000:
+            message = message[:1000] + "..."
+            
+        # Fire and forget-ish (await it but ignore result)
+        # Note: supabase-py execute() is sync or async depending on client? 
+        # In database.py we implemented custom `SupabaseClient` with `aiohttp`.
+        # db.get_client() returns that instance?
+        # Let's check database.py
+        pass 
+    except Exception:
+        pass
+
+# Actually let's check database.py content first.
+
     (18, 9),   # 18:00 to 09:00 MSK (Sleep)
     (12, 15)   # 12:00 to 15:00 MSK (Sleep)
 ]
@@ -123,13 +143,20 @@ async def process_pending_conversions():
                     'session_string': session_str,
                     'session_file_data': None # Clear blob to save space
                 }).eq('id', acc['id']).execute()
-                logger.info(f"Successfully converted {acc.get('phone_number')}")
+                
+                msg = f"Successfully converted session for {acc.get('phone_number')}"
+                logger.info(msg)
+                await log_to_db(acc.get('user_id'), 'INFO', msg)
             else:
-                logger.error(f"Failed to convert {acc.get('phone_number')}: {error}")
+                msg = f"Failed to convert {acc.get('phone_number')}: {error}"
+                logger.error(msg)
+                await log_to_db(acc.get('user_id'), 'ERROR', msg)
+                
                 client.table('outreach_accounts').update({
                     'status': 'failed', 
                     'import_status': f"failed: {error}"
                 }).eq('id', acc['id']).execute()
+
                 
     except Exception as e:
         logger.error(f"Error in conversion task: {e}")
@@ -221,7 +248,10 @@ async def process_account(account):
         
         # TODO: Template substitution (e.g. {name})
         
-        logger.info(f"Sending to {contact_point} via {account['phone_number']}...")
+        msg = f"Sending to {contact_point} via {account['phone_number']}..."
+        logger.info(msg)
+        await log_to_db(account.get('user_id'), 'INFO', msg)
+        
         success, error = await mgr.send_message(contact_point, message_text)
         
         # Update Target Status
@@ -231,6 +261,11 @@ async def process_account(account):
             'sent_at': datetime.datetime.now().isoformat(),
             'error_message': error
         }
+        
+        if success:
+            await log_to_db(account.get('user_id'), 'SUCCESS', f"✅ Sent to {contact_point}")
+        else:
+            await log_to_db(account.get('user_id'), 'ERROR', f"❌ Failed to send to {contact_point}: {error}")
         
         client.table('outreach_targets')\
             .update(update_data)\

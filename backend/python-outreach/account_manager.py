@@ -2,7 +2,7 @@ import asyncio
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 from loguru import logger
-import socks
+import python_socks
 from urllib.parse import urlparse
 
 class AccountManager:
@@ -21,8 +21,19 @@ class AccountManager:
         
         try:
             parsed = urlparse(self.proxy_url)
-            scheme = socks.SOCKS5 if parsed.scheme == 'socks5' else socks.HTTP
-            return (scheme, parsed.hostname, parsed.port, True, parsed.username, parsed.password)
+            if parsed.scheme not in ['socks5', 'http', 'https']:
+                return None
+
+            p_type = python_socks.ProxyType.SOCKS5 if parsed.scheme == 'socks5' else python_socks.ProxyType.HTTP
+            
+            return {
+                'proxy_type': p_type,
+                'addr': parsed.hostname,
+                'port': parsed.port,
+                'username': parsed.username,
+                'password': parsed.password,
+                'rdns': True
+            }
         except Exception as e:
             logger.error(f"Failed to parse proxy {self.proxy_url}: {e}")
             return None
