@@ -29,7 +29,7 @@ const Outreach = () => {
 
   // Import State
   const [showImportModal, setShowImportModal] = useState(false);
-  const [importFile, setImportFile] = useState(null);
+  const [importFiles, setImportFiles] = useState([]);
   const [defaultProxy, setDefaultProxy] = useState('');
 
   useEffect(() => {
@@ -55,10 +55,12 @@ const Outreach = () => {
 
   const handleImport = async (e) => {
     e.preventDefault();
-    if (!importFile) return;
+    if (importFiles.length === 0) return;
 
     const formData = new FormData();
-    formData.append('file', importFile);
+    for (let i = 0; i < importFiles.length; i++) {
+        formData.append('files', importFiles[i]);
+    }
     formData.append('default_proxy', defaultProxy);
 
     try {
@@ -68,7 +70,7 @@ const Outreach = () => {
       });
       alert(res.data.message);
       setShowImportModal(false);
-      setImportFile(null);
+      setImportFiles([]);
       setDefaultProxy('');
       fetchData();
     } catch (error) {
@@ -216,18 +218,22 @@ const Outreach = () => {
           <div className="modal" onClick={e => e.stopPropagation()}>
             <h2>Import Accounts (ZIP)</h2>
             <p style={{ color: '#aaa', fontSize: '14px', marginBottom: '15px' }}>
-              Upload a ZIP file containing pairs of .session and .json files.
+              Upload ZIP file(s) containing pairs of .session and .json files.
             </p>
             <form onSubmit={handleImport}>
               <div style={{ marginBottom: '15px' }}>
-                <label style={{ display: 'block', marginBottom: '5px' }}>ZIP File:</label>
+                <label style={{ display: 'block', marginBottom: '5px' }}>ZIP File(s):</label>
                 <input 
                   type="file" 
                   accept=".zip" 
-                  onChange={e => setImportFile(e.target.files[0])} 
+                  multiple
+                  onChange={e => setImportFiles(e.target.files)} 
                   required 
                   className="chat-input"
                 />
+                <small style={{ color: '#888', display: 'block', marginTop: '5px' }}>
+                    {importFiles.length > 0 ? `${importFiles.length} file(s) selected` : ''}
+                </small>
               </div>
               <div style={{ marginBottom: '15px' }}>
                 <label style={{ display: 'block', marginBottom: '5px' }}>Default Proxy (Optional):</label>

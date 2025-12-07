@@ -65,100 +65,98 @@ router.post('/accounts', async (req, res) => {
 });
 
 // POST /api/outreach/accounts/import
-router.post('/accounts/import', upload.single('file'), async (req, res) => {
+router.post('/accounts/import', upload.array('files'), async (req, res) => {
   const userId = req.headers['x-user-id'];
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No files uploaded' });
 
   const defaultProxy = req.body.default_proxy;
+  const accountsToInsert = [];
+  let skippedCount = 0;
 
   try {
-    const zip = new AdmZip(req.file.buffer);
-    const zipEntries = zip.getEntries();
-    
-    const accountsToInsert = [];
-    let skippedCount = 0;
-    
-    // Index files by name
-    const jsonFiles = {};
-    const sessionFiles = {};
-
-    zipEntries.forEach(entry => {
-      if (entry.isDirectory) return;
-      // Use just the filename, ignore folders
-      const name = entry.name; 
-      if (name.endsWith('.json')) {
-         jsonFiles[name] = entry;
-      } else if (name.endsWith('.session')) {
-         sessionFiles[name] = entry;
-      }
-    });
-
-    // Iterate through JSON files
-    for (const [jsonName, jsonEntry] of Object.entries(jsonFiles)) {
-       try {
-         const content = jsonEntry.getData().toString('utf8');
-         const data = JSON.parse(content);
-         
-         // Find matching session (assuming same filename base)
-         const baseName = jsonName.replace('.json', '');
-         const sessionName = baseName + '.session';
-         
-         if (sessionFiles[sessionName]) {
-            const sessionEntry = sessionFiles[sessionName];
-            const sessionBuffer = sessionEntry.getData();
+    // Iterate over all uploaded ZIP files
+    for (const file of req.files) {
+        try {
+            const zip = new AdmZip(file.buffer);
+            const zipEntries = zip.getEntries();
             
-            // Extract proxy from JSON format "type:ip:port:user:pass" if exists
-            let proxyUrl = defaultProxy || null;
-            if (data.proxy && typeof data.proxy === 'string') {
-                // Convert format type:ip:port:user:pass to standard URL if possible
-                // E.g. socks5:1.2.3.4:1080:user:pass -> socks5://user:pass@1.2.3.4:1080
-                const parts = data.proxy.split(':');
-                if (parts.length >= 4) {
-                    const protocol = parts[0];
-                    const ip = parts[1];
-                    const port = parts[2];
-                    const user = parts[3];
-                    const pass = parts[4] || '';
-                    proxyUrl = `${protocol}://${user}:${pass}@${ip}:${port}`;
-                } else {
-                    // Try to assume it's a valid URL or leave as is
-                     proxyUrl = data.proxy;
-                }
-            }
+            // Index files by name
+            const jsonFiles = {};
+            const sessionFiles = {};
 
-            // Fallback to default
-            if (!proxyUrl && defaultProxy) {
-                proxyUrl = defaultProxy;
-            }
-
-            // Strictly enforce proxy
-            if (!proxyUrl) {
-                logger.warn(`Skipping import for ${baseName}: No proxy found in JSON and no default provided.`);
-                skippedCount++;
-                continue;
-            }
-
-            accountsToInsert.push({
-               user_id: userId,
-               phone_number: data.phone || baseName, 
-               api_id: data.app_id || data.api_id,
-               api_hash: data.app_hash || data.api_hash,
-               proxy_url: proxyUrl,
-               session_file_data: sessionBuffer.toString('base64'),
-               session_string: '', // Will be filled by worker
-               status: 'pending_conversion',
-               import_status: 'pending_conversion'
+            zipEntries.forEach(entry => {
+              if (entry.isDirectory) return;
+              const name = entry.name; 
+              if (name.endsWith('.json')) {
+                 jsonFiles[name] = entry;
+              } else if (name.endsWith('.session')) {
+                 sessionFiles[name] = entry;
+              }
             });
-         }
-       } catch (e) {
-         logger.warn(`Failed to parse JSON ${jsonName}: ${e.message}`);
-       }
+
+            // Process pairs
+            for (const [jsonName, jsonEntry] of Object.entries(jsonFiles)) {
+               try {
+                 const content = jsonEntry.getData().toString('utf8');
+                 const data = JSON.parse(content);
+                 
+                 const baseName = jsonName.replace('.json', '');
+                 const sessionName = baseName + '.session';
+                 
+                 if (sessionFiles[sessionName]) {
+                    const sessionEntry = sessionFiles[sessionName];
+                    const sessionBuffer = sessionEntry.getData();
+                    
+                    let proxyUrl = defaultProxy || null;
+                    if (data.proxy && typeof data.proxy === 'string') {
+                         const parts = data.proxy.split(':');
+                         if (parts.length >= 4) {
+                             const protocol = parts[0];
+                             const ip = parts[1];
+                             const port = parts[2];
+                             const user = parts[3];
+                             const pass = parts[4] || '';
+                             proxyUrl = `${protocol}://${user}:${pass}@${ip}:${port}`;
+                         } else {
+                              proxyUrl = data.proxy;
+                         }
+                    }
+
+                    if (!proxyUrl && defaultProxy) {
+                        proxyUrl = defaultProxy;
+                    }
+
+                    if (!proxyUrl) {
+                        logger.warn(`Skipping import for ${baseName}: No proxy found.`);
+                        skippedCount++;
+                        continue;
+                    }
+
+                    accountsToInsert.push({
+                       user_id: userId,
+                       phone_number: data.phone || baseName, 
+                       api_id: data.app_id || data.api_id,
+                       api_hash: data.app_hash || data.api_hash,
+                       proxy_url: proxyUrl,
+                       session_file_data: sessionBuffer.toString('base64'),
+                       session_string: '', 
+                       status: 'pending_conversion',
+                       import_status: 'pending_conversion'
+                    });
+                 }
+               } catch (e) {
+                 logger.warn(`Failed to parse JSON ${jsonName}: ${e.message}`);
+               }
+            }
+        } catch (fileError) {
+            logger.error(`Error processing zip file ${file.originalname}: ${fileError.message}`);
+        }
     }
 
     if (accountsToInsert.length === 0) {
-       return res.status(400).json({ error: `No valid accounts found. Skipped ${skippedCount} accounts due to missing proxy.` });
+       return res.status(400).json({ error: `No valid accounts found in uploaded files. Skipped ${skippedCount} accounts due to missing proxy.` });
     }
 
     const { data, error } = await supabase
@@ -171,7 +169,7 @@ router.post('/accounts/import', upload.single('file'), async (req, res) => {
     res.json({ 
         count: data.length, 
         skipped: skippedCount,
-        message: `Imported ${data.length} accounts. Skipped ${skippedCount} (missing proxy). Conversion started.` 
+        message: `Imported ${data.length} accounts from ${req.files.length} file(s). Skipped ${skippedCount} (missing proxy). Conversion started.` 
     });
 
   } catch (error) {
