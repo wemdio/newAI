@@ -17,6 +17,7 @@ from telethon.crypto import AuthKey
 from loguru import logger
 from database import db
 from account_manager import AccountManager
+from ai_handler import AIHandler
 
 # Configure Logging with [OutreachWorker] prefix
 logger.remove()
@@ -285,84 +286,226 @@ async def get_next_target(campaign_id):
         return target
     return None
 
+async def process_incoming_messages(account, mgr):
+    """Checks for new messages and handles auto-replies."""
+    logger.info(f"Checking inbox for {account['phone_number']}...")
+    try:
+        unread_msgs = await mgr.get_unread_messages()
+        if not unread_msgs:
+            return
+
+        client = db.get_client()
+        user_id = account['user_id']
+        ai = AIHandler(user_id)
+        
+        # Group messages by username to handle multiple messages from same user
+        msgs_by_user = {}
+        for msg in unread_msgs:
+            uname = msg.get('username')
+            if uname:
+                if uname not in msgs_by_user:
+                    msgs_by_user[uname] = []
+                msgs_by_user[uname].append(msg)
+        
+        for username, user_msgs in msgs_by_user.items():
+            # Sort oldest to newest for correct insertion order
+            user_msgs.sort(key=lambda x: x['date'])
+            
+            # Get latest msg for name info
+            latest_msg = user_msgs[-1]
+
+            # Find or Create Chat
+            # Try to find existing chat
+            chat_resp = client.table('outreach_chats')\
+                .select('*')\
+                .eq('account_id', account['id'])\
+                .eq('target_username', username)\
+                .execute()
+                
+            chat = chat_resp.data[0] if chat_resp.data else None
+            
+            if not chat:
+                # Create a new chat entry
+                chat_data = {
+                    'user_id': user_id,
+                    'account_id': account['id'],
+                    'target_username': username,
+                    'target_name': latest_msg.get('name'),
+                    'status': 'active',
+                    'last_message_at': datetime.datetime.now().isoformat(),
+                    'unread_count': len(user_msgs)
+                }
+                chat_insert = client.table('outreach_chats').insert(chat_data).select().execute()
+                chat = chat_insert.data[0] if chat_insert.data else None
+            else:
+                 new_count = (chat.get('unread_count') or 0) + len(user_msgs)
+                 client.table('outreach_chats').update({
+                     'last_message_at': datetime.datetime.now().isoformat(),
+                     'unread_count': new_count
+                 }).eq('id', chat['id']).execute()
+
+            if not chat:
+                logger.error(f"Failed to get/create chat for {username}")
+                continue
+
+            # Save All Messages
+            for msg in user_msgs:
+                client.table('outreach_messages').insert({
+                    'chat_id': chat['id'],
+                    'sender': 'them',
+                    'content': msg['content'],
+                    'created_at': msg['date'].isoformat() if msg['date'] else datetime.datetime.now().isoformat(),
+                    'is_read': False
+                }).execute()
+                
+                log_msg = f"📩 New message from @{username}: {msg['content'][:50]}..."
+                logger.info(log_msg)
+                await log_to_db(user_id, 'INFO', log_msg)
+
+            # Auto-Reply Logic (Run once per batch)
+            # Check if auto-reply is enabled for this campaign
+            campaign_id = chat.get('campaign_id')
+            auto_reply = False
+            
+            if campaign_id:
+                camp_resp = client.table('outreach_campaigns').select('auto_reply_enabled').eq('id', campaign_id).execute()
+                if camp_resp.data and camp_resp.data[0].get('auto_reply_enabled'):
+                    auto_reply = True
+
+            if auto_reply:
+                # Fetch history
+                history_resp = client.table('outreach_messages')\
+                    .select('*')\
+                    .eq('chat_id', chat['id'])\
+                    .order('created_at', desc=False)\
+                    .execute()
+                
+                history = history_resp.data or []
+                
+                # Generate Response
+                logger.info(f"Generating AI response for @{username}...")
+                response_text = await ai.generate_response(history)
+                
+                if response_text:
+                    # Send
+                    await asyncio.sleep(random.uniform(5, 10)) # Thinking time
+                    success, err = await mgr.send_message(username, response_text)
+                    
+                    if success:
+                        # Save AI Message
+                        client.table('outreach_messages').insert({
+                            'chat_id': chat['id'],
+                            'sender': 'me',
+                            'content': response_text,
+                            'created_at': datetime.datetime.now().isoformat()
+                        }).execute()
+                        
+                        log_ai = f"🤖 AI replied to @{username}: {response_text[:50]}..."
+                        logger.info(log_ai)
+                        await log_to_db(user_id, 'SUCCESS', log_ai)
+                    else:
+                        logger.error(f"Failed to send AI response: {err}")
+                else:
+                    logger.warning("AI returned empty response")
+
+    except Exception as e:
+        logger.error(f"Error processing inbox: {e}")
+        logger.error(traceback.format_exc())
+
 async def process_account(account):
     """Processes a single account's outreach tasks."""
     account_id = account['id']
-    
-    # 1. Get campaigns assigned to this account
-    # We need to find campaigns where this account_id is in the 'account_ids' array.
-    client = db.get_client()
-    
-    # Postgres array contains check: account_ids @> {uuid}
-    # Supabase-js: .cs('account_ids', [account_id])
-    campaigns_resp = client.table('outreach_campaigns')\
-        .select('*')\
-        .eq('status', 'active')\
-        .cs('account_ids', [account_id])\
-        .execute()
-        
-    campaigns = campaigns_resp.data
-    if not campaigns:
-        logger.info(f"No active campaigns for account {account.get('phone_number')}")
-        return
-
-    # 2. Check Daily Limit (TODO: Implement real counter in DB)
-    # For now, we assume we can send 1 message per cycle per account to be safe and slow.
-    
-    # 3. Pick a campaign (Randomly or First)
-    campaign = random.choice(campaigns)
-    
-    # 4. Get Target
-    target = await get_next_target(campaign['id'])
-    if not target:
-        logger.info(f"No pending targets for campaign {campaign['name']}")
-        return
-
-    # 5. Connect and Send
     mgr = AccountManager(account)
-    if await mgr.connect():
-        # Human-like delay before action
-        await asyncio.sleep(random.uniform(2, 5))
+    
+    # Connect once for both tasks
+    if not await mgr.connect():
+        logger.error(f"Failed to connect account {account['phone_number']}")
+        return
+
+    try:
+        # 1. Process Incoming Messages
+        await process_incoming_messages(account, mgr)
         
-        contact_point = target.get('username') or target.get('phone')
-        message_text = campaign['message_template']
+        # 2. Outreach (Send New Messages)
+        client = db.get_client()
         
-        # TODO: Template substitution (e.g. {name})
-        
-        msg = f"Sending to {contact_point} via {account['phone_number']}..."
-        logger.info(msg)
-        await log_to_db(account.get('user_id'), 'INFO', msg)
-        
-        success, error = await mgr.send_message(contact_point, message_text)
-        
-        # Update Target Status
-        status = 'sent' if success else 'failed'
-        update_data = {
-            'status': status,
-            'sent_at': datetime.datetime.now().isoformat(),
-            'error_message': error
-        }
-        
-        if success:
-            await log_to_db(account.get('user_id'), 'SUCCESS', f"✅ Sent to {contact_point}")
-        else:
-            await log_to_db(account.get('user_id'), 'ERROR', f"❌ Failed to send to {contact_point}: {error}")
-        
-        client.table('outreach_targets')\
-            .update(update_data)\
-            .eq('id', target['id'])\
+        # Get campaigns
+        campaigns_resp = client.table('outreach_campaigns')\
+            .select('*')\
+            .eq('status', 'active')\
+            .cs('account_ids', [account_id])\
             .execute()
             
-        # Stay online a bit
-        await asyncio.sleep(random.uniform(5, 10))
+        campaigns = campaigns_resp.data
+        if campaigns:
+            # Pick a campaign
+            campaign = random.choice(campaigns)
+            
+            # Get Target
+            target = await get_next_target(campaign['id'])
+            if target:
+                await asyncio.sleep(random.uniform(2, 5))
+                
+                contact_point = target.get('username') or target.get('phone')
+                message_text = campaign['message_template']
+                
+                msg = f"Sending to {contact_point} via {account['phone_number']}..."
+                logger.info(msg)
+                await log_to_db(account.get('user_id'), 'INFO', msg)
+                
+                success, error = await mgr.send_message(contact_point, message_text)
+                
+                # Update Target Status
+                status = 'sent' if success else 'failed'
+                update_data = {
+                    'status': status,
+                    'sent_at': datetime.datetime.now().isoformat(),
+                    'error_message': error
+                }
+                
+                client.table('outreach_targets')\
+                    .update(update_data)\
+                    .eq('id', target['id'])\
+                    .execute()
+
+                if success:
+                    await log_to_db(account.get('user_id'), 'SUCCESS', f"✅ Sent to {contact_point}")
+                    
+                    # Create Chat Entry
+                    chat_data = {
+                        'user_id': account['user_id'],
+                        'account_id': account['id'],
+                        'campaign_id': campaign['id'],
+                        'target_username': contact_point.replace('@', '').strip(), # Normalize
+                        'target_name': target.get('name') or contact_point,
+                        'status': 'active',
+                        'last_message_at': datetime.datetime.now().isoformat()
+                    }
+                    
+                    # Upsert chat (in case it exists)
+                    chat_insert = client.table('outreach_chats').upsert(chat_data, on_conflict='account_id, target_username').select().execute()
+                    
+                    # Save Initial Message
+                    if chat_insert.data:
+                        chat_id = chat_insert.data[0]['id']
+                        client.table('outreach_messages').insert({
+                            'chat_id': chat_id,
+                            'sender': 'me',
+                            'content': message_text,
+                            'created_at': datetime.datetime.now().isoformat()
+                        }).execute()
+
+                else:
+                    await log_to_db(account.get('user_id'), 'ERROR', f"❌ Failed to send to {contact_point}: {error}")
+                
+                # Stay online a bit
+                await asyncio.sleep(random.uniform(5, 10))
+
+    except Exception as e:
+        logger.error(f"Error in process_account loop: {e}")
+        logger.error(traceback.format_exc())
+    finally:
         await mgr.disconnect()
-    else:
-        # Connection failed - revert target to pending? or failed?
-        # Let's mark as failed for now to avoid infinite loops on bad targets
-        client.table('outreach_targets')\
-            .update({'status': 'failed', 'error_message': 'Account connection failed'})\
-            .eq('id', target['id'])\
-            .execute()
 
 async def run_worker():
     logger.info("Starting Outreach Worker...")

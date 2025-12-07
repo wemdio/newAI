@@ -21,7 +21,8 @@ const Outreach = () => {
   // Campaign Form State
   const [campaignForm, setCampaignForm] = useState({
     name: '',
-    message_template: ''
+    message_template: '',
+    auto_reply_enabled: false
   });
 
   // Targets Upload
@@ -206,6 +207,18 @@ const Outreach = () => {
             <form onSubmit={handleCreateCampaign} className="add-form" style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px', maxWidth: '500px' }}>
               <input placeholder="Campaign Name" value={campaignForm.name} onChange={e => setCampaignForm({...campaignForm, name: e.target.value})} required className="chat-input" />
               <textarea placeholder="Message Template" value={campaignForm.message_template} onChange={e => setCampaignForm({...campaignForm, message_template: e.target.value})} required className="chat-input" style={{ minHeight: '100px' }} />
+              
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '5px 0' }}>
+                <input 
+                    type="checkbox" 
+                    id="auto_reply"
+                    checked={campaignForm.auto_reply_enabled}
+                    onChange={e => setCampaignForm({...campaignForm, auto_reply_enabled: e.target.checked})}
+                    style={{ width: 'auto' }}
+                />
+                <label htmlFor="auto_reply" style={{ color: '#ccc', cursor: 'pointer' }}>Enable AI Auto-Reply</label>
+              </div>
+
               <button type="submit" className="btn btn-primary">Create Campaign</button>
             </form>
 

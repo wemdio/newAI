@@ -245,7 +245,7 @@ router.post('/campaigns', async (req, res) => {
   const userId = req.headers['x-user-id'];
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { name, message_template, account_ids } = req.body;
+  const { name, message_template, account_ids, auto_reply_enabled } = req.body;
 
   try {
     const { data, error } = await supabase
@@ -255,6 +255,7 @@ router.post('/campaigns', async (req, res) => {
         name,
         message_template,
         account_ids: account_ids || [],
+        auto_reply_enabled: !!auto_reply_enabled,
         status: 'draft'
       }])
       .select();

@@ -106,3 +106,38 @@ class AccountManager:
             error_msg = str(e)
             logger.error(f"Failed to send to {target}: {error_msg}")
             return False, error_msg
+
+    async def get_unread_messages(self, limit_dialogs=20):
+        """Checks for new unread messages in dialogs."""
+        if not self.client:
+            return []
+
+        unread_messages = []
+        try:
+            me = await self.client.get_me()
+            async for dialog in self.client.iter_dialogs(limit=limit_dialogs):
+                if dialog.unread_count > 0:
+                    # Get unread messages from this dialog
+                    async for message in self.client.iter_messages(dialog.entity, limit=dialog.unread_count):
+                         if message.sender_id != me.id: # Only incoming
+                            # Resolve sender username
+                            sender = await message.get_sender()
+                            username = getattr(sender, 'username', None)
+                            name = f"{getattr(sender, 'first_name', '')} {getattr(sender, 'last_name', '')}".strip()
+                            
+                            unread_messages.append({
+                                'dialog_id': dialog.id, # Telegram Chat ID
+                                'username': username,
+                                'name': name,
+                                'content': message.text,
+                                'date': message.date,
+                                'message_id': message.id
+                            })
+                    
+                    # Mark as read
+                    await self.client.send_read_acknowledge(dialog.entity)
+                    
+        except Exception as e:
+            logger.error(f"Error checking messages: {e}")
+            
+        return unread_messages
