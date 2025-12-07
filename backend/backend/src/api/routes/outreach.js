@@ -78,6 +78,7 @@ router.post('/accounts/import', upload.single('file'), async (req, res) => {
     const zipEntries = zip.getEntries();
     
     const accountsToInsert = [];
+    let skippedCount = 0;
     
     // Index files by name
     const jsonFiles = {};
@@ -127,6 +128,18 @@ router.post('/accounts/import', upload.single('file'), async (req, res) => {
                 }
             }
 
+            // Fallback to default
+            if (!proxyUrl && defaultProxy) {
+                proxyUrl = defaultProxy;
+            }
+
+            // Strictly enforce proxy
+            if (!proxyUrl) {
+                logger.warn(`Skipping import for ${baseName}: No proxy found in JSON and no default provided.`);
+                skippedCount++;
+                continue;
+            }
+
             accountsToInsert.push({
                user_id: userId,
                phone_number: data.phone || baseName, 
@@ -145,7 +158,7 @@ router.post('/accounts/import', upload.single('file'), async (req, res) => {
     }
 
     if (accountsToInsert.length === 0) {
-       return res.status(400).json({ error: 'No valid json+session pairs found in zip.' });
+       return res.status(400).json({ error: `No valid accounts found. Skipped ${skippedCount} accounts due to missing proxy.` });
     }
 
     const { data, error } = await supabase
@@ -155,7 +168,11 @@ router.post('/accounts/import', upload.single('file'), async (req, res) => {
 
     if (error) throw error;
 
-    res.json({ count: data.length, message: `Imported ${data.length} accounts. Conversion started.` });
+    res.json({ 
+        count: data.length, 
+        skipped: skippedCount,
+        message: `Imported ${data.length} accounts. Skipped ${skippedCount} (missing proxy). Conversion started.` 
+    });
 
   } catch (error) {
     logger.error('Import failed', { error: error.message });
