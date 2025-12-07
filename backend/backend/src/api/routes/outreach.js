@@ -56,10 +56,36 @@ router.post('/accounts', async (req, res) => {
       }])
       .select();
 
-    if (error) throw error;
+    if (error) {
+        if (error.code === '23505') { // Unique violation
+            return res.status(409).json({ error: 'Account with this phone number already exists.' });
+        }
+        throw error;
+    }
     res.status(201).json(data[0]);
   } catch (error) {
     logger.error('Error creating outreach account', { error: error.message });
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+// DELETE /api/outreach/accounts/:id
+router.delete('/accounts/:id', async (req, res) => {
+  const userId = req.headers['x-user-id'];
+  if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+  const accountId = req.params.id;
+
+  try {
+    const { error } = await supabase
+      .from('outreach_accounts')
+      .delete()
+      .eq('id', accountId)
+      .eq('user_id', userId);
+
+    if (error) throw error;
+    res.status(200).json({ message: 'Account deleted' });
+  } catch (error) {
+    logger.error('Error deleting account', { error: error.message });
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
@@ -159,17 +185,32 @@ router.post('/accounts/import', upload.array('files'), async (req, res) => {
        return res.status(400).json({ error: `No valid accounts found in uploaded files. Skipped ${skippedCount} accounts due to missing proxy.` });
     }
 
+    // Use ignoreDuplicates (onConflict) to handle duplicates gracefully
     const { data, error } = await supabase
       .from('outreach_accounts')
       .insert(accountsToInsert)
-      .select();
+      .select(); // Note: upsert/ignoreDuplicates via Supabase JS client is explicit: .upsert(rows, { onConflict: 'user_id, phone_number', ignoreDuplicates: true })
 
-    if (error) throw error;
+    // However, standard insert with duplicate might throw. 
+    // Let's use upsert with ignoreDuplicates
+    
+    const { data: insertedData, error: insertError } = await supabase
+        .from('outreach_accounts')
+        .upsert(accountsToInsert, { onConflict: 'user_id, phone_number', ignoreDuplicates: true })
+        .select();
+
+    if (insertError) throw insertError;
+
+    // Note: 'data' might be null/empty for ignored rows depending on client version, 
+    // but usually returns the rows that were touched or all if selected.
+    
+    // If we want to count ACTUAL inserts, it's harder with ignoreDuplicates. 
+    // We can just say "Processed X accounts".
 
     res.json({ 
-        count: data.length, 
+        count: insertedData ? insertedData.length : 0, 
         skipped: skippedCount,
-        message: `Imported ${data.length} accounts from ${req.files.length} file(s). Skipped ${skippedCount} (missing proxy). Conversion started.` 
+        message: `Processed ${accountsToInsert.length} accounts from files. Skipped ${skippedCount} (missing proxy). Duplicates were ignored.` 
     });
 
   } catch (error) {

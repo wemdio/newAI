@@ -92,6 +92,16 @@ const Outreach = () => {
     }
   };
 
+  const handleDeleteAccount = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this account?')) return;
+    try {
+      await api.delete(`/outreach/accounts/${id}`);
+      setAccounts(prev => prev.filter(acc => acc.id !== id));
+    } catch (error) {
+      alert('Failed to delete: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
   const handleCreateCampaign = async (e) => {
     e.preventDefault();
     try {
@@ -159,10 +169,23 @@ const Outreach = () => {
                 accounts.length === 0 ? <p>No accounts found.</p> :
                 accounts.map(acc => (
                   <div key={acc.id} className="account-card">
-                    <h3>{acc.phone_number}</h3>
-                    <p>Status: {acc.status}</p>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
+                        <h3>{acc.phone_number}</h3>
+                        <button 
+                            className="btn" 
+                            style={{ background: '#ff4444', color: 'white', padding: '5px 10px', fontSize: '12px' }}
+                            onClick={() => handleDeleteAccount(acc.id)}
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    <p>Status: <span style={{ color: acc.status === 'active' ? '#7dd17d' : '#aaa' }}>{acc.status}</span></p>
                     <p style={{ fontSize: '12px', color: '#888' }}>Import Status: {acc.import_status || 'N/A'}</p>
-                    {acc.proxy_url && <p>Proxy: {acc.proxy_url}</p>}
+                    {acc.proxy_url && (
+                        <p style={{ fontSize: '12px', color: '#666', wordBreak: 'break-all' }}>
+                            Proxy: {acc.proxy_url}
+                        </p>
+                    )}
                   </div>
                 ))
               )}
