@@ -1,7 +1,7 @@
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 from loguru import logger
-import socks
+import python_socks
 from urllib.parse import urlparse
 
 class AccountManager:
@@ -23,16 +23,22 @@ class AccountManager:
             if parsed.scheme not in ['socks5', 'http', 'https']:
                 return None
 
-            p_type = socks.SOCKS5 if parsed.scheme == 'socks5' else socks.HTTP
-            
-            # Telethon with PySocks accepts dict
-            return {
-                'proxy_type': p_type,
-                'addr': parsed.hostname,
-                'port': parsed.port,
-                'username': parsed.username,
-                'password': parsed.password
-            }
+            # Determine proxy type using python_socks constants
+            if parsed.scheme == 'socks5':
+                p_type = python_socks.ProxyType.SOCKS5
+            elif parsed.scheme == 'http' or parsed.scheme == 'https':
+                p_type = python_socks.ProxyType.HTTP
+            else:
+                return None
+
+            # RETURN A TUPLE OF 5 ELEMENTS: (type, host, port, user, pass)
+            return (
+                p_type,
+                parsed.hostname,
+                parsed.port,
+                parsed.username,
+                parsed.password
+            )
         except Exception as e:
             logger.error(f"Failed to parse proxy {self.proxy_url}: {e}")
             return None

@@ -5,4 +5,4 @@ loguru==0.7.2
 asyncio
 aiohttp
 pytz
-PySocks
+python-socks[asyncio]

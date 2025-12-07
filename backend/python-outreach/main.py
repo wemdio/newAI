@@ -6,7 +6,7 @@ import base64
 import os
 import string
 import sys
-import socks
+import python_socks
 from urllib.parse import urlparse
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -57,16 +57,23 @@ def parse_proxy(proxy_url):
         if parsed.scheme not in ['socks5', 'http', 'https']:
             return None
 
-        p_type = socks.SOCKS5 if parsed.scheme == 'socks5' else socks.HTTP
-        
-        # Telethon with PySocks accepts dict
-        return {
-            'proxy_type': p_type,
-            'addr': parsed.hostname,
-            'port': parsed.port,
-            'username': parsed.username,
-            'password': parsed.password
-        }
+        # Determine proxy type using python_socks constants
+        if parsed.scheme == 'socks5':
+            p_type = python_socks.ProxyType.SOCKS5
+        elif parsed.scheme == 'http' or parsed.scheme == 'https':
+            p_type = python_socks.ProxyType.HTTP
+        else:
+            return None
+            
+        # RETURN A TUPLE OF 5 ELEMENTS: (type, host, port, user, pass)
+        # This fixes "too many values to unpack (expected 5)"
+        return (
+            p_type,
+            parsed.hostname,
+            parsed.port,
+            parsed.username,
+            parsed.password
+        )
     except Exception as e:
         logger.error(f"Proxy parse error: {e}")
         return None
@@ -87,6 +94,7 @@ async def convert_session_file(session_blob_b64, api_id, api_hash, phone, proxy_
         
         # Connect
         try:
+            # Note: Telethon handles the proxy tuple correctly if it matches expected signature
             client = TelegramClient(temp_name, int(api_id), api_hash, proxy=proxy)
             await client.connect()
         except Exception as e:
