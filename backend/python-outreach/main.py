@@ -5,7 +5,8 @@ import pytz
 import base64
 import os
 import string
-import socks
+import sys
+import python_socks
 from urllib.parse import urlparse
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -13,7 +14,19 @@ from loguru import logger
 from database import db
 from account_manager import AccountManager
 
-# ... imports
+# Configure Logging with [OutreachWorker] prefix
+logger.remove()
+logger.add(
+    sys.stderr,
+    format="<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | <level>{level: <8}</level> | <cyan>[OutreachWorker]</cyan> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>"
+)
+
+# Configuration
+SLEEP_PERIODS = [
+    (18, 9),   # 18:00 to 09:00 MSK (Sleep)
+    (12, 15)   # 12:00 to 15:00 MSK (Sleep)
+]
+MSK_TZ = pytz.timezone('Europe/Moscow')
 
 async def log_to_db(user_id, level, message):
     """Logs an event to the database for the user to see."""
@@ -24,21 +37,17 @@ async def log_to_db(user_id, level, message):
         if len(message) > 1000:
             message = message[:1000] + "..."
             
-        # Fire and forget-ish (await it but ignore result)
-        # Note: supabase-py execute() is sync or async depending on client? 
-        # In database.py we implemented custom `SupabaseClient` with `aiohttp`.
-        # db.get_client() returns that instance?
-        # Let's check database.py
-        pass 
-    except Exception:
-        pass
-
-# Actually let's check database.py content first.
-
-    (18, 9),   # 18:00 to 09:00 MSK (Sleep)
-    (12, 15)   # 12:00 to 15:00 MSK (Sleep)
-]
-MSK_TZ = pytz.timezone('Europe/Moscow')
+        # Fire and forget-ish
+        await asyncio.to_thread(
+            db.get_client().table('outreach_logs').insert({
+                'user_id': str(user_id),
+                'level': level,
+                'message': message
+            }).execute
+        )
+    except Exception as e:
+        # Don't let logging kill the worker, but print to stderr
+        logger.warning(f"DB Log failed: {e}")
 
 def parse_proxy(proxy_url):
     if not proxy_url:
@@ -48,7 +57,7 @@ def parse_proxy(proxy_url):
         if parsed.scheme not in ['socks5', 'http', 'https']:
             return None
 
-        p_type = socks.SOCKS5 if parsed.scheme == 'socks5' else socks.HTTP
+        p_type = python_socks.ProxyType.SOCKS5 if parsed.scheme == 'socks5' else python_socks.ProxyType.HTTP
         
         # Telethon accepts dict for proxy
         return {
@@ -328,4 +337,3 @@ async def run_worker():
 
 if __name__ == "__main__":
     asyncio.run(run_worker())
-

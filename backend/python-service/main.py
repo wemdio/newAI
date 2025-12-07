@@ -17,7 +17,7 @@ from ai_communicator import AICommunicator
 from telethon_client import TelethonManager
 from lead_manager import LeadManager
 
-logger = setup_logger('MainService')
+logger = setup_logger('LeadScanner')
 
 
 class AIMessagingService:
