@@ -1,8 +1,7 @@
-import asyncio
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 from loguru import logger
-import python_socks
+import socks
 from urllib.parse import urlparse
 
 class AccountManager:
@@ -24,8 +23,9 @@ class AccountManager:
             if parsed.scheme not in ['socks5', 'http', 'https']:
                 return None
 
-            p_type = python_socks.ProxyType.SOCKS5 if parsed.scheme == 'socks5' else python_socks.ProxyType.HTTP
+            p_type = socks.SOCKS5 if parsed.scheme == 'socks5' else socks.HTTP
             
+            # Telethon with PySocks accepts dict
             return {
                 'proxy_type': p_type,
                 'addr': parsed.hostname,
@@ -44,8 +44,6 @@ class AccountManager:
             return True # No proxy = OK (direct connection)
         
         # TODO: Implement actual proxy connectivity check (e.g. requests.get('http://google.com', proxies=...))
-        # For now, we assume it's valid if it parses correctly.
-        # The 'deply' repo checks availability. We can add a simple socket check.
         return True
 
     async def connect(self):
@@ -104,4 +102,3 @@ class AccountManager:
             error_msg = str(e)
             logger.error(f"Failed to send to {target}: {error_msg}")
             return False, error_msg
-

@@ -6,7 +6,7 @@ import base64
 import os
 import string
 import sys
-import python_socks
+import socks
 from urllib.parse import urlparse
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -57,9 +57,9 @@ def parse_proxy(proxy_url):
         if parsed.scheme not in ['socks5', 'http', 'https']:
             return None
 
-        p_type = python_socks.ProxyType.SOCKS5 if parsed.scheme == 'socks5' else python_socks.ProxyType.HTTP
+        p_type = socks.SOCKS5 if parsed.scheme == 'socks5' else socks.HTTP
         
-        # Telethon accepts dict for proxy
+        # Telethon with PySocks accepts dict
         return {
             'proxy_type': p_type,
             'addr': parsed.hostname,
