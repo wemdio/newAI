@@ -5,6 +5,8 @@ import pytz
 import base64
 import os
 import string
+import socks
+from urllib.parse import urlparse
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 from loguru import logger
@@ -18,12 +20,35 @@ SLEEP_PERIODS = [
 ]
 MSK_TZ = pytz.timezone('Europe/Moscow')
 
-async def convert_session_file(session_blob_b64, api_id, api_hash, phone):
+def parse_proxy(proxy_url):
+    if not proxy_url:
+        return None
+    try:
+        parsed = urlparse(proxy_url)
+        if parsed.scheme not in ['socks5', 'http', 'https']:
+            return None
+
+        p_type = socks.SOCKS5 if parsed.scheme == 'socks5' else socks.HTTP
+        
+        # Telethon accepts dict for proxy
+        return {
+            'proxy_type': p_type,
+            'addr': parsed.hostname,
+            'port': parsed.port,
+            'username': parsed.username,
+            'password': parsed.password,
+            'rdns': True
+        }
+    except Exception as e:
+        logger.error(f"Proxy parse error: {e}")
+        return None
+
+async def convert_session_file(session_blob_b64, api_id, api_hash, phone, proxy_url=None):
     rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
-    # Telethon uses the path exactly as given for SQLite, adding .session implicitly? 
-    # Actually TelegramClient(name) -> name.session
     temp_name = f"temp_{phone}_{rand_suffix}"
     
+    proxy = parse_proxy(proxy_url)
+
     try:
         if not session_blob_b64:
             return None, "Empty session data"
@@ -34,7 +59,7 @@ async def convert_session_file(session_blob_b64, api_id, api_hash, phone):
         
         # Connect
         try:
-            client = TelegramClient(temp_name, int(api_id), api_hash)
+            client = TelegramClient(temp_name, int(api_id), api_hash, proxy=proxy)
             await client.connect()
         except Exception as e:
              return None, f"Connect error: {e}"
@@ -87,7 +112,8 @@ async def process_pending_conversions():
                 acc.get('session_file_data'), 
                 acc.get('api_id'), 
                 acc.get('api_hash'), 
-                phone_safe
+                phone_safe,
+                acc.get('proxy_url')
             )
 
             if session_str:
