@@ -31,8 +31,7 @@ class AccountManager:
                 'addr': parsed.hostname,
                 'port': parsed.port,
                 'username': parsed.username,
-                'password': parsed.password,
-                'rdns': True
+                'password': parsed.password
             }
         except Exception as e:
             logger.error(f"Failed to parse proxy {self.proxy_url}: {e}")

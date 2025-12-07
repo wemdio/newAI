@@ -65,8 +65,7 @@ def parse_proxy(proxy_url):
             'addr': parsed.hostname,
             'port': parsed.port,
             'username': parsed.username,
-            'password': parsed.password,
-            'rdns': True
+            'password': parsed.password
         }
     except Exception as e:
         logger.error(f"Proxy parse error: {e}")
