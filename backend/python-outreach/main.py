@@ -6,7 +6,8 @@ import base64
 import os
 import string
 import sys
-import socks
+import traceback
+import python_socks
 from urllib.parse import urlparse
 from telethon import TelegramClient
 from telethon.sessions import StringSession
@@ -57,24 +58,20 @@ def parse_proxy(proxy_url):
         if parsed.scheme not in ['socks5', 'http', 'https']:
             return None
 
-        # Determine proxy type using PySocks constants
         if parsed.scheme == 'socks5':
-            p_type = socks.SOCKS5
+            p_type = python_socks.ProxyType.SOCKS5
         else:
-            p_type = socks.HTTP
+            p_type = python_socks.ProxyType.HTTP
             
-        # RETURN A TUPLE OF 5 ELEMENTS: (type, host, port, user, pass)
-        # Explicitly checking values
-        proxy_tuple = (
-            p_type,
-            parsed.hostname,
-            int(parsed.port),
-            parsed.username,
-            parsed.password
-        )
-        # Log (hide password)
-        logger.info(f"Parsed proxy: ({p_type}, {parsed.hostname}, {parsed.port}, {parsed.username}, ***)")
-        return proxy_tuple
+        # Use Dict format for python-socks
+        return {
+            'proxy_type': p_type,
+            'addr': parsed.hostname,
+            'port': parsed.port,
+            'username': parsed.username,
+            'password': parsed.password,
+            'rdns': True 
+        }
 
     except Exception as e:
         logger.error(f"Proxy parse error: {e}")
@@ -96,11 +93,12 @@ async def convert_session_file(session_blob_b64, api_id, api_hash, phone, proxy_
         
         # Connect
         try:
-            logger.info(f"Connecting with proxy: {bool(proxy)}")
+            logger.info(f"Connecting with proxy: {proxy}")
             client = TelegramClient(temp_name, int(api_id), api_hash, proxy=proxy)
             await client.connect()
         except Exception as e:
              logger.error(f"Client connect exception: {e}")
+             logger.error(traceback.format_exc()) # LOG FULL TRACEBACK
              return None, f"Connect error: {e}"
         
         if not await client.is_user_authorized():
@@ -112,6 +110,8 @@ async def convert_session_file(session_blob_b64, api_id, api_hash, phone, proxy_
         return string_session, None
         
     except Exception as e:
+        logger.error(f"General conversion error: {e}")
+        logger.error(traceback.format_exc())
         return None, str(e)
     finally:
         if os.path.exists(temp_name + '.session'):
