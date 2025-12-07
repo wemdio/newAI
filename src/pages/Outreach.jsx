@@ -27,6 +27,11 @@ const Outreach = () => {
   const [targetText, setTargetText] = useState('');
   const [selectedCampaignId, setSelectedCampaignId] = useState(null);
 
+  // Import State
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFile, setImportFile] = useState(null);
+  const [defaultProxy, setDefaultProxy] = useState('');
+
   useEffect(() => {
     fetchData();
   }, [activeTab]);
@@ -44,6 +49,30 @@ const Outreach = () => {
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleImport = async (e) => {
+    e.preventDefault();
+    if (!importFile) return;
+
+    const formData = new FormData();
+    formData.append('file', importFile);
+    formData.append('default_proxy', defaultProxy);
+
+    try {
+      setLoading(true);
+      const res = await api.post('/outreach/accounts/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      alert(res.data.message);
+      setShowImportModal(false);
+      setImportFile(null);
+      setDefaultProxy('');
+      fetchData();
+    } catch (error) {
+      alert('Import failed: ' + (error.response?.data?.error || error.message));
       setLoading(false);
     }
   };
@@ -107,8 +136,13 @@ const Outreach = () => {
           <section className="outreach-section">
             <div className="section-header">
                 <h2>Manage Accounts</h2>
+                <button className="btn btn-secondary" onClick={() => setShowImportModal(true)} style={{ marginLeft: '10px' }}>
+                  Import ZIP (Session+JSON)
+                </button>
             </div>
+            
             <form onSubmit={handleAddAccount} className="add-form" style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px', maxWidth: '500px' }}>
+              <h3>Add Single Account</h3>
               <input placeholder="Phone (+1...)" value={accountForm.phone_number} onChange={e => setAccountForm({...accountForm, phone_number: e.target.value})} required className="chat-input" />
               <input placeholder="API ID" value={accountForm.api_id} onChange={e => setAccountForm({...accountForm, api_id: e.target.value})} className="chat-input" />
               <input placeholder="API Hash" value={accountForm.api_hash} onChange={e => setAccountForm({...accountForm, api_hash: e.target.value})} className="chat-input" />
@@ -124,6 +158,7 @@ const Outreach = () => {
                   <div key={acc.id} className="account-card">
                     <h3>{acc.phone_number}</h3>
                     <p>Status: {acc.status}</p>
+                    <p style={{ fontSize: '12px', color: '#888' }}>Import Status: {acc.import_status || 'N/A'}</p>
                     {acc.proxy_url && <p>Proxy: {acc.proxy_url}</p>}
                   </div>
                 ))
@@ -175,6 +210,46 @@ const Outreach = () => {
           </section>
         )}
       </div>
+
+      {showImportModal && (
+        <div className="modal-overlay" onClick={() => setShowImportModal(false)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h2>Import Accounts (ZIP)</h2>
+            <p style={{ color: '#aaa', fontSize: '14px', marginBottom: '15px' }}>
+              Upload a ZIP file containing pairs of .session and .json files.
+            </p>
+            <form onSubmit={handleImport}>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', marginBottom: '5px' }}>ZIP File:</label>
+                <input 
+                  type="file" 
+                  accept=".zip" 
+                  onChange={e => setImportFile(e.target.files[0])} 
+                  required 
+                  className="chat-input"
+                />
+              </div>
+              <div style={{ marginBottom: '15px' }}>
+                <label style={{ display: 'block', marginBottom: '5px' }}>Default Proxy (Optional):</label>
+                <input 
+                  type="text" 
+                  placeholder="socks5://user:pass@host:port" 
+                  value={defaultProxy} 
+                  onChange={e => setDefaultProxy(e.target.value)} 
+                  className="chat-input"
+                />
+                <small style={{ color: '#666' }}>Used if proxy is missing in JSON</small>
+              </div>
+              <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setShowImportModal(false)} className="btn btn-secondary">Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={loading}>
+                  {loading ? 'Uploading...' : 'Import'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -2,6 +2,11 @@ import asyncio
 import random
 import datetime
 import pytz
+import base64
+import os
+import string
+from telethon import TelegramClient
+from telethon.sessions import StringSession
 from loguru import logger
 from database import db
 from account_manager import AccountManager
@@ -12,6 +17,96 @@ SLEEP_PERIODS = [
     (12, 15)   # 12:00 to 15:00 MSK (Sleep)
 ]
 MSK_TZ = pytz.timezone('Europe/Moscow')
+
+async def convert_session_file(session_blob_b64, api_id, api_hash, phone):
+    rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
+    # Telethon uses the path exactly as given for SQLite, adding .session implicitly? 
+    # Actually TelegramClient(name) -> name.session
+    temp_name = f"temp_{phone}_{rand_suffix}"
+    
+    try:
+        if not session_blob_b64:
+            return None, "Empty session data"
+            
+        session_data = base64.b64decode(session_blob_b64)
+        with open(temp_name + '.session', 'wb') as f:
+            f.write(session_data)
+        
+        # Connect
+        try:
+            client = TelegramClient(temp_name, int(api_id), api_hash)
+            await client.connect()
+        except Exception as e:
+             return None, f"Connect error: {e}"
+        
+        if not await client.is_user_authorized():
+            await client.disconnect()
+            return None, "Unauthorized session"
+            
+        string_session = StringSession.save(client.session)
+        await client.disconnect()
+        return string_session, None
+        
+    except Exception as e:
+        return None, str(e)
+    finally:
+        if os.path.exists(temp_name + '.session'):
+            try:
+                os.remove(temp_name + '.session')
+            except:
+                pass
+        if os.path.exists(temp_name + '.session-journal'):
+            try:
+                os.remove(temp_name + '.session-journal')
+            except:
+                pass
+
+async def process_pending_conversions():
+    """Finds accounts waiting for session conversion."""
+    try:
+        client = db.get_client()
+        # Filter for status='pending_conversion'
+        response = client.table('outreach_accounts')\
+            .select('*')\
+            .eq('status', 'pending_conversion')\
+            .execute()
+            
+        accounts = response.data
+        if not accounts:
+            return
+
+        logger.info(f"Found {len(accounts)} accounts pending conversion.")
+
+        for acc in accounts:
+            logger.info(f"Converting session for {acc.get('phone_number')}...")
+            
+            # Simple sanitization of phone for filename
+            phone_safe = ''.join(filter(str.isdigit, str(acc.get('phone_number', 'unknown'))))
+            
+            session_str, error = await convert_session_file(
+                acc.get('session_file_data'), 
+                acc.get('api_id'), 
+                acc.get('api_hash'), 
+                phone_safe
+            )
+
+            if session_str:
+                client.table('outreach_accounts').update({
+                    'status': 'active', 
+                    'import_status': 'completed',
+                    'session_string': session_str,
+                    'session_file_data': None # Clear blob to save space
+                }).eq('id', acc['id']).execute()
+                logger.info(f"Successfully converted {acc.get('phone_number')}")
+            else:
+                logger.error(f"Failed to convert {acc.get('phone_number')}: {error}")
+                client.table('outreach_accounts').update({
+                    'status': 'failed', 
+                    'import_status': f"failed: {error}"
+                }).eq('id', acc['id']).execute()
+                
+    except Exception as e:
+        logger.error(f"Error in conversion task: {e}")
 
 async def is_sleeping_time():
     now = datetime.datetime.now(MSK_TZ)
@@ -132,6 +227,9 @@ async def run_worker():
     
     while True:
         # 1. Check Schedule
+        # Always check conversions even if sleeping for outreach
+        await process_pending_conversions()
+
         if await is_sleeping_time():
             logger.info("Sleeping time (MSK). Pausing worker...")
             await asyncio.sleep(60 * 15) # Check every 15 mins
