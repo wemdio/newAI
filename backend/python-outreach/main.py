@@ -8,9 +8,12 @@ import string
 import sys
 import traceback
 import python_socks
+import sqlite3
+import struct
 from urllib.parse import urlparse
 from telethon import TelegramClient
-from telethon.sessions import StringSession
+from telethon.sessions import StringSession, MemorySession
+from telethon.crypto import AuthKey
 from loguru import logger
 from database import db
 from account_manager import AccountManager
@@ -28,6 +31,15 @@ SLEEP_PERIODS = [
     (12, 15)   # 12:00 to 15:00 MSK (Sleep)
 ]
 MSK_TZ = pytz.timezone('Europe/Moscow')
+
+# Standard Telegram DC IPs (IPv4)
+DC_IPV4 = {
+    1: '149.154.175.50',
+    2: '149.154.167.50',
+    3: '149.154.175.100',
+    4: '149.154.167.91',
+    5: '91.108.56.130'
+}
 
 async def log_to_db(user_id, level, message):
     """Logs an event to the database for the user to see."""
@@ -72,14 +84,34 @@ def parse_proxy(proxy_url):
             'password': parsed.password,
             'rdns': True 
         }
-
     except Exception as e:
         logger.error(f"Proxy parse error: {e}")
         return None
 
+def extract_pyrogram_session(path):
+    """
+    Attempts to read a Pyrogram session file (sqlite) and extract auth key.
+    Returns (dc_id, auth_key_bytes) or (None, None).
+    """
+    try:
+        conn = sqlite3.connect(path)
+        cursor = conn.cursor()
+        # Pyrogram sessions table: (dc_id, api_id, test_mode, auth_key, date, user_id, is_bot)
+        cursor.execute("SELECT dc_id, auth_key FROM sessions")
+        row = cursor.fetchone()
+        conn.close()
+        
+        if row:
+            dc_id, auth_key = row
+            return dc_id, auth_key
+    except Exception as e:
+        logger.warning(f"Failed to read as Pyrogram session: {e}")
+    return None, None
+
 async def convert_session_file(session_blob_b64, api_id, api_hash, phone, proxy_url=None):
     rand_suffix = ''.join(random.choices(string.ascii_lowercase + string.digits, k=8))
     temp_name = f"temp_{phone}_{rand_suffix}"
+    session_file_path = temp_name + '.session'
     
     proxy = parse_proxy(proxy_url)
 
@@ -88,17 +120,47 @@ async def convert_session_file(session_blob_b64, api_id, api_hash, phone, proxy_
             return None, "Empty session data"
             
         session_data = base64.b64decode(session_blob_b64)
-        with open(temp_name + '.session', 'wb') as f:
+        with open(session_file_path, 'wb') as f:
             f.write(session_data)
         
-        # Connect
+        client = None
+        
+        # 1. Try initializing as standard Telethon Session
+        try:
+            logger.info(f"Attempting to load Telethon session for {phone}...")
+            # We must use a separate try-except for initialization vs connection
+            # because init fails for Pyrogram sessions
+            client = TelegramClient(temp_name, int(api_id), api_hash, proxy=proxy)
+        except ValueError as e:
+            # This catches "too many values to unpack" which implies Pyrogram/Other format
+            logger.warning(f"Telethon init failed ({e}). Trying Pyrogram conversion...")
+            
+            dc_id, auth_key_bytes = extract_pyrogram_session(session_file_path)
+            if dc_id and auth_key_bytes:
+                logger.info(f"Detected Pyrogram session. DC: {dc_id}")
+                
+                # Create a MemorySession and populate it
+                # We need to manually construct the session state
+                session = StringSession() 
+                session._dc_id = dc_id
+                session._server_address = DC_IPV4.get(dc_id, '149.154.167.50') # Default fallback
+                session._port = 443
+                session._auth_key = AuthKey(data=auth_key_bytes)
+                
+                # Use this pre-filled session
+                client = TelegramClient(session, int(api_id), api_hash, proxy=proxy)
+            else:
+                return None, f"Invalid session format and Pyrogram conversion failed: {e}"
+        except Exception as e:
+            return None, f"Client init error: {e}"
+
+        # 2. Connect
         try:
             logger.info(f"Connecting with proxy: {proxy}")
-            client = TelegramClient(temp_name, int(api_id), api_hash, proxy=proxy)
             await client.connect()
         except Exception as e:
              logger.error(f"Client connect exception: {e}")
-             logger.error(traceback.format_exc()) # LOG FULL TRACEBACK
+             logger.error(traceback.format_exc())
              return None, f"Connect error: {e}"
         
         if not await client.is_user_authorized():
@@ -114,9 +176,9 @@ async def convert_session_file(session_blob_b64, api_id, api_hash, phone, proxy_
         logger.error(traceback.format_exc())
         return None, str(e)
     finally:
-        if os.path.exists(temp_name + '.session'):
+        if os.path.exists(session_file_path):
             try:
-                os.remove(temp_name + '.session')
+                os.remove(session_file_path)
             except:
                 pass
         if os.path.exists(temp_name + '.session-journal'):
