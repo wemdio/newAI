@@ -11,13 +11,13 @@
     margin-bottom: 25px;
 }
 
-.outreach-tabs {
+.outreach-page .outreach-tabs {
     display: flex;
     margin-bottom: 25px;
     border-bottom: 1px solid #333;
 }
 
-.tab-button {
+.outreach-page .tab-button {
     background: none;
     border: none;
     padding: 12px 25px;
@@ -29,44 +29,44 @@
     font-weight: 500;
 }
 
-.tab-button:hover {
+.outreach-page .tab-button:hover {
     color: #ddd;
 }
 
-.tab-button.active {
+.outreach-page .tab-button.active {
     color: #7dd17d; /* Matches the green accent */
     border-bottom-color: #7dd17d;
 }
 
-.section-header {
+.outreach-page .section-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
 }
 
-.section-header h2 {
+.outreach-page .section-header h2 {
     font-size: 20px;
     color: #fff;
     margin: 0;
 }
 
 /* Forms */
-.add-form {
+.outreach-page .add-form {
     background: #1e1e1e; /* Slightly lighter than page bg */
     border: 1px solid #333;
     padding: 20px;
     border-radius: 10px;
 }
 
-.add-form h3 {
+.outreach-page .add-form h3 {
     margin-top: 0;
     margin-bottom: 15px;
     color: #ddd;
     font-size: 16px;
 }
 
-.chat-input {
+.outreach-page .chat-input {
     width: 100%;
     padding: 12px;
     background: #2a2a2a;
@@ -79,19 +79,21 @@
     box-sizing: border-box; /* Fix input overflow */
 }
 
-.chat-input:focus {
+.outreach-page .chat-input:focus {
     border-color: #7dd17d;
 }
 
 /* Lists */
-.accounts-list, .campaigns-list {
+.outreach-page .accounts-list, 
+.outreach-page .campaigns-list {
     display: grid;
     gap: 15px;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     margin-top: 20px;
 }
 
-.account-card, .campaign-card {
+.outreach-page .account-card, 
+.outreach-page .campaign-card {
     background: #1e1e1e;
     border: 1px solid #333;
     border-radius: 8px;
@@ -99,24 +101,26 @@
     transition: transform 0.2s, border-color 0.2s;
 }
 
-.account-card:hover, .campaign-card:hover {
+.outreach-page .account-card:hover, 
+.outreach-page .campaign-card:hover {
     border-color: #555;
     transform: translateY(-2px);
 }
 
-.account-card h3, .campaign-card h3 {
+.outreach-page .account-card h3, 
+.outreach-page .campaign-card h3 {
     margin: 0 0 10px 0;
     color: #7dd17d;
     font-size: 18px;
 }
 
-.account-card p {
+.outreach-page .account-card p {
     margin: 5px 0;
     color: #aaa;
     font-size: 14px;
 }
 
-.template-preview {
+.outreach-page .template-preview {
     background: #111;
     padding: 10px;
     border-radius: 4px;
@@ -128,7 +132,7 @@
 }
 
 /* Buttons */
-.btn {
+.outreach-page .btn {
     padding: 10px 16px;
     border-radius: 6px;
     border: none;
@@ -138,31 +142,31 @@
     transition: background-color 0.2s;
 }
 
-.btn-primary {
+.outreach-page .btn-primary {
     background: #7dd17d;
     color: #1a1a1a;
 }
 
-.btn-primary:hover {
+.outreach-page .btn-primary:hover {
     background: #6cb26c;
 }
 
-.btn-primary:disabled {
+.outreach-page .btn-primary:disabled {
     background: #4a664a;
     cursor: not-allowed;
 }
 
-.btn-secondary {
+.outreach-page .btn-secondary {
     background: #333;
     color: #e0e0e0;
 }
 
-.btn-secondary:hover {
+.outreach-page .btn-secondary:hover {
     background: #444;
 }
 
 /* Modal */
-.modal-overlay {
+.outreach-page .modal-overlay {
     position: fixed; /* Fixed position is crucial for overlays */
     top: 0;
     left: 0;
@@ -176,7 +180,7 @@
     backdrop-filter: blur(3px); /* Nice blur effect */
 }
 
-.modal {
+.outreach-page .modal {
     background: #1e1e1e;
     border: 1px solid #444;
     padding: 30px;
@@ -187,7 +191,7 @@
     animation: modalSlideIn 0.3s ease-out;
 }
 
-.modal h2 {
+.outreach-page .modal h2 {
     margin-top: 0;
     color: #fff;
     margin-bottom: 10px;
