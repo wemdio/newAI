@@ -31,7 +31,12 @@ const addTransliterations = (text) => {
     'business': 'бизнес',
     'client': 'клиент клиенты клиентов',
     'service': 'сервис услуга услуги',
-    'target': 'таргет целевой'
+    'target': 'таргет целевой',
+    'dev': 'дев разраб программист',
+    'design': 'дизайн',
+    'crypto': 'крипта крипто',
+    'need': 'нужно надо требуется ищу',
+    'want': 'хочу желаю'
   };
   
   let expandedText = text.toLowerCase();
@@ -104,28 +109,28 @@ export const extractKeywords = (userCriteria) => {
     cutAt: cutIndex < userCriteria.length ? cutIndex : 'no cut'
   });
 
-  // Extract criteria points from the cleaned text
-  const criteria = extractCriteria(positiveCriteria);
-  
   // Extract meaningful words (longer than 3 chars, not common words)
   const commonWords = new Set([
+    // Basic English Stop Words (Pronouns, Prepositions, Conjunctions ONLY)
     'the', 'be', 'to', 'of', 'and', 'a', 'in', 'that', 'have', 'i',
     'it', 'for', 'not', 'on', 'with', 'he', 'as', 'you', 'do', 'at',
     'this', 'but', 'his', 'by', 'from', 'they', 'we', 'say', 'her', 'she',
     'or', 'an', 'will', 'my', 'one', 'all', 'would', 'there', 'their',
-    'who', 'are', 'looking', 'need', 'want', 'find', 'help', 'seeking',
-    'ask', 'asking', 'mention', 'mentioning', 'discuss', 'discussing',
-    // Russian common words
+    'who', 'are', 'people', 'someone', 'anyone', 'person', 'is', 'was', 'am',
+    
+    // Russian Stop Words (Pronouns, Prepositions ONLY)
     'это', 'быть', 'или', 'как', 'его', 'для', 'так', 'уже', 'что',
-    'можно', 'нужно', 'есть', 'был', 'была', 'были', 'буду', 'будет',
+    'можно', 'есть', 'был', 'была', 'были', 'буду', 'будет',
     'если', 'того', 'тогда', 'теперь', 'потом', 'сейчас', 'здесь', 'там',
+    'он', 'она', 'они', 'мы', 'вы', 'ты', 'я', 'и', 'в', 'на', 'с', 'по', 'к',
+    
+    // Technical/Internal words
     'score', 'лид', 'лида', 'лиды', 'горячий', 'тёплый', 'теплый'
   ]);
   
   const keywords = new Set();
   
   // Extract from CLEANED positive criteria text (with transliterations applied)
-  // FIX: Use positiveCriteria instead of userCriteria!
   const expandedCriteria = addTransliterations(positiveCriteria);
   
   const words = expandedCriteria
@@ -371,4 +376,3 @@ export default {
   preFilterMessage,
   preFilterMessages
 };
-
