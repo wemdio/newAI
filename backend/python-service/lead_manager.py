@@ -127,16 +127,27 @@ class LeadManager:
         print(f"      🎯 Confidence: {lead['confidence_score']}%")
         
         try:
-            # Get Telegram user ID first
+            # 1. Ensure connection first
+            if not await self.telethon.ensure_connected(account_id):
+                print(f"      ❌ Account disconnected and failed to reconnect - skipping lead")
+                return False
+
+            # 2. Get Telegram user ID
             user_info = await self.telethon.get_user_info(account_id, username)
             
+            # If user_info is None, it means an error occurred (e.g. connection error)
+            # We must STOP here to avoid wasting AI credits
+            if user_info is None:
+                print(f"      ❌ Failed to get user info (likely invalid username or connection error) - skipping AI generation")
+                return False
+
             # Skip if it's a channel or group
             if user_info is False:
                 print(f"      ⏭️ Skipping - @{username} is a channel/group, not a user")
                 await self.supabase.mark_lead_contacted(lead_id)
                 return True  # Not an error, just skip
             
-            telegram_user_id = user_info['id'] if user_info else 0
+            telegram_user_id = user_info['id']
             
             # Check if we already have an active conversation with this user in this campaign
             existing_conversation = await self.supabase.check_existing_conversation(

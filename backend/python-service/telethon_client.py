@@ -611,6 +611,35 @@ class TelethonManager:
             callback: Async function to call on new message
         """
         self.event_handlers[account_id] = callback
+
+    async def ensure_connected(self, account_id: str) -> bool:
+        """
+        Ensure client is connected. Attempts to reconnect if disconnected.
+        
+        Args:
+            account_id: Account ID
+            
+        Returns:
+            True if connected (or reconnected successfully), False otherwise
+        """
+        client = self.clients.get(account_id)
+        if not client:
+            return False
+            
+        if not client.is_connected():
+            print(f"⚠️ Client {account_id} disconnected, attempting to reconnect...")
+            try:
+                await client.connect()
+                if not await client.is_user_authorized():
+                    print(f"❌ Client {account_id} reconnected but not authorized")
+                    return False
+                print(f"✅ Client {account_id} reconnected successfully")
+                return True
+            except Exception as e:
+                print(f"❌ Failed to reconnect client {account_id}: {e}")
+                return False
+                
+        return True
     
     async def get_user_info(self, account_id: str, username: str) -> Optional[Dict]:
         """
