@@ -717,5 +717,95 @@ export const testAnalysis = async (userCriteria, testMessage, apiKey) => {
 export default {
   analyzeMessage,
   analyzeBatch,
-  testAnalysis
+  testAnalysis,
+  doubleCheckLead
+};
+
+/**
+ * Double check a potential lead with a stronger model (Gemini 3 Pro)
+ * @param {object} message - Original message
+ * @param {object} initialAnalysis - Result from first analysis
+ * @param {string} userCriteria - User criteria
+ * @param {string} apiKey - OpenRouter API key
+ * @returns {object} Verification result
+ */
+export const doubleCheckLead = async (message, initialAnalysis, userCriteria, apiKey) => {
+  const startTime = Date.now();
+  const model = 'google/gemini-3-pro-preview';
+
+  try {
+    logger.info('Starting Double Check with Gemini', {
+      messageId: message.id,
+      initialConfidence: initialAnalysis.confidence_score
+    });
+
+    const client = getOpenRouter(apiKey);
+    
+    const prompt = `ТЫ - ЭКСПЕРТ ПО КОНТРОЛЮ КАЧЕСТВА ЛИДОВ.
+Твоя задача - перепроверить решение предыдущего AI, который посчитал это сообщение лидом.
+
+КРИТЕРИИ ПОИСКА:
+${userCriteria}
+
+СООБЩЕНИЕ:
+${message.message || ''}
+${message.bio ? `Био: ${message.bio}` : ''}
+${message.chat_name ? `Канал: ${message.chat_name}` : ''}
+
+ПРЕДЫДУЩИЙ АНАЛИЗ:
+Причина: "${initialAnalysis.reasoning}"
+Уверенность: ${initialAnalysis.confidence_score}%
+
+ЗАДАЧА:
+1. Прочитай сообщение ОЧЕНЬ ВНИМАТЕЛЬНО.
+2. Действительно ли человек ИЩЕТ то, что указано в критериях?
+3. Нет ли здесь ложного срабатывания (например, он продает, а не покупает)?
+4. Если есть сомнения - отвергай.
+
+Верни JSON:
+{
+  "verified": boolean,
+  "confidence": number,
+  "reasoning": "твое обоснование (на русском)"
+}`;
+
+    const response = await retryWithBackoff(async () => {
+      return await client.chat.completions.create({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0,
+        max_tokens: 1000
+      });
+    }, 3, 1000);
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error('Empty response from Gemini');
+
+    let result;
+    try {
+        // Handle markdown code blocks if present
+        const cleanContent = content.replace(/```json\n?|\n?```/g, '').trim();
+        result = JSON.parse(cleanContent);
+    } catch (e) {
+        logger.warn('Failed to parse Gemini response', { content });
+        throw e;
+    }
+
+    const duration = Date.now() - startTime;
+    
+    logger.info('Gemini Double Check complete', {
+        verified: result.verified,
+        reason: result.reasoning,
+        duration
+    });
+
+    return result;
+
+  } catch (error) {
+    logger.error('Double check failed', { error: error.message });
+    // If double check fails, we fall back to trusting the original analysis (fail open) 
+    // OR fail closed. Let's fail open but log it.
+    return { verified: true, reasoning: "Double check failed, trusting initial result", confidence: initialAnalysis.confidence_score }; 
+  }
 };

@@ -1,6 +1,6 @@
 import { getSupabase } from '../config/database.js';
 import { preFilterMessages } from '../validators/messagePreFilter.js';
-import { analyzeBatch } from './messageAnalyzer.js';
+import { analyzeBatch, doubleCheckLead } from './messageAnalyzer.js';
 import { optimizeBatchSize, recordUsage } from './costOptimizer.js';
 import logger from '../utils/logger.js';
 import { DatabaseError } from '../utils/errorHandler.js';
@@ -315,6 +315,25 @@ export const detectLeads = async (userId, userConfig, options = {}) => {
     // Step 5: Save detected leads
     for (const match of analysisResult.matches) {
       try {
+        // Double Check with Gemini 3 Pro
+        const verification = await doubleCheckLead(
+          match.message,
+          match.analysis.aiResponse,
+          userConfig.lead_prompt,
+          userConfig.openrouter_api_key
+        );
+
+        if (!verification.verified) {
+          logger.info('Lead rejected by Gemini Double Check', {
+            messageId: match.message.id,
+            reason: verification.reasoning
+          });
+          continue; // Skip saving this lead
+        }
+
+        // Enrich reasoning with Gemini's confirmation
+        match.analysis.aiResponse.reasoning = `[Gemini Verified] ${verification.reasoning}`;
+
         const savedLead = await saveDetectedLead(userId, match.message, match.analysis);
         
         // Skip if duplicate (savedLead will be null)
