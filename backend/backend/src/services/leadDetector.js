@@ -197,7 +197,8 @@ export const saveDetectedLead = async (userId, message, analysis) => {
       messageId: message.id,
       userId,
       senderId,
-      confidence: analysis.aiResponse.confidence_score
+      confidence: analysis.aiResponse.confidence_score,
+      reasoning: analysis.aiResponse.reasoning
     });
     
     return data;

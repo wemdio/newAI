@@ -535,18 +535,25 @@ ID: {contact_info.get('telegram_user_id', 'N/A')}
             
             # 6. Send via Telegram Bot API (without parse_mode to avoid Markdown issues)
             url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            
+            # Ensure chat_id starts with -100 if it's a channel (common mistake)
+            # But don't break simple numeric IDs
+            target_chat_id = channel_id
+            
             payload = {
-                'chat_id': channel_id,
+                'chat_id': target_chat_id,
                 'text': message
                 # No parse_mode - send as plain text to avoid parsing errors
             }
+            
+            print(f"   📤 Sending request to Telegram: chat_id={target_chat_id}, token=...{bot_token[-5:]}")
             
             async with aiohttp.ClientSession() as session:
                 async with session.post(url, json=payload) as resp:
                     if resp.status == 200:
                         # Mark as posted
                         await self.supabase.mark_hot_lead_posted(hot_lead_id)
-                        print(f"   ✅ Posted hot lead report to channel {channel_id} via Bot")
+                        print(f"   ✅ Posted hot lead report to channel {target_chat_id} via Bot")
                     else:
                         err_text = await resp.text()
                         print(f"   ❌ Failed to send report via Bot: {resp.status} - {err_text}")
