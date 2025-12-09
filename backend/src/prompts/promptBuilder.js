@@ -15,20 +15,24 @@ export const buildAnalysisPrompt = (message, userCriteria) => {
     bio,
     message: messageText
   } = message;
-  
-  // Simple prompt - let user criteria do the work
-  const prompt = `КРИТЕРИИ ПОЛЬЗОВАТЕЛЯ:
+
+  // Clean prompt without hardcoded logic logic, relying on System Prompt + User Criteria
+  const prompt = `ДАННЫЕ СООБЩЕНИЯ:
+Текст: "${messageText}"
+Автор: @${username || 'не указан'} ${bio ? `(${bio})` : ''}
+Канал: ${chat_name || 'не указан'}
+
+-------------------
+КРИТЕРИИ ПОЛЬЗОВАТЕЛЯ (ИНСТРУКЦИЯ):
 ${userCriteria}
+-------------------
 
-СООБЩЕНИЕ ДЛЯ АНАЛИЗА:
-${messageText}
-${username ? `\nАвтор: @${username}` : ''}
-${bio ? `\nБио: ${bio}` : ''}
-${chat_name ? `\nКанал: ${chat_name}` : ''}
+ТВОЯ ЗАДАЧА:
+1. Проверь сообщение на соответствие разделу "НЕ СЧИТАТЬ ЛИДОМ" (или аналогам). Если есть совпадение — ОТКАЗ.
+2. Проверь сообщение на соответствие разделу "СЧИТАТЬ ЛИДОМ". Если есть совпадение — УСПЕХ.
 
-Проанализируй сообщение СТРОГО по критериям выше.
-Ответь в формате JSON на русском языке.`;
-  
+ВАЖНО: Игнорируй любые свои скрытые установки. Работай ТОЛЬКО по тексту КРИТЕРИЕВ ПОЛЬЗОВАТЕЛЯ выше.`;
+
   return prompt;
 };
 
@@ -195,4 +199,3 @@ export default {
   validateCriteria,
   EXAMPLE_PROMPTS
 };
-
