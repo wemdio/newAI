@@ -66,7 +66,7 @@ ${message.chat_name ? `Канал: ${message.chat_name}` : ''}
         messages: [{ role: 'user', content: prompt }],
         // response_format: { type: 'json_object' }, // Gemini via OpenRouter might not support this flag correctly
         temperature: 0,
-        max_tokens: 1000
+        max_tokens: 4000 // Increased from 1000 to prevent 'length' cutoffs
       });
     }, 3, 1000);
 
