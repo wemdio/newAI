@@ -296,13 +296,17 @@ function Leads() {
                   <p>{lead.reasoning}</p>
                 </div>
 
-                {lead.matched_criteria && lead.matched_criteria.length > 0 && (
+                {lead.matched_criteria && (
                   <div className="matched-criteria">
                     <strong>Совпавшие критерии:</strong>
                     <div className="criteria-tags">
-                      {lead.matched_criteria.map((criterion, idx) => (
-                        <span key={idx} className="criterion-tag">{criterion}</span>
-                      ))}
+                      {Array.isArray(lead.matched_criteria) ? (
+                        lead.matched_criteria.map((criterion, idx) => (
+                          <span key={idx} className="criterion-tag">{criterion}</span>
+                        ))
+                      ) : (
+                        <span className="criterion-tag">{lead.matched_criteria}</span>
+                      )}
                     </div>
                   </div>
                 )}
