@@ -296,14 +296,14 @@ ${JSON.stringify(messagesArray, null, 2)}
     "is_match": boolean,
     "confidence_score": 0-100,
     "reasoning": "краткое объяснение на русском",
-    "matched_criteria": ["критерий1", "критерий2"]
+    "matched_criteria": "цитата критерия или null"
   },
   {
     "id": "message_id_2",
     "is_match": boolean,
     "confidence_score": 0-100,
     "reasoning": "краткое объяснение на русском",
-    "matched_criteria": []
+    "matched_criteria": null
   }
   ... (всего ${batchSize} объектов)
 ]`;
