@@ -64,7 +64,7 @@ ${message.chat_name ? `Канал: ${message.chat_name}` : ''}
       return await client.chat.completions.create({
         model,
         messages: [{ role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
+        // response_format: { type: 'json_object' }, // Gemini via OpenRouter might not support this flag correctly
         temperature: 0,
         max_tokens: 1000
       });
@@ -128,7 +128,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'deepseek/deepseek-v3.2';
+    const model = process.env.AI_MODEL || 'openai/gpt-4o-mini';
     
     logger.info('Making OpenRouter API call', {
       messageId: message.id,

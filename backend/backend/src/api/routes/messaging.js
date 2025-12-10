@@ -655,14 +655,14 @@ router.post('/conversations/:id/send', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Conversation not found' });
     }
 
-    // 2. Update status to 'manual' to stop AI
-    if (conversation.status !== 'manual' && conversation.status !== 'stopped') {
+    // 2. Update status to 'stopped' to stop AI (was 'manual' but constraint allows: active, waiting, hot_lead, stopped, completed)
+    if (conversation.status !== 'stopped') {
       await supabase
         .from('ai_conversations')
-        .update({ status: 'manual', updated_at: new Date().toISOString() })
+        .update({ status: 'stopped', updated_at: new Date().toISOString() })
         .eq('id', id);
         
-      logger.info('Switched conversation to manual mode', { userId, conversationId: id });
+      logger.info('Switched conversation to stopped mode (manual takeover)', { userId, conversationId: id });
     }
 
     // 3. Add to message_queue for Python worker
@@ -717,7 +717,7 @@ router.post('/conversations/:id/takeover', async (req, res) => {
     const { error } = await supabase
       .from('ai_conversations')
       .update({ 
-        status: 'manual',
+        status: 'stopped', // Was 'manual', changed to match constraint
         updated_at: new Date().toISOString()
       })
       .eq('id', id);

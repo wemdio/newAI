@@ -1,7 +1,7 @@
 """Supabase database client for AI Messaging Service"""
 import aiohttp
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from config import SUPABASE_URL, SUPABASE_KEY
 
@@ -15,7 +15,8 @@ class SupabaseClient:
         self.headers = {
             'apikey': self.key,
             'Authorization': f'Bearer {self.key}',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
         }
         self.session: Optional[aiohttp.ClientSession] = None
     
@@ -31,7 +32,7 @@ class SupabaseClient:
     
     # ============= HELPER METHODS =============
     
-    async def _get(self, table: str, filters: Dict = None, select: str = "*", order: str = None, limit: int = None) -> List[Dict]:
+    async def _get(self, table: str, filters: Dict = None, select: str = "*", order: str = None, limit: int = None, custom_params: List[str] = None) -> List[Dict]:
         """Generic GET request to Supabase"""
         url = f"{self.url}/rest/v1/{table}?select={select}"
         
@@ -39,37 +40,60 @@ class SupabaseClient:
             for key, value in filters.items():
                 url += f"&{key}=eq.{value}"
         
+        if custom_params:
+            for param in custom_params:
+                url += f"&{param}"
+        
         if order:
             url += f"&order={order}"
         
         if limit:
             url += f"&limit={limit}"
-        
+            
         async with self.session.get(url) as resp:
             if resp.status == 200:
                 return await resp.json()
+            error_text = await resp.text()
+            print(f"❌ GET Error {table}: {error_text}")
             return []
     
     async def _post(self, table: str, data: Dict) -> Optional[Dict]:
         """Generic POST request to Supabase"""
         url = f"{self.url}/rest/v1/{table}"
-        headers = {**self.headers, 'Prefer': 'return=representation'}
         
-        async with self.session.post(url, json=data, headers=headers) as resp:
+        async with self.session.post(url, json=data) as resp:
             if resp.status in [200, 201]:
                 result = await resp.json()
                 return result[0] if result else None
+            error_text = await resp.text()
+            print(f"❌ POST Error {table}: {error_text}")
             return None
     
     async def _patch(self, table: str, filters: Dict, data: Dict) -> bool:
         """Generic PATCH request to Supabase"""
         url = f"{self.url}/rest/v1/{table}?"
         
+        params = []
         for key, value in filters.items():
-            url += f"&{key}=eq.{value}"
+            params.append(f"{key}=eq.{value}")
+        url += "&".join(params)
         
         async with self.session.patch(url, json=data) as resp:
-            return resp.status in [200, 204]
+            if resp.status in [200, 204]:
+                return True
+            error_text = await resp.text()
+            print(f"❌ PATCH Error {table}: {error_text}")
+            return False
+
+    async def _rpc(self, function_name: str, params: Dict = None) -> Optional[Dict]:
+        """Call Supabase RPC function"""
+        url = f"{self.url}/rest/v1/rpc/{function_name}"
+        async with self.session.post(url, json=params or {}) as resp:
+            if resp.status == 200:
+                return await resp.json()
+            error_text = await resp.text()
+            print(f"❌ RPC Error {function_name}: {error_text}")
+            return None
     
     # ============= USER CONFIG =============
     
@@ -82,125 +106,163 @@ class SupabaseClient:
     
     async def get_active_campaigns(self) -> List[Dict]:
         """Get all running campaigns"""
-        async with self.pool.acquire() as conn:
-            rows = await conn.fetch(
-                "SELECT * FROM messaging_campaigns WHERE status = 'running'"
-            )
-            return [dict(row) for row in rows]
+        return await self._get('messaging_campaigns', {'status': 'running'})
     
     async def update_campaign_stats(self, campaign_id: str, leads_contacted: int = 0, hot_leads_found: int = 0):
         """Update campaign statistics"""
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                UPDATE messaging_campaigns 
-                SET leads_contacted = leads_contacted + $2,
-                    hot_leads_found = hot_leads_found + $3,
-                    updated_at = NOW()
-                WHERE id = $1
-                """,
-                campaign_id, leads_contacted, hot_leads_found
-            )
+        campaigns = await self._get('messaging_campaigns', {'id': campaign_id})
+        if not campaigns:
+            return
+            
+        current = campaigns[0]
+        new_contacted = (current.get('leads_contacted') or 0) + leads_contacted
+        new_hot = (current.get('hot_leads_found') or 0) + hot_leads_found
+        
+        await self._patch(
+            'messaging_campaigns', 
+            {'id': campaign_id},
+            {
+                'leads_contacted': new_contacted,
+                'hot_leads_found': new_hot,
+                'updated_at': datetime.utcnow().isoformat()
+            }
+        )
     
     # ============= LEADS =============
     
     async def get_uncontacted_leads(self, user_id: str) -> List[Dict]:
         """Get uncontacted leads for specific user/company"""
-        async with self.pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT 
-                    dl.id as lead_id,
-                    dl.message_id,
-                    dl.confidence_score,
-                    dl.reasoning,
-                    dl.matched_criteria,
-                    m.username,
-                    m.user_id as telegram_user_id,
-                    m.message,
-                    m.chat_name,
-                    m.message_time
-                FROM detected_leads dl
-                JOIN messages m ON dl.message_id = m.id
-                WHERE dl.user_id = $1 
-                  AND dl.is_contacted = false
-                  AND m.username IS NOT NULL
-                ORDER BY dl.detected_at DESC
-                LIMIT 100
-                """,
-                user_id
-            )
-            return [dict(row) for row in rows]
+        data = await self._get(
+            'detected_leads',
+            {'user_id': user_id, 'is_contacted': 'false'},
+            select='id,message_id,confidence_score,reasoning,matched_criteria,detected_at,messages(username,user_id,message,chat_name,message_time)',
+            order='detected_at.desc',
+            limit=100
+        )
+        
+        leads = []
+        for item in data:
+            msg = item.get('messages')
+            if not msg or not msg.get('username'):
+                continue
+                
+            leads.append({
+                'lead_id': item['id'],
+                'message_id': item['message_id'],
+                'confidence_score': item['confidence_score'],
+                'reasoning': item['reasoning'],
+                'matched_criteria': item['matched_criteria'],
+                'username': msg['username'],
+                'telegram_user_id': msg['user_id'],
+                'message': msg['message'],
+                'chat_name': msg['chat_name'],
+                'message_time': msg['message_time']
+            })
+            
+        return leads
     
     async def mark_lead_contacted(self, lead_id: int):
         """Mark lead as contacted"""
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE detected_leads SET is_contacted = true WHERE id = $1",
-                lead_id
-            )
+        await self._patch('detected_leads', {'id': lead_id}, {'is_contacted': True})
     
     # ============= ACCOUNTS =============
     
     async def get_accounts_for_user(self, user_id: str) -> List[Dict]:
         """Get available accounts for user"""
-        async with self.pool.acquire() as conn:
-            rows = await conn.fetch(
-                """
-                SELECT * FROM telegram_accounts 
-                WHERE user_id = $1 
-                  AND status = 'active' 
-                  AND is_available = true
-                ORDER BY last_used_at ASC NULLS FIRST
-                """,
-                user_id
-            )
-            return [dict(row) for row in rows]
+        return await self._get(
+            'telegram_accounts',
+            {
+                'user_id': user_id,
+                'status': 'active',
+                'is_available': 'true'
+            },
+            order='last_used_at.asc.nullsfirst'
+        )
     
     async def update_account_usage(self, account_id: str):
         """Update account last used time and message counter"""
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                UPDATE telegram_accounts 
-                SET messages_sent_today = messages_sent_today + 1,
-                    last_used_at = NOW(),
-                    updated_at = NOW()
-                WHERE id = $1
-                """,
-                account_id
-            )
+        accounts = await self._get('telegram_accounts', {'id': account_id})
+        if not accounts:
+            return
+            
+        current = accounts[0]
+        sent_today = (current.get('messages_sent_today') or 0) + 1
+        
+        await self._patch(
+            'telegram_accounts',
+            {'id': account_id},
+            {
+                'messages_sent_today': sent_today,
+                'last_used_at': datetime.utcnow().isoformat(),
+                'updated_at': datetime.utcnow().isoformat()
+            }
+        )
     
     async def reset_daily_counters(self):
         """Reset daily message counters (run at midnight)"""
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE telegram_accounts SET messages_sent_today = 0"
-            )
+        result = await self._rpc('reset_daily_stats')
+        if result is None:
+             pass
     
     async def mark_account_banned(self, account_id: str):
         """Mark account as banned"""
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                UPDATE telegram_accounts 
-                SET status = 'banned', is_available = false, updated_at = NOW()
-                WHERE id = $1
-                """,
-                account_id
-            )
+        await self._patch(
+            'telegram_accounts',
+            {'id': account_id},
+            {
+                'status': 'banned',
+                'is_available': False,
+                'updated_at': datetime.utcnow().isoformat()
+            }
+        )
     
     async def pause_account(self, account_id: str, duration_seconds: int):
         """Temporarily pause account (for FloodWait)"""
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                UPDATE telegram_accounts 
-                SET is_available = false, updated_at = NOW()
-                WHERE id = $1
-                """,
-                account_id
+        await self._patch(
+            'telegram_accounts',
+            {'id': account_id},
+            {
+                'is_available': False,
+                'updated_at': datetime.utcnow().isoformat()
+            }
+        )
+        
+    async def reactivate_expired_pauses(self, cooldown_hours: int = 24):
+        """Reactivate accounts that have been paused for more than N hours"""
+        # Calculate cutoff time
+        cutoff_time = (datetime.utcnow() - timedelta(hours=cooldown_hours)).isoformat()
+        
+        # Find accounts: status='active', is_available=false, updated_at < cutoff
+        # We assume if it was updated long ago and is active but unavailable -> it was a pause
+        # Note: We need a custom query param for less than
+        
+        accounts = await self._get(
+            'telegram_accounts',
+            filters={
+                'status': 'active',
+                'is_available': 'false'
+            },
+            custom_params=[f'updated_at=lt.{cutoff_time}']
+        )
+        
+        if not accounts:
+            return 0
+            
+        count = 0
+        for acc in accounts:
+            print(f"♻️ Reactivating account {acc.get('account_name')} (cooldown expired)")
+            success = await self._patch(
+                'telegram_accounts',
+                {'id': acc['id']},
+                {
+                    'is_available': True,
+                    'updated_at': datetime.utcnow().isoformat()
+                }
             )
+            if success:
+                count += 1
+                
+        return count
     
     # ============= CONVERSATIONS =============
     
@@ -222,60 +284,62 @@ class SupabaseClient:
             }
         ]
         
-        async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """
-                INSERT INTO ai_conversations (
-                    campaign_id, account_id, lead_id, peer_user_id, peer_username,
-                    conversation_history, status, last_message_at, messages_count
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, 'active', NOW(), 1)
-                RETURNING id
-                """,
-                campaign_id, account_id, lead_id, peer_user_id, peer_username,
-                history
-            )
-            return row['id']
+        data = {
+            'campaign_id': campaign_id,
+            'account_id': account_id,
+            'lead_id': lead_id,
+            'peer_user_id': peer_user_id,
+            'peer_username': peer_username,
+            'conversation_history': history,
+            'status': 'active',
+            'last_message_at': datetime.utcnow().isoformat(),
+            'messages_count': 1
+        }
+        
+        result = await self._post('ai_conversations', data)
+        return result['id'] if result else None
     
     async def add_message_to_conversation(self, conversation_id: str, role: str, content: str):
         """Add message to conversation history"""
-        message = {
+        convs = await self._get('ai_conversations', {'id': conversation_id})
+        if not convs:
+            return
+            
+        current = convs[0]
+        history = current.get('conversation_history') or []
+        
+        new_message = {
             'role': role,
             'content': content,
             'timestamp': datetime.utcnow().isoformat()
         }
+        history.append(new_message)
         
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                """
-                UPDATE ai_conversations 
-                SET conversation_history = conversation_history || $2::jsonb,
-                    messages_count = messages_count + 1,
-                    last_message_at = NOW(),
-                    updated_at = NOW()
-                WHERE id = $1
-                """,
-                conversation_id, json.dumps(message)
-            )
+        await self._patch(
+            'ai_conversations',
+            {'id': conversation_id},
+            {
+                'conversation_history': history,
+                'messages_count': (current.get('messages_count') or 0) + 1,
+                'last_message_at': datetime.utcnow().isoformat(),
+                'updated_at': datetime.utcnow().isoformat()
+            }
+        )
     
     async def get_conversation_history(self, conversation_id: str) -> List[Dict]:
         """Get conversation history"""
-        async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(
-                "SELECT conversation_history FROM ai_conversations WHERE id = $1",
-                conversation_id
-            )
-            if row and row['conversation_history']:
-                return row['conversation_history']
-            return []
+        convs = await self._get('ai_conversations', {'id': conversation_id})
+        if convs and convs[0].get('conversation_history'):
+            return convs[0]['conversation_history']
+        return []
     
     async def update_conversation_status(self, conversation_id: str, status: str):
         """Update conversation status"""
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE ai_conversations SET status = $2, updated_at = NOW() WHERE id = $1",
-                conversation_id, status
-            )
+        await self._patch(
+            'ai_conversations',
+            {'id': conversation_id},
+            {'status': status, 'updated_at': datetime.utcnow().isoformat()}
+        )
     
     # ============= HOT LEADS =============
     
@@ -288,26 +352,22 @@ class SupabaseClient:
         contact_info: Dict
     ) -> str:
         """Create hot lead record"""
-        async with self.pool.acquire() as conn:
-            row = await conn.fetchrow(
-                """
-                INSERT INTO hot_leads (
-                    campaign_id, conversation_id, lead_id, 
-                    conversation_history, contact_info, posted_to_channel
-                )
-                VALUES ($1, $2, $3, $4, $5, false)
-                RETURNING id
-                """,
-                campaign_id, conversation_id, lead_id,
-                conversation_history, json.dumps(contact_info)
-            )
-            return row['id']
+        data = {
+            'campaign_id': campaign_id,
+            'conversation_id': conversation_id,
+            'lead_id': lead_id,
+            'conversation_history': conversation_history,
+            'contact_info': contact_info,
+            'posted_to_channel': False
+        }
+        
+        result = await self._post('hot_leads', data)
+        return result['id'] if result else None
     
     async def mark_hot_lead_posted(self, hot_lead_id: str):
         """Mark hot lead as posted to Telegram channel"""
-        async with self.pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE hot_leads SET posted_to_channel = true, updated_at = NOW() WHERE id = $1",
-                hot_lead_id
-            )
-
+        await self._patch(
+            'hot_leads',
+            {'id': hot_lead_id},
+            {'posted_to_channel': True, 'updated_at': datetime.utcnow().isoformat()}
+        )

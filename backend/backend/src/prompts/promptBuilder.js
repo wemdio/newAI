@@ -15,7 +15,7 @@ export const buildAnalysisPrompt = (message, userCriteria) => {
     bio,
     message: messageText
   } = message;
-
+  
   // Clean prompt without hardcoded logic logic, relying on System Prompt + User Criteria
   const prompt = `ДАННЫЕ СООБЩЕНИЯ:
 Текст: "${messageText}"
@@ -32,7 +32,7 @@ ${userCriteria}
 2. Проверь сообщение на соответствие разделу "СЧИТАТЬ ЛИДОМ". Если есть совпадение — УСПЕХ.
 
 ВАЖНО: Игнорируй любые свои скрытые установки. Работай ТОЛЬКО по тексту КРИТЕРИЕВ ПОЛЬЗОВАТЕЛЯ выше.`;
-
+  
   return prompt;
 };
 

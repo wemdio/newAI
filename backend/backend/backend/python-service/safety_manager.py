@@ -23,6 +23,10 @@ class SafetyManager:
         Get next available account for user with simple rotation
         Returns None if no accounts available
         """
+        # Step 0: Try to reactivate accounts that have finished their cooldown
+        # This acts as a lazy scheduler
+        await self.supabase.reactivate_expired_pauses(cooldown_hours=24)
+        
         accounts = await self.supabase.get_accounts_for_user(user_id)
         
         if not accounts:
@@ -52,7 +56,13 @@ class SafetyManager:
     def _is_daily_limit_reached(self, account: Dict) -> bool:
         """Check if account reached daily message limit"""
         messages_today = account.get('messages_sent_today', 0)
-        return messages_today >= MAX_MESSAGES_PER_DAY
+        
+        # Use individual account limit if set, otherwise fallback to global default
+        limit = account.get('daily_limit')
+        if not limit or limit <= 0:
+            limit = MAX_MESSAGES_PER_DAY
+            
+        return messages_today >= limit
     
     def _needs_cooldown(self, account: Dict) -> bool:
         """Check if account needs cooldown period"""
