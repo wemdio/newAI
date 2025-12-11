@@ -13,6 +13,7 @@ class LeadManager:
         self.ai = ai_communicator
         self.telethon = telethon_manager
         self.active_conversations = {}  # {conversation_id: data}
+        self.last_used_account_id = None # Track last used account for round-robin
     
     async def process_campaign(self, campaign: Dict):
         """
@@ -49,11 +50,14 @@ class LeadManager:
                 print(f"   ⏸️ Campaign status changed to '{current_status}' - stopping processing")
                 break
             
-            # Get available account
-            account = await self.safety.get_available_account(user_id)
+            # Get available account (passing last_used_account_id for round-robin)
+            account = await self.safety.get_available_account(user_id, self.last_used_account_id)
             if not account:
                 print(f"   ⚠️ No available accounts - pausing campaign")
                 break
+            
+            # Update last used account ID
+            self.last_used_account_id = str(account['id'])
             
             # Initialize account if not already done
             account_id = str(account['id'])

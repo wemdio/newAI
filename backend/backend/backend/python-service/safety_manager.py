@@ -18,9 +18,12 @@ class SafetyManager:
         self.supabase = supabase
         self.account_usage = {}  # In-memory tracking
     
-    async def get_available_account(self, user_id: str) -> Optional[Dict]:
+    async def get_available_account(self, user_id: str, last_account_id: str = None) -> Optional[Dict]:
         """
-        Get next available account for user with simple rotation
+        Get next available account for user with round-robin rotation
+        Args:
+            user_id: User ID to fetch accounts for
+            last_account_id: ID of the last used account (to avoid using it again immediately)
         Returns None if no accounts available
         """
         # Step 0: Try to reactivate accounts that have finished their cooldown
@@ -32,26 +35,33 @@ class SafetyManager:
         if not accounts:
             print(f"❌ No accounts found for user {user_id}")
             return None
-        
+            
+        # Filter available accounts first
+        available_accounts = []
         for account in accounts:
-            account_id = str(account['id'])
-            
-            # Check daily limit
             if self._is_daily_limit_reached(account):
-                print(f"⏭️ Account {account['account_name']} reached daily limit")
                 continue
-            
-            # Check cooldown period since last use
             if self._needs_cooldown(account):
-                print(f"⏳ Account {account['account_name']} in cooldown period")
                 continue
+            available_accounts.append(account)
             
-            # Found available account
-            print(f"✅ Selected account: {account['account_name']}")
-            return account
+        if not available_accounts:
+            print(f"⚠️ All accounts for user {user_id} are unavailable")
+            return None
+            
+        # Round-robin logic:
+        # If we have multiple accounts and a last_account_id is provided,
+        # try to find an account that is DIFFERENT from the last one.
+        if len(available_accounts) > 1 and last_account_id:
+            for account in available_accounts:
+                if str(account['id']) != str(last_account_id):
+                    print(f"✅ Selected next account (Round-Robin): {account['account_name']}")
+                    return account
         
-        print(f"⚠️ All accounts for user {user_id} are unavailable")
-        return None
+        # Fallback: Just take the first available one (sorted by last_used_at ASC from DB)
+        selected = available_accounts[0]
+        print(f"✅ Selected account: {selected['account_name']}")
+        return selected
     
     def _is_daily_limit_reached(self, account: Dict) -> bool:
         """Check if account reached daily message limit"""

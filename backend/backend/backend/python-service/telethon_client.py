@@ -10,11 +10,14 @@ from telethon.errors import (
     SessionPasswordNeededError
 )
 from telethon.errors.common import TypeNotFoundError
+from python_socks import ProxyError
 from urllib.parse import urlparse
 from typing import Dict, Optional, Callable
 import asyncio
 import os
 import socks
+import socket
+from python_socks import ProxyError
 import socket
 
 
@@ -188,7 +191,10 @@ class TelethonManager:
                 session_file,
                 account['api_id'],
                 account['api_hash'],
-                proxy=proxy
+                proxy=proxy,
+                connection_retries=1,
+                request_retries=1,
+                timeout=10
             )
             
             # Connect
@@ -342,7 +348,7 @@ class TelethonManager:
             print(f"✅ Proxy connection successful")
             return True
             
-        except socks.ProxyConnectionError as e:
+        except (socks.ProxyConnectionError, ProxyError) as e:
             print(f"❌ Proxy connection failed: {e}")
             return False
         except socket.timeout:
