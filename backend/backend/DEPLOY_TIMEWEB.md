@@ -47,6 +47,10 @@ OPENROUTER_API_KEY=sk-or-your-key
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 AI_MODEL=google/gemini-2.0-flash-001
 
+# AI Cost Optimization (NEW - для снижения расходов на AI анализ)
+DOUBLECHECK_MODE=smart
+DOUBLECHECK_MIN_CONFIDENCE=90
+
 # Telegram Bot
 TELEGRAM_BOT_TOKEN=your-telegram-bot-token
 
@@ -201,6 +205,15 @@ curl https://wemdio-parserandscanner-40d8.twc1.net/health
 
 - `SUPABASE_URL` - публичный URL
 - `SUPABASE_ANON_KEY` - публичный ключ (ограничен RLS)
+
+### AI Cost Optimization переменные (опционально, для экономии):
+
+- `DOUBLECHECK_MODE` - режим работы Gemini double-check:
+  - `always` (по умолчанию) - проверять все лиды
+  - `smart` - проверять только подозрительные (экономия ~50-70%)
+- `DOUBLECHECK_MIN_CONFIDENCE` - минимальный порог confidence для пропуска double-check (рекомендуется 90)
+  - Если DeepSeek уверен >= 90%, Gemini не вызывается
+  - Снижайте осторожно: 85 = больше экономии, но риск пропуска плохих лидов
 
 ---
 
