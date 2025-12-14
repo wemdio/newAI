@@ -267,19 +267,23 @@ export const analyzeMessageBatch = async (messages, userCriteria, apiKey) => {
     
     // Build batch prompt
     const systemPrompt = SYSTEM_PROMPT;
-    const messagesArray = messages.map(msg => ({
-      id: msg.id.toString(),
-      message: msg.message || '',
-      chat_name: msg.chat_name || '',
-      username: msg.username || '',
-      bio: msg.bio || ''
-    }));
+    // Cost optimization: omit empty optional fields (fewer prompt tokens, same semantics)
+    const messagesArray = messages.map(msg => {
+      const payload = {
+        id: msg.id.toString(),
+        message: msg.message || ''
+      };
+      if (msg.chat_name) payload.chat_name = msg.chat_name;
+      if (msg.username) payload.username = msg.username;
+      if (msg.bio) payload.bio = msg.bio;
+      return payload;
+    });
     
     const userPrompt = `КРИТЕРИИ ПОЛЬЗОВАТЕЛЯ (следуй точно, ОСОБЕННО секцию "НЕ СЧИТАТЬ ЛИДОМ"):
 ${userCriteria}
 
 ПРОАНАЛИЗИРУЙ СЛЕДУЮЩИЕ ${batchSize} СООБЩЕНИЙ:
-${JSON.stringify(messagesArray, null, 2)}
+${JSON.stringify(messagesArray)}
 
 ВАЖНО:
 1. Проанализируй КАЖДОЕ сообщение ОТДЕЛЬНО (не смешивай контекст!)

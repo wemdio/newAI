@@ -6,6 +6,84 @@ import logger from '../utils/logger.js';
 import { DatabaseError } from '../utils/errorHandler.js';
 
 /**
+ * Gemini double-check cost optimization
+ *
+ * Default behavior is kept the same: ALWAYS double-check every detected lead.
+ * To reduce spend without sacrificing quality in most cases, enable "smart" mode:
+ *   DOUBLECHECK_MODE=smart
+ *
+ * Smart mode runs Gemini only for:
+ * - low confidence leads
+ * - suspicious/ambiguous messages (jobs/services/ads markers)
+ * - empty/weak matched_criteria
+ * - very short messages
+ */
+const DOUBLECHECK_MODE = (process.env.DOUBLECHECK_MODE || 'always').toLowerCase(); // always | smart | off
+const DOUBLECHECK_MIN_CONFIDENCE = Number.parseInt(process.env.DOUBLECHECK_MIN_CONFIDENCE || '90', 10);
+
+const DOUBLECHECK_RISK_PATTERNS = [
+  // вакансии / работа
+  /\bваканси[яи]\b/i,
+  /\bрезюме\b/i,
+  /\bищу\s+работ/i,
+  /\bподработ/i,
+  /\bоклад\b/i,
+  /\bзарплат/i,
+  /\bзп\b/i,
+  /\bтребу(ется|ются)\b/i,
+  /\bнанима(ем|ю|ют)\b/i,
+  // предложение услуг / реклама
+  /\bпредлага(ю|ем|ют)\b/i,
+  /\bоказыва(ю|ем|ют)\s+услуг/i,
+  /\bуслуг[аи]\b/i,
+  /\bнастрою\b/i,
+  /\bсделаю\b/i,
+  /\bпомогу\b/i,
+  /\bпродам\b/i,
+  /\bреклам/i,
+  /\bподписывай(тесь)?\b/i
+];
+
+const getRiskCheckText = (message) => {
+  return [
+    message?.message,
+    message?.bio,
+    message?.chat_name
+  ].filter(Boolean).join(' ');
+};
+
+const matchedCriteriaCount = (matchedCriteria) => {
+  if (!matchedCriteria) return 0;
+  if (Array.isArray(matchedCriteria)) return matchedCriteria.length;
+  if (typeof matchedCriteria === 'string') return matchedCriteria.trim().length > 0 ? 1 : 0;
+  return 0;
+};
+
+const looksRiskyNonLead = (message) => {
+  const text = getRiskCheckText(message);
+  if (!text) return false;
+  return DOUBLECHECK_RISK_PATTERNS.some((re) => re.test(text));
+};
+
+const shouldRunGeminiDoubleCheck = (message, aiResponse) => {
+  // Backward-compatible default
+  if (DOUBLECHECK_MODE === 'always') return true;
+  if (DOUBLECHECK_MODE === 'off') return false;
+  // Smart mode
+  const confidence = Number(aiResponse?.confidence_score ?? 0);
+  const msgLen = (message?.message || '').length;
+  const criteriaCnt = matchedCriteriaCount(aiResponse?.matched_criteria);
+
+  if (!Number.isFinite(confidence)) return true;
+  if (confidence < DOUBLECHECK_MIN_CONFIDENCE) return true;
+  if (criteriaCnt === 0) return true;
+  if (msgLen < 20) return true;
+  if (looksRiskyNonLead(message)) return true;
+
+  return false;
+};
+
+/**
  * Lead detection orchestrator
  * Coordinates the entire lead detection pipeline
  */
@@ -316,24 +394,35 @@ export const detectLeads = async (userId, userConfig, options = {}) => {
     // Step 5: Save detected leads
     for (const match of analysisResult.matches) {
       try {
-        // Double Check with Gemini 3 Pro
-        const verification = await doubleCheckLead(
-          match.message,
-          match.analysis.aiResponse,
-          userConfig.lead_prompt,
-          userConfig.openrouter_api_key
-        );
+        const shouldDoubleCheck = shouldRunGeminiDoubleCheck(match.message, match.analysis.aiResponse);
+        let verification = null;
 
-        if (!verification.verified) {
-          logger.info('Lead rejected by Gemini Double Check', {
+        if (shouldDoubleCheck) {
+          // Double Check with Gemini 3 Pro
+          verification = await doubleCheckLead(
+            match.message,
+            match.analysis.aiResponse,
+            userConfig.lead_prompt,
+            userConfig.openrouter_api_key
+          );
+
+          if (!verification.verified) {
+            logger.info('Lead rejected by Gemini Double Check', {
+              messageId: match.message.id,
+              reason: verification.reasoning
+            });
+            continue; // Skip saving this lead
+          }
+
+          // Enrich reasoning with Gemini's confirmation
+          match.analysis.aiResponse.reasoning = `[Gemini Verified] ${verification.reasoning}`;
+        } else {
+          logger.info('Skipping Gemini Double Check (smart mode)', {
             messageId: match.message.id,
-            reason: verification.reasoning
+            confidence: match.analysis.aiResponse?.confidence_score,
+            mode: DOUBLECHECK_MODE
           });
-          continue; // Skip saving this lead
         }
-
-        // Enrich reasoning with Gemini's confirmation
-        match.analysis.aiResponse.reasoning = `[Gemini Verified] ${verification.reasoning}`;
 
         const savedLead = await saveDetectedLead(userId, match.message, match.analysis);
         
