@@ -204,6 +204,14 @@ class SupabaseClient:
         """Mark lead as contacted"""
         return await self._patch('detected_leads', {'id': lead_id}, {'is_contacted': True})
     
+    async def skip_lead_with_reason(self, lead_id: int, reason: str):
+        """Mark lead as skipped with a reason (e.g., privacy_premium_required, write_forbidden)"""
+        print(f"      📝 Marking lead {lead_id} as skipped: {reason}")
+        return await self._patch('detected_leads', {'id': lead_id}, {
+            'is_contacted': True,  # Mark as processed so it won't be retried
+            'skip_reason': reason
+        })
+    
     # ============= ACCOUNTS =============
     
     async def get_accounts_for_user(self, user_id: str) -> List[Dict]:
