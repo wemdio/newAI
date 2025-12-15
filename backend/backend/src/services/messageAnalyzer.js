@@ -107,23 +107,65 @@ ${message.chat_name ? `Канал: ${message.chat_name}` : ''}
       return await client.chat.completions.create({
         model,
         messages: [{ role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
+        // NOTE: Gemini 3 Pro does NOT support response_format: json_object
+        // It returns empty response if forced. We parse JSON manually.
         temperature: 0,
         max_tokens: 1000
       });
     }, 3, 1000);
 
     const content = response.choices[0]?.message?.content;
-    if (!content) throw new Error('Empty response from Gemini');
+    if (!content || content.trim() === '') {
+      throw new Error('Empty response from Gemini');
+    }
 
     let result;
     try {
-        // Handle markdown code blocks if present
-        const cleanContent = content.replace(/```json\n?|\n?```/g, '').trim();
-        result = JSON.parse(cleanContent);
+      // Multiple strategies to extract JSON from Gemini response
+      let cleanContent = content.trim();
+      
+      // Strategy 1: Remove markdown code blocks
+      cleanContent = cleanContent.replace(/```json\n?|\n?```/g, '').trim();
+      
+      // Strategy 2: If still not valid JSON, try to find JSON object in text
+      if (!cleanContent.startsWith('{')) {
+        const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          cleanContent = jsonMatch[0];
+        }
+      }
+      
+      result = JSON.parse(cleanContent);
+      
+      // Validate required fields
+      if (typeof result.verified !== 'boolean') {
+        // Try to coerce from string
+        if (typeof result.verified === 'string') {
+          result.verified = result.verified.toLowerCase() === 'true';
+        } else {
+          result.verified = false;
+        }
+      }
+      
     } catch (e) {
-        logger.warn('Failed to parse Gemini response', { content });
-        throw e;
+      logger.warn('Failed to parse Gemini response, trying fallback extraction', { 
+        content: content.substring(0, 500),
+        error: e.message 
+      });
+      
+      // Fallback: look for verified: true/false pattern in text
+      const verifiedMatch = content.match(/verified["']?\s*:\s*(true|false)/i);
+      const reasoningMatch = content.match(/reasoning["']?\s*:\s*["']([^"']+)["']/i);
+      
+      if (verifiedMatch) {
+        result = {
+          verified: verifiedMatch[1].toLowerCase() === 'true',
+          reasoning: reasoningMatch ? reasoningMatch[1] : 'Extracted from text response',
+          confidence: initialAnalysis.confidence_score
+        };
+      } else {
+        throw new Error('Could not extract verification result from Gemini response');
+      }
     }
 
     const duration = Date.now() - startTime;
