@@ -8,6 +8,49 @@ import { AIServiceError, retryWithBackoff } from '../utils/errorHandler.js';
 import PQueue from 'p-queue';
 
 /**
+ * Normalize common model output inconsistencies in batch mode.
+ * Batch responses can't use response_format=json_object, so some models return
+ * booleans/numbers as strings. We coerce safely to avoid false positives.
+ */
+const normalizeBatchAIResult = (aiResult, expectedMessageId) => {
+  const normalized = { ...(aiResult || {}) };
+
+  // Ensure id is a string for stable comparisons/logs
+  if (normalized.id != null) normalized.id = String(normalized.id);
+  if (expectedMessageId != null && (!normalized.id || normalized.id.trim() === '')) {
+    normalized.id = String(expectedMessageId);
+  }
+
+  // Coerce "true"/"false" strings to booleans
+  if (typeof normalized.is_match === 'string') {
+    const v = normalized.is_match.trim().toLowerCase();
+    if (v === 'true') normalized.is_match = true;
+    if (v === 'false') normalized.is_match = false;
+  }
+
+  // Coerce numeric strings to numbers
+  if (typeof normalized.confidence_score === 'string') {
+    const n = Number(normalized.confidence_score);
+    if (Number.isFinite(n)) normalized.confidence_score = n;
+  }
+
+  // Normalize matched_criteria
+  if (typeof normalized.matched_criteria === 'string') {
+    const s = normalized.matched_criteria.trim();
+    normalized.matched_criteria = s ? [s] : [];
+  } else if (!Array.isArray(normalized.matched_criteria)) {
+    normalized.matched_criteria = [];
+  }
+
+  // Normalize reasoning
+  if (typeof normalized.reasoning !== 'string') {
+    normalized.reasoning = normalized.reasoning == null ? '' : String(normalized.reasoning);
+  }
+
+  return normalized;
+};
+
+/**
  * Core AI message analysis service
  * Handles communication with OpenRouter and validation
  */
@@ -490,10 +533,10 @@ ${JSON.stringify(messagesArray)}
     const results = [];
     for (let i = 0; i < messages.length; i++) {
       const message = messages[i];
-      const aiResult = batchResults[i];
+      const aiResultRaw = batchResults[i];
       
       // Check if result exists
-      if (!aiResult) {
+      if (!aiResultRaw) {
         logger.error('Missing batch result', {
           messageId: message.id,
           position: i,
@@ -501,23 +544,29 @@ ${JSON.stringify(messagesArray)}
         });
         throw new AIServiceError(`Missing result for message at position ${i}`);
       }
+
+      const expectedId = message.id.toString();
+      const aiResult = normalizeBatchAIResult(aiResultRaw, expectedId);
       
       // Validate result has correct ID
-      if (aiResult.id !== message.id.toString()) {
+      const idMatch = String(aiResult.id) === expectedId;
+      if (!idMatch) {
         logger.warn('Batch result ID mismatch', {
-          expected: message.id,
+          expected: expectedId,
           received: aiResult.id,
           position: i
         });
       }
       
       // Validate AI response structure
-      const validation = validateAIResponse(aiResult);
-      logValidationResult(validation, message.id);
+      const validation = validateAIResponse(aiResult, message);
+      logValidationResult(validation, message);
       
       // FIXED: validateAIResponse returns { valid, reason, validations }, NOT { isValid, data }!
       const result = {
-        isMatch: aiResult.is_match && aiResult.confidence_score >= 70,
+        // CRITICAL: must be valid structure + correct id + boolean true
+        // Avoid JS truthiness bug where "false" (string) is treated as true.
+        isMatch: validation.valid && idMatch && aiResult.is_match === true && aiResult.confidence_score >= 70,
         aiResponse: aiResult,
         metadata: {
           duration: duration / batchSize, // Average duration per message

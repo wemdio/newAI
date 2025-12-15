@@ -117,6 +117,8 @@ export const extractKeywords = (userCriteria) => {
     'this', 'but', 'his', 'by', 'from', 'they', 'we', 'say', 'her', 'she',
     'or', 'an', 'will', 'my', 'one', 'all', 'would', 'there', 'their',
     'who', 'are', 'people', 'someone', 'anyone', 'person', 'is', 'was', 'am',
+    // Generic intent words (too broad, create noisy keyword matches)
+    'need', 'want',
     
     // Russian Stop Words (Pronouns, Prepositions ONLY)
     'это', 'быть', 'или', 'как', 'его', 'для', 'так', 'уже', 'что',
