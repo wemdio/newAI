@@ -106,11 +106,15 @@ ${message.chat_name ? `Канал: ${message.chat_name}` : ''}
     const response = await retryWithBackoff(async () => {
       return await client.chat.completions.create({
         model,
-        messages: [{ role: 'user', content: prompt }],
+        messages: [
+          // Gemini 3 Pro requires system message for reliable responses
+          { role: 'system', content: 'Ты эксперт по верификации лидов. Всегда отвечай в формате JSON.' },
+          { role: 'user', content: prompt }
+        ],
         // NOTE: Gemini 3 Pro does NOT support response_format: json_object
         // It returns empty response if forced. We parse JSON manually.
-        temperature: 0,
-        max_tokens: 1000
+        temperature: 0.1, // Slight randomness helps Gemini avoid empty responses
+        max_tokens: 1500
       });
     }, 3, 1000);
 
