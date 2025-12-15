@@ -93,6 +93,9 @@ class AIMessagingService:
                 logger.info(f"ℹ️ Currently running campaigns: {len(self.active_campaign_tasks)}")
             
             try:
+                # Process pending manual messages from queue
+                await self.process_message_queue()
+                
                 # Check for accounts needing reconnection (e.g., proxy changed)
                 await self.check_and_reconnect_accounts()
                 
@@ -132,6 +135,58 @@ class AIMessagingService:
             # The campaigns run in background during this sleep!
             logger.debug(f"⏸️ Main loop sleeping for 60 seconds...")
             await asyncio.sleep(60)
+    
+    async def process_message_queue(self):
+        """Process pending manual messages from the queue"""
+        try:
+            # Get pending messages
+            messages = await self.supabase.get_pending_messages()
+            
+            if not messages:
+                return  # Nothing to process
+            
+            logger.info(f"📬 Processing {len(messages)} pending manual message(s)")
+            
+            for msg in messages:
+                msg_id = msg['id']
+                account_id = msg['account_id']
+                peer_username = msg['peer_username']
+                content = msg['content']
+                
+                logger.info(f"   📤 Sending to @{peer_username}: {content[:50]}...")
+                
+                try:
+                    # Get account info
+                    account = await self.supabase.get_account_by_id(account_id)
+                    
+                    if not account:
+                        logger.error(f"   ❌ Account {account_id} not found")
+                        await self.supabase.update_message_queue_status(msg_id, 'failed', 'Account not found')
+                        continue
+                    
+                    # Initialize account if not already done
+                    if account_id not in self.telethon.clients:
+                        success = await self.telethon.init_account(account)
+                        if not success:
+                            await self.supabase.update_message_queue_status(msg_id, 'failed', 'Failed to init account')
+                            continue
+                    
+                    # Send message
+                    result = await self.telethon.send_message(account_id, peer_username, content)
+                    
+                    if result == "success":
+                        await self.supabase.update_message_queue_status(msg_id, 'sent')
+                        logger.info(f"   ✅ Message sent to @{peer_username}")
+                    else:
+                        await self.supabase.update_message_queue_status(msg_id, 'failed', f'Send failed: {result}')
+                        logger.error(f"   ❌ Failed to send: {result}")
+                        
+                except Exception as e:
+                    logger.error(f"   ❌ Error sending message {msg_id}: {e}")
+                    await self.supabase.update_message_queue_status(msg_id, 'failed', str(e))
+                    
+        except Exception as e:
+            logger.error(f"⚠️ Error processing message queue: {e}")
     
     async def check_and_reconnect_accounts(self):
         """Check for accounts that need reconnection and reconnect them"""

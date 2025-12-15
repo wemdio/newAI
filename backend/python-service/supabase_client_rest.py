@@ -212,6 +212,38 @@ class SupabaseClient:
             'skip_reason': reason
         })
     
+    # ============= MESSAGE QUEUE =============
+    
+    async def get_pending_messages(self) -> List[Dict]:
+        """Get pending messages from queue"""
+        url = f"{self.url}/rest/v1/message_queue?select=*&status=eq.pending&order=created_at.asc&limit=10"
+        
+        async with self.session.get(url) as resp:
+            if resp.status == 200:
+                return await resp.json()
+            return []
+    
+    async def update_message_queue_status(self, msg_id: int, status: str, error: str = None):
+        """Update message queue status"""
+        from datetime import datetime
+        data = {
+            'status': status,
+            'processed_at': datetime.utcnow().isoformat()
+        }
+        if error:
+            data['error'] = error
+        return await self._patch('message_queue', {'id': msg_id}, data)
+    
+    async def get_account_by_id(self, account_id: str) -> Optional[Dict]:
+        """Get single account by ID"""
+        url = f"{self.url}/rest/v1/telegram_accounts?select=*&id=eq.{account_id}"
+        
+        async with self.session.get(url) as resp:
+            if resp.status == 200:
+                accounts = await resp.json()
+                return accounts[0] if accounts else None
+            return None
+    
     # ============= ACCOUNTS =============
     
     async def get_accounts_for_user(self, user_id: str) -> List[Dict]:
