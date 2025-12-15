@@ -149,6 +149,7 @@ class AIMessagingService:
             
             for msg in messages:
                 msg_id = msg['id']
+                conversation_id = msg.get('conversation_id')
                 account_id = msg['account_id']
                 peer_username = msg['peer_username']
                 content = msg['content']
@@ -156,6 +157,9 @@ class AIMessagingService:
                 logger.info(f"   📤 Sending to @{peer_username}: {content[:50]}...")
                 
                 try:
+                    # Mark as processing to prevent duplicates if worker restarts mid-loop
+                    await self.supabase.update_message_queue_status(msg_id, 'processing')
+
                     # Get account info
                     account = await self.supabase.get_account_by_id(account_id)
                     
@@ -177,6 +181,27 @@ class AIMessagingService:
                     if result == "success":
                         await self.supabase.update_message_queue_status(msg_id, 'sent')
                         logger.info(f"   ✅ Message sent to @{peer_username}")
+
+                        # Persist message to conversation history so UI shows it after reload
+                        if conversation_id:
+                            ok = await self.supabase.add_message_to_conversation(
+                                str(conversation_id),
+                                'assistant',
+                                content
+                            )
+                            if not ok:
+                                logger.warning(
+                                    f"   ⚠️ Message {msg_id} sent but failed to append to conversation_history "
+                                    f"(conversation_id={conversation_id})"
+                                )
+                                # Keep status as sent to avoid re-sending, but store error for visibility
+                                await self.supabase.update_message_queue_status(
+                                    msg_id,
+                                    'sent',
+                                    'Sent, but failed to append to conversation_history'
+                                )
+                        else:
+                            logger.warning(f"   ⚠️ Message {msg_id} has no conversation_id - cannot append to history")
                     else:
                         await self.supabase.update_message_queue_status(msg_id, 'failed', f'Send failed: {result}')
                         logger.error(f"   ❌ Failed to send: {result}")

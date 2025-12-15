@@ -451,18 +451,23 @@ class SupabaseClient:
         
         # Get existing history
         history = results[0].get('conversation_history', [])
+        if history is None:
+            history = []
         
         # Add new message
+        now_iso = datetime.utcnow().isoformat()
         history.append({
             'role': role,
             'content': content,
-            'timestamp': datetime.utcnow().isoformat()
+            'timestamp': now_iso
         })
         
         # Update conversation
         return await self._patch('ai_conversations', {'id': conversation_id}, {
             'conversation_history': history,
-            'updated_at': datetime.utcnow().isoformat()
+            'updated_at': now_iso,
+            'last_message_at': now_iso,
+            'messages_count': len(history)
         })
     
     async def get_conversation_history(self, conversation_id: str) -> List[Dict]:
