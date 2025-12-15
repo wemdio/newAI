@@ -4,7 +4,6 @@ import {
   stopRealtimeScanner,
   getScannerStatus
 } from '../../services/realtimeScanner.js';
-import { runHourlyScan } from '../../jobs/hourlyScanner.js';
 import { authenticateUser } from '../middleware/auth.js';
 import { asyncHandler } from '../../utils/errorHandler.js';
 import logger from '../../utils/logger.js';
@@ -17,12 +16,12 @@ const router = express.Router();
  */
 router.get('/status', asyncHandler(async (req, res) => {
   const status = getScannerStatus();
-  const mode = process.env.SCAN_MODE || 'cron';
 
   res.json({
     success: true,
-    mode,
-    status
+    mode: 'realtime', // Always realtime now
+    status,
+    doubleCheckEnabled: process.env.DOUBLECHECK_MODE !== 'off'
   });
 }));
 
@@ -44,27 +43,14 @@ router.get('/status', asyncHandler(async (req, res) => {
 
 /**
  * POST /api/scanner/manual-scan
- * Trigger manual scan (like hourly cron)
+ * @deprecated Manual scan is deprecated - realtimeScanner runs continuously with Gemini double-check
  */
 router.post('/manual-scan', authenticateUser, asyncHandler(async (req, res) => {
-  logger.info('Manual scan triggered via API', {
-    userId: req.userId
-  });
-
-  // Run in background
-  runHourlyScan()
-    .then(results => {
-      logger.info('Manual scan completed', results);
-    })
-    .catch(error => {
-      logger.error('Manual scan failed', {
-        error: error.message
-      });
-    });
+  logger.warn('Manual scan endpoint is DEPRECATED', { userId: req.userId });
 
   res.json({
-    success: true,
-    message: 'Manual scan started in background'
+    success: false,
+    message: 'Manual scan is deprecated. RealtimeScanner runs continuously and processes messages automatically with Gemini double-check.'
   });
 }));
 

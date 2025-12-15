@@ -1,60 +1,28 @@
 import cron from 'node-cron';
-import { runHourlyScan, retryUnpostedLeads } from './hourlyScanner.js';
+import { retryUnpostedLeads } from './hourlyScanner.js';
 import logger from '../utils/logger.js';
 
 /**
  * Cron job scheduler
  * Manages all scheduled tasks
+ * 
+ * NOTE: Hourly scan is DEPRECATED - use realtimeScanner instead (it has double-check built-in)
  */
 
-let hourlyScanJob = null;
 let retryJob = null;
 
 /**
- * Start the hourly scan job
- * Runs at the start of every hour (e.g., 1:00, 2:00, 3:00)
+ * @deprecated Use realtimeScanner instead - it runs continuously and has Gemini double-check
  */
 export const startHourlyScan = () => {
-  if (hourlyScanJob) {
-    logger.warn('Hourly scan job already running');
-    return;
-  }
-  
-  // Cron expression: minute hour day month weekday
-  // '0 * * * *' = every hour at minute 0
-  const cronExpression = '0 * * * *';
-  
-  hourlyScanJob = cron.schedule(cronExpression, async () => {
-    try {
-      logger.info('Triggering hourly scan job');
-      await runHourlyScan();
-    } catch (error) {
-      logger.error('Hourly scan job failed', {
-        error: error.message,
-        stack: error.stack
-      });
-    }
-  }, {
-    scheduled: true,
-    timezone: 'UTC' // Use UTC for consistency
-  });
-  
-  logger.info('Hourly scan job scheduled', {
-    cronExpression,
-    timezone: 'UTC',
-    nextRun: getNextRunTime(cronExpression)
-  });
+  logger.warn('startHourlyScan is DEPRECATED. Lead scanning is handled by realtimeScanner with Gemini double-check.');
 };
 
 /**
- * Stop the hourly scan job
+ * @deprecated Use realtimeScanner instead
  */
 export const stopHourlyScan = () => {
-  if (hourlyScanJob) {
-    hourlyScanJob.stop();
-    hourlyScanJob = null;
-    logger.info('Hourly scan job stopped');
-  }
+  logger.warn('stopHourlyScan is DEPRECATED. Lead scanning is handled by realtimeScanner.');
 };
 
 /**

@@ -1,7 +1,7 @@
 import { getSupabase } from '../config/database.js';
 import { getActiveUserConfigs } from '../database/queries.js';
 import { preFilterMessages } from '../validators/messagePreFilter.js';
-import { analyzeBatch } from './messageAnalyzer.js';
+import { analyzeBatch, doubleCheckLead } from './messageAnalyzer.js';
 import { saveDetectedLead } from './leadDetector.js';
 import { postLeadToChannel, markLeadAsPosted } from './telegramPoster.js';
 import { generateMessageSuggestion } from './messageSuggestion.js';
@@ -11,6 +11,65 @@ import logger from '../utils/logger.js';
  * Real-time message scanner using Supabase Realtime
  * Analyzes messages immediately as they are inserted
  */
+
+// ============= DOUBLE CHECK CONFIG =============
+const DOUBLECHECK_MODE = (process.env.DOUBLECHECK_MODE || 'always').toLowerCase(); // always | smart | off
+const DOUBLECHECK_MIN_CONFIDENCE = Number.parseInt(process.env.DOUBLECHECK_MIN_CONFIDENCE || '90', 10);
+
+const DOUBLECHECK_RISK_PATTERNS = [
+  /\bваканси[яи]\b/i,
+  /\bрезюме\b/i,
+  /\bищу\s+работ/i,
+  /\bподработ/i,
+  /\bоклад\b/i,
+  /\bзарплат/i,
+  /\bзп\b/i,
+  /\bтребу(ется|ются)\b/i,
+  /\bнанима(ем|ю|ют)\b/i,
+  /\bпредлага(ю|ем|ют)\b/i,
+  /\bоказыва(ю|ем|ют)\s+услуг/i,
+  /\bуслуг[аи]\b/i,
+  /\bнастрою\b/i,
+  /\bсделаю\b/i,
+  /\bпомогу\b/i,
+  /\bпродам\b/i,
+  /\bреклам/i,
+  /\bподписывай(тесь)?\b/i
+];
+
+const getRiskCheckText = (message) => {
+  return [message?.message, message?.bio, message?.chat_name].filter(Boolean).join(' ');
+};
+
+const matchedCriteriaCount = (matchedCriteria) => {
+  if (!matchedCriteria) return 0;
+  if (Array.isArray(matchedCriteria)) return matchedCriteria.length;
+  if (typeof matchedCriteria === 'string') return matchedCriteria.trim().length > 0 ? 1 : 0;
+  return 0;
+};
+
+const looksRiskyNonLead = (message) => {
+  const text = getRiskCheckText(message);
+  if (!text) return false;
+  return DOUBLECHECK_RISK_PATTERNS.some((re) => re.test(text));
+};
+
+const shouldRunGeminiDoubleCheck = (message, aiResponse) => {
+  if (DOUBLECHECK_MODE === 'always') return true;
+  if (DOUBLECHECK_MODE === 'off') return false;
+  // Smart mode
+  const confidence = Number(aiResponse?.confidence_score ?? 0);
+  const msgLen = (message?.message || '').length;
+  const criteriaCnt = matchedCriteriaCount(aiResponse?.matched_criteria);
+
+  if (!Number.isFinite(confidence)) return true;
+  if (confidence < DOUBLECHECK_MIN_CONFIDENCE) return true;
+  if (criteriaCnt === 0) return true;
+  if (msgLen < 20) return true;
+  if (looksRiskyNonLead(message)) return true;
+
+  return false;
+};
 
 let realtimeChannel = null;
 let isRunning = false;
@@ -200,6 +259,46 @@ const processMessagesForUser = async (messages, userConfig) => {
     // Process each matched lead
     for (const match of analysisResults.matches) {
       try {
+        // ============= DOUBLE CHECK WITH GEMINI =============
+        const shouldDoubleCheck = shouldRunGeminiDoubleCheck(match.message, match.analysis.aiResponse);
+        
+        if (shouldDoubleCheck) {
+          try {
+            const verification = await doubleCheckLead(
+              match.message,
+              match.analysis.aiResponse,
+              userConfig.lead_prompt,
+              userConfig.openrouter_api_key
+            );
+
+            if (!verification.verified) {
+              logger.info('Lead rejected by Gemini Double Check', {
+                userId,
+                messageId: match.message.id,
+                reason: verification.reasoning
+              });
+              continue; // Skip saving this lead
+            }
+
+            // Enrich reasoning with Gemini's confirmation
+            match.analysis.aiResponse.reasoning = `[Gemini Verified] ${verification.reasoning}`;
+          } catch (dcError) {
+            logger.warn('Double check failed, proceeding with original analysis', {
+              userId,
+              messageId: match.message.id,
+              error: dcError.message
+            });
+            // Continue with original analysis if double check fails
+          }
+        } else {
+          logger.debug('Skipping Gemini Double Check (smart mode)', {
+            userId,
+            messageId: match.message.id,
+            confidence: match.analysis.aiResponse?.confidence_score,
+            mode: DOUBLECHECK_MODE
+          });
+        }
+
         // Save to database
         const savedLead = await saveDetectedLead(
           userId,
@@ -219,7 +318,8 @@ const processMessagesForUser = async (messages, userConfig) => {
         logger.info('Lead detected and saved', {
           userId,
           leadId: savedLead.id,
-          confidence: match.analysis.aiResponse.confidence_score
+          confidence: match.analysis.aiResponse.confidence_score,
+          doubleChecked: shouldDoubleCheck
         });
 
         // Generate message suggestion if message_prompt is configured
