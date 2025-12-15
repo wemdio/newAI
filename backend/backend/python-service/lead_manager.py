@@ -138,14 +138,27 @@ class LeadManager:
             print(f"      💬 Generated message: {first_message[:100]}...")
             
             # Send message via Telethon
-            success = await self.telethon.send_message(
+            send_result = await self.telethon.send_message(
                 account_id,
                 username,
                 first_message
             )
             
-            if not success:
-                print(f"      ❌ Failed to send message")
+            # Handle different send results
+            if send_result == "privacy_premium":
+                # User requires Telegram Premium - skip this lead permanently
+                print(f"      ⏭️ Skipping - user requires Telegram Premium")
+                await self.supabase.skip_lead_with_reason(lead_id, "privacy_premium_required")
+                return False
+            
+            if send_result == "forbidden":
+                # Can't write to this user - skip permanently
+                print(f"      ⏭️ Skipping - cannot write to user (forbidden)")
+                await self.supabase.skip_lead_with_reason(lead_id, "write_forbidden")
+                return False
+            
+            if send_result != "success":
+                print(f"      ❌ Failed to send message: {send_result}")
                 return False
             
             # Create conversation record

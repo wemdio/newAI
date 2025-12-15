@@ -9,6 +9,7 @@ from telethon.errors import (
     AuthKeyUnregisteredError,
     SessionPasswordNeededError
 )
+from telethon.errors.rpcbaseerrors import ForbiddenError
 from urllib.parse import urlparse
 from typing import Dict, Optional, Callable
 import asyncio
@@ -297,7 +298,7 @@ class TelethonManager:
             print(f"❌ Proxy test failed: {e}")
             return False
     
-    async def send_message(self, account_id: str, username: str, message: str) -> bool:
+    async def send_message(self, account_id: str, username: str, message: str) -> str:
         """
         Send message to user
         
@@ -307,24 +308,40 @@ class TelethonManager:
             message: Message text
         
         Returns:
-            True if sent successfully, False otherwise
+            "success" - message sent
+            "privacy_premium" - user requires Telegram Premium to receive messages
+            "flood_wait" - rate limited
+            "peer_flood" - spam ban
+            "forbidden" - can't write to user
+            "banned" - account banned
+            "error" - other error
         """
         client = self.clients.get(account_id)
         if not client:
             print(f"❌ Client {account_id} not initialized")
-            return False
+            return "error"
         
         try:
             # Send message
             await client.send_message(username, message)
             print(f"✉️ Sent message to @{username}")
-            return True
+            return "success"
             
         except FloodWaitError as e:
             # Telegram rate limit - specific time
             print(f"🚫 FloodWait for {e.seconds}s")
             await self.safety.handle_flood_wait(account_id, e.seconds)
-            return False
+            return "flood_wait"
+        
+        except ForbiddenError as e:
+            # Check for PRIVACY_PREMIUM_REQUIRED error
+            error_msg = str(e)
+            if "PRIVACY_PREMIUM_REQUIRED" in error_msg:
+                print(f"🔒 User @{username} requires Telegram Premium to receive messages")
+                return "privacy_premium"
+            else:
+                print(f"🚫 Forbidden error: {e}")
+                return "forbidden"
             
         except PeerFloodError:
             # Too many messages sent - ban for several hours
@@ -332,24 +349,24 @@ class TelethonManager:
             print(f"   Account {account_id} will be paused for 24 hours")
             # Pause for 24 hours (86400 seconds)
             await self.safety.handle_flood_wait(account_id, 86400)
-            return False
+            return "peer_flood"
             
         except ChatWriteForbiddenError:
             # Can't write to this user/chat (probably a channel or bot)
             print(f"⚠️ Cannot write to @{username} - might be a channel or restricted")
-            return False
+            return "forbidden"
             
         except UserBannedInChannelError:
             # Account permanently banned
             print(f"🔒 Account {account_id} permanently banned")
             await self.safety.handle_account_ban(account_id)
-            return False
+            return "banned"
             
         except Exception as e:
             print(f"❌ Error sending message: {e}")
             import traceback
             traceback.print_exc()
-            return False
+            return "error"
     
     async def _setup_message_listener(self, account_id: str, client: TelegramClient):
         """
