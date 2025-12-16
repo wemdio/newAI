@@ -103,19 +103,26 @@ ${message.chat_name ? `Канал: ${message.chat_name}` : ''}
     const response = await retryWithBackoff(async () => {
       return await client.chat.completions.create({
         model,
-        messages: [
-          { role: 'system', content: 'Ты эксперт по верификации лидов. Отвечай ТОЛЬКО валидным JSON.' },
-          { role: 'user', content: prompt }
-        ],
-        response_format: { type: 'json_object' }, // GPT-5.2 supports structured JSON output
-        temperature: 0.2,
-        max_tokens: 500
-      });
+          messages: [
+            { role: 'system', content: 'Ты эксперт по верификации лидов. Отвечай ТОЛЬКО валидным JSON.' },
+            { role: 'user', content: prompt }
+          ],
+          // response_format: { type: 'json_object' }, // Commented out to prevent "Empty response" if model doesn't support it strictly
+          temperature: 0.2,
+          max_tokens: 500
+        });
     }, 3, 1000);
 
     const content = response.choices[0]?.message?.content;
+    
+    // Detailed logging for debugging empty responses
     if (!content || content.trim() === '') {
-      throw new Error('Empty response from Gemini');
+      logger.error('Received empty response from Double Check AI', {
+        model,
+        fullResponse: JSON.stringify(response),
+        finishReason: response.choices[0]?.finish_reason
+      });
+      throw new Error('Empty response from Double Check AI');
     }
 
     let result;
