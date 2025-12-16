@@ -229,7 +229,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'deepseek/deepseek-v3.2';
+    const model = process.env.AI_MODEL || 'openai/gpt-oss-120b';
     
     logger.info('Making OpenRouter API call', {
       messageId: message.id,
@@ -416,7 +416,7 @@ ${JSON.stringify(messagesArray)}
 
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    const model = process.env.AI_MODEL || 'deepseek/deepseek-v3.2';
+    const model = process.env.AI_MODEL || 'openai/gpt-oss-120b';
     
     // Estimate tokens
     const estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt);
@@ -438,8 +438,8 @@ ${JSON.stringify(messagesArray)}
         ],
         temperature: 0.1, 
         top_p: 0.95,
-        frequency_penalty: 0.5, // Reduced from 1.0 to avoid structure breakage
-        presence_penalty: 0.2, // Reduced from 0.5
+        frequency_penalty: 0.1, // Standard low penalty
+        presence_penalty: 0, 
         seed: 12345,
         // Don't use response_format for arrays - Gemini returns plain JSON array
         max_tokens: 4000 // Increased for batch + reasoning
