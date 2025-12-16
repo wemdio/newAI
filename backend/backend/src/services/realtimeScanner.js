@@ -98,6 +98,12 @@ const processBatch = async () => {
       return;
     }
 
+    // Log active users for debugging
+    logger.debug('Active users found', {
+      count: activeUsers.length,
+      userIds: activeUsers.map(u => u.user_id.substring(0, 8) + '...')
+    });
+
     // Process for each active user independently
     for (const userConfig of activeUsers) {
       try {
@@ -142,6 +148,7 @@ const processBatch = async () => {
         }
         
         if (!messages || messages.length === 0) {
+          logger.debug('No new messages for user', { userId, lastProcessedId: userLastId });
           continue; // No new messages for this user
         }
         
