@@ -51,6 +51,10 @@ export const calculateCost = (inputTokens, outputTokens, model = 'anthropic/clau
     'openai/gpt-5.2-chat': {
       input: 1.75 / 1_000_000,  // $1.75 per 1M tokens
       output: 14.00 / 1_000_000  // $14.00 per 1M tokens
+    },
+    'openai/gpt-4o-mini': {
+      input: 0.15 / 1_000_000,
+      output: 0.60 / 1_000_000
     }
   };
   

@@ -65,12 +65,11 @@ const normalizeBatchAIResult = (aiResult, expectedMessageId) => {
  */
 export const doubleCheckLead = async (message, initialAnalysis, userCriteria, apiKey) => {
   const startTime = Date.now();
-  // GPT-5.2 Chat - fast, low-latency with strong instruction following
-  // https://openrouter.ai/openai/gpt-5.2-chat/api
-  const model = 'openai/gpt-5.2-chat';
+  // GPT-4o Mini - reliable, cheap, fast, supports JSON mode well
+  const model = 'openai/gpt-4o-mini';
 
   try {
-    logger.info('Starting Double Check with Gemini', {
+    logger.info('Starting Double Check with AI', {
       messageId: message.id,
       initialConfidence: initialAnalysis.confidence_score,
       model
@@ -108,7 +107,7 @@ ${message.chat_name ? `Канал: ${message.chat_name}` : ''}
             { role: 'system', content: 'Ты эксперт по верификации лидов. Отвечай ТОЛЬКО валидным JSON.' },
             { role: 'user', content: prompt }
           ],
-          // response_format: { type: 'json_object' }, // Commented out to prevent "Empty response" if model doesn't support it strictly
+          response_format: { type: 'json_object' }, 
           temperature: 0.2,
           max_tokens: 500
         });
@@ -435,10 +434,10 @@ ${JSON.stringify(messagesArray)}
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0.3, // Increased slightly to avoid deterministic loops
+        temperature: 0.1, 
         top_p: 0.95,
-        frequency_penalty: 1.0, // Maximum penalty to prevent repetition loops (fixes "SуSуSу" and "СЕКИЕКИЕКИЕ" errors)
-        presence_penalty: 0.5, // Strong presence penalty
+        frequency_penalty: 0.5, // Reduced from 1.0 to avoid structure breakage
+        presence_penalty: 0.2, // Reduced from 0.5
         seed: 12345,
         // Don't use response_format for arrays - Gemini returns plain JSON array
         max_tokens: 4000 // Increased for batch + reasoning
