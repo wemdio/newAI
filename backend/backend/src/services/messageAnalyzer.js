@@ -65,56 +65,49 @@ const normalizeBatchAIResult = (aiResult, expectedMessageId) => {
  */
 export const doubleCheckLead = async (message, initialAnalysis, userCriteria, apiKey) => {
   const startTime = Date.now();
-  const model = 'google/gemini-3-pro-preview';
+  // Use Gemini 2.0 Flash - more stable and reliable than 3 Pro Preview
+  const model = 'google/gemini-2.0-flash-001';
 
   try {
     logger.info('Starting Double Check with Gemini', {
       messageId: message.id,
-      initialConfidence: initialAnalysis.confidence_score
+      initialConfidence: initialAnalysis.confidence_score,
+      model
     });
 
     const client = getOpenRouter(apiKey);
     
-    const prompt = `ТЫ - ЭКСПЕРТ ПО КОНТРОЛЮ КАЧЕСТВА ЛИДОВ.
-Твоя задача - перепроверить решение предыдущего AI, который посчитал это сообщение лидом.
+    const prompt = `Ты эксперт по верификации лидов. Перепроверь решение AI.
 
-КРИТЕРИИ ПОИСКА:
+КРИТЕРИИ ПОИСКА ЛИДОВ:
 ${userCriteria}
 
-СООБЩЕНИЕ:
-${message.message || ''}
-${message.bio ? `Био: ${message.bio}` : ''}
+АНАЛИЗИРУЕМОЕ СООБЩЕНИЕ:
+"${message.message || ''}"
+${message.bio ? `Био автора: ${message.bio}` : ''}
 ${message.chat_name ? `Канал: ${message.chat_name}` : ''}
 
-ПРЕДЫДУЩИЙ АНАЛИЗ:
-Причина: "${initialAnalysis.reasoning}"
-Уверенность: ${initialAnalysis.confidence_score}%
+ПРЕДЫДУЩИЙ АНАЛИЗ AI:
+- Причина: "${initialAnalysis.reasoning}"
+- Уверенность: ${initialAnalysis.confidence_score}%
 
-ЗАДАЧА:
-1. Прочитай сообщение ОЧЕНЬ ВНИМАТЕЛЬНО.
-2. Действительно ли человек ИЩЕТ то, что указано в критериях?
-3. Нет ли здесь ложного срабатывания (например, он продает, а не покупает)?
-4. Если есть сомнения - отвергай.
+ТВОЯ ЗАДАЧА:
+1. Человек действительно ИЩЕТ/СПРАШИВАЕТ то, что в критериях? (не предлагает, не продает)
+2. Сообщение релевантно критериям поиска?
+3. При сомнениях - отвергай.
 
-Верни JSON:
-{
-  "verified": boolean,
-  "confidence": number,
-  "reasoning": "твое обоснование (на русском)"
-}`;
+ОБЯЗАТЕЛЬНО верни ТОЛЬКО JSON без markdown:
+{"verified": true или false, "confidence": число 0-100, "reasoning": "причина на русском"}`;
 
     const response = await retryWithBackoff(async () => {
       return await client.chat.completions.create({
         model,
         messages: [
-          // Gemini 3 Pro requires system message for reliable responses
-          { role: 'system', content: 'Ты эксперт по верификации лидов. Всегда отвечай в формате JSON.' },
+          { role: 'system', content: 'Ты JSON API. Отвечай ТОЛЬКО валидным JSON объектом без markdown разметки.' },
           { role: 'user', content: prompt }
         ],
-        // NOTE: Gemini 3 Pro does NOT support response_format: json_object
-        // It returns empty response if forced. We parse JSON manually.
-        temperature: 0.1, // Slight randomness helps Gemini avoid empty responses
-        max_tokens: 1500
+        temperature: 0.3, // Balanced for reliable yet varied responses
+        max_tokens: 500 // Shorter response = more reliable
       });
     }, 3, 1000);
 
@@ -423,9 +416,10 @@ ${JSON.stringify(messagesArray)}
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0,
-        top_p: 1,
-        frequency_penalty: 0.1, // Prevent repetition loops (fixes "SуSуSу" error)
+        temperature: 0.1, // Slight randomness helps avoid repetition
+        top_p: 0.95,
+        frequency_penalty: 0.5, // Strong penalty to prevent repetition loops (fixes "SуSуSу" and "СЕКИЕКИЕКИЕ" errors)
+        presence_penalty: 0.1, // Encourage diverse vocabulary
         seed: 12345,
         // Don't use response_format for arrays - Gemini returns plain JSON array
         max_tokens: 4000 // Increased for batch + reasoning
