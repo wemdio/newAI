@@ -101,8 +101,9 @@ ${message.chat_name ? `Канал: ${message.chat_name}` : ''}
 {"verified": true или false, "confidence": число 0-100, "reasoning": "причина на русском"}`;
 
     const response = await retryWithBackoff(async () => {
-      return await client.chat.completions.create({
-        model,
+      try {
+        return await client.chat.completions.create({
+          model,
           messages: [
             { role: 'system', content: 'Ты эксперт по верификации лидов. Отвечай ТОЛЬКО валидным JSON.' },
             { role: 'user', content: prompt }
@@ -111,6 +112,14 @@ ${message.chat_name ? `Канал: ${message.chat_name}` : ''}
           temperature: 0.2,
           max_tokens: 500
         });
+      } catch (e) {
+        // Handle 403 Forbidden specifically - often means model not accessible/exists
+        if (e.status === 403 || (e.response && e.response.status === 403)) {
+           logger.error(`Model ${model} returned 403 Forbidden. It may be restricted or require special access.`, { error: e.message });
+           throw new Error(`Model ${model} is restricted (403). Please choose a different model.`);
+        }
+        throw e;
+      }
     }, 3, 1000);
 
     const content = response.choices[0]?.message?.content;
@@ -379,29 +388,30 @@ ${JSON.stringify(messagesArray)}
 ВАЖНО:
 1. Проанализируй КАЖДОЕ сообщение ОТДЕЛЬНО (не смешивай контекст!)
 2. Верни ТОЛЬКО МАССИВ из ${batchSize} JSON объектов (без дополнительного текста!)
-3. Порядок результатов должен соответствовать порядку сообщений
-4. Каждый результат должен содержать: id, is_match, confidence_score, reasoning, matched_criteria
-
-КРИТИЧЕСКИ ВАЖНО: Ответ должен начинаться с [ и заканчиваться ] - это должен быть чистый JSON массив!
-
-ФОРМАТ ОТВЕТА (ТОЛЬКО ЭТОТ JSON МАССИВ, БЕЗ ТЕКСТА):
-[
-  {
-    "id": "message_id_1",
-    "is_match": boolean,
-    "confidence_score": 0-100,
-    "reasoning": "краткое объяснение на русском",
-    "matched_criteria": ["критерий1", "критерий2"]
-  },
-  {
-    "id": "message_id_2",
-    "is_match": boolean,
-    "confidence_score": 0-100,
-    "reasoning": "краткое объяснение на русском",
-    "matched_criteria": []
-  }
-  ... (всего ${batchSize} объектов)
-]`;
+    3. Порядок результатов должен соответствовать порядку сообщений
+    4. Каждый результат должен содержать: id, is_match, confidence_score, reasoning, matched_criteria
+    5. Reasoning (причина) должна быть ОЧЕНЬ КРАТКОЙ (макс. 10 слов), чтобы избежать ошибок JSON.
+    
+    КРИТИЧЕСКИ ВАЖНО: Ответ должен начинаться с [ и заканчиваться ] - это должен быть чистый JSON массив!
+    
+    ФОРМАТ ОТВЕТА (ТОЛЬКО ЭТОТ JSON МАССИВ, БЕЗ ТЕКСТА):
+    [
+      {
+        "id": "message_id_1",
+        "is_match": boolean,
+        "confidence_score": 0-100,
+        "reasoning": "кратко 5-10 слов",
+        "matched_criteria": ["критерий1", "критерий2"]
+      },
+      {
+        "id": "message_id_2",
+        "is_match": boolean,
+        "confidence_score": 0-100,
+        "reasoning": "кратко 5-10 слов",
+        "matched_criteria": []
+      }
+      ... (всего ${batchSize} объектов)
+    ]`;
 
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
@@ -425,10 +435,10 @@ ${JSON.stringify(messagesArray)}
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0.1, // Slight randomness helps avoid repetition
+        temperature: 0.3, // Increased slightly to avoid deterministic loops
         top_p: 0.95,
-        frequency_penalty: 0.5, // Strong penalty to prevent repetition loops (fixes "SуSуSу" and "СЕКИЕКИЕКИЕ" errors)
-        presence_penalty: 0.1, // Encourage diverse vocabulary
+        frequency_penalty: 1.0, // Maximum penalty to prevent repetition loops (fixes "SуSуSу" and "СЕКИЕКИЕКИЕ" errors)
+        presence_penalty: 0.5, // Strong presence penalty
         seed: 12345,
         // Don't use response_format for arrays - Gemini returns plain JSON array
         max_tokens: 4000 // Increased for batch + reasoning
