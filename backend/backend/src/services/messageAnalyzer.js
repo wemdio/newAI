@@ -65,8 +65,9 @@ const normalizeBatchAIResult = (aiResult, expectedMessageId) => {
  */
 export const doubleCheckLead = async (message, initialAnalysis, userCriteria, apiKey) => {
   const startTime = Date.now();
-  // GPT-4o Mini - reliable, cheap, fast, supports JSON mode well
-  const model = 'openai/gpt-4o-mini';
+  // Gemini 2.0 Flash Experimental - Top tier reasoning, currently free/cheap on OpenRouter
+  // Superior to GPT-4o-mini for validation tasks
+  const model = 'google/gemini-2.0-flash-exp';
 
   try {
     logger.info('Starting Double Check with AI', {
