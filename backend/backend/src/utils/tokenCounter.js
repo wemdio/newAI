@@ -56,6 +56,10 @@ export const calculateCost = (inputTokens, outputTokens, model = 'anthropic/clau
       input: 0.15 / 1_000_000,
       output: 0.60 / 1_000_000
     },
+    'google/gemini-2.5-pro': {
+      input: 1.25 / 1_000_000,
+      output: 10.00 / 1_000_000
+    },
     'google/gemini-2.0-flash-exp': {
       input: 0,
       output: 0

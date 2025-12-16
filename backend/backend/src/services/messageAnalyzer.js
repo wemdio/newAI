@@ -65,10 +65,10 @@ const normalizeBatchAIResult = (aiResult, expectedMessageId) => {
  */
 export const doubleCheckLead = async (message, initialAnalysis, userCriteria, apiKey) => {
   const startTime = Date.now();
-  // Gemini 2.0 Flash Thinking - Specialized reasoning model that "thinks" before answering
-  // Perfect for verification tasks (Double Check)
-  // ID: google/gemini-2.0-flash-thinking-exp:free
-  const model = 'google/gemini-2.0-flash-thinking-exp:free';
+  // Gemini 2.5 Pro - State-of-the-art reasoning model, stable and powerful
+  // Excellent for verification tasks (Double Check)
+  // ID: google/gemini-2.5-pro
+  const model = 'google/gemini-2.5-pro';
 
   try {
     logger.info('Starting Double Check with AI', {
