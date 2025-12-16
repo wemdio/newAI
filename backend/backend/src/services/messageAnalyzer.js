@@ -425,6 +425,7 @@ ${JSON.stringify(messagesArray)}
         ],
         temperature: 0,
         top_p: 1,
+        frequency_penalty: 0.1, // Prevent repetition loops (fixes "SуSуSу" error)
         seed: 12345,
         // Don't use response_format for arrays - Gemini returns plain JSON array
         max_tokens: 4000 // Increased for batch + reasoning
