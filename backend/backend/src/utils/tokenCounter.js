@@ -47,6 +47,10 @@ export const calculateCost = (inputTokens, outputTokens, model = 'anthropic/clau
     'google/gemini-3-pro-preview': {
       input: 2.00 / 1_000_000,  // $2.00 per 1M tokens
       output: 12.00 / 1_000_000  // $12.00 per 1M tokens
+    },
+    'openai/gpt-5.2-chat': {
+      input: 1.75 / 1_000_000,  // $1.75 per 1M tokens
+      output: 14.00 / 1_000_000  // $14.00 per 1M tokens
     }
   };
   

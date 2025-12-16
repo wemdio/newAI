@@ -65,8 +65,9 @@ const normalizeBatchAIResult = (aiResult, expectedMessageId) => {
  */
 export const doubleCheckLead = async (message, initialAnalysis, userCriteria, apiKey) => {
   const startTime = Date.now();
-  // Use Gemini 2.0 Flash - more stable and reliable than 3 Pro Preview
-  const model = 'google/gemini-2.0-flash-001';
+  // GPT-5.2 Chat - fast, low-latency with strong instruction following
+  // https://openrouter.ai/openai/gpt-5.2-chat/api
+  const model = 'openai/gpt-5.2-chat';
 
   try {
     logger.info('Starting Double Check with Gemini', {
@@ -103,11 +104,12 @@ ${message.chat_name ? `Канал: ${message.chat_name}` : ''}
       return await client.chat.completions.create({
         model,
         messages: [
-          { role: 'system', content: 'Ты JSON API. Отвечай ТОЛЬКО валидным JSON объектом без markdown разметки.' },
+          { role: 'system', content: 'Ты эксперт по верификации лидов. Отвечай ТОЛЬКО валидным JSON.' },
           { role: 'user', content: prompt }
         ],
-        temperature: 0.3, // Balanced for reliable yet varied responses
-        max_tokens: 500 // Shorter response = more reliable
+        response_format: { type: 'json_object' }, // GPT-5.2 supports structured JSON output
+        temperature: 0.2,
+        max_tokens: 500
       });
     }, 3, 1000);
 
