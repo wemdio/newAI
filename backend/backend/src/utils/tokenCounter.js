@@ -57,7 +57,11 @@ export const calculateCost = (inputTokens, outputTokens, model = 'anthropic/clau
       output: 0.60 / 1_000_000
     },
     'google/gemini-2.0-flash-exp': {
-      input: 0, // Currently free on OpenRouter
+      input: 0,
+      output: 0
+    },
+    'google/gemini-2.0-flash-thinking-exp:free': {
+      input: 0, // Free on OpenRouter
       output: 0
     }
   };
