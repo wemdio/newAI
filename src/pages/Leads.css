@@ -323,13 +323,18 @@
 
 .btn-post-telegram:disabled {
   opacity: 0.6;
-  cursor: not-allowed;
+  cursor: wait;
 }
 
 .btn-post-telegram.posted {
-  border-color: #2a3e2a;
-  color: #7dd17d;
-  background: #1a2e1a;
+  border-color: #3a4a3a;
+  color: #9aba9a;
+}
+
+.btn-post-telegram.posted:hover:not(:disabled) {
+  border-color: #7db8d1;
+  background: #1a2e3a;
+  color: #7db8d1;
 }
 
 .btn-delete-single {

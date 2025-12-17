@@ -199,7 +199,7 @@ function Leads() {
             Обновить
           </button>
           <button onClick={copyAllUsernames} className="btn-copy-usernames">
-            📋 Копировать юзернеймы
+            Копировать юзернеймы
           </button>
           {selectedLeads.size > 0 && (
             <button onClick={handleDeleteSelected} className="btn-delete">
@@ -289,8 +289,8 @@ function Leads() {
                     onChange={() => toggleSelectLead(lead.id)}
                     className="lead-checkbox"
                   />
-                <div className="confidence-badge" style={{ backgroundColor: getConfidenceColor(lead.confidence_score) }}>
-                  {lead.confidence_score}%
+                  <div className="confidence-badge" style={{ backgroundColor: getConfidenceColor(lead.confidence_score) }}>
+                    {lead.confidence_score}%
                   </div>
                   {lead.lead_status && lead.lead_status !== 'lead' && (
                     <div className="status-badge" style={{ borderColor: getStatusColor(lead.lead_status) }}>
@@ -331,13 +331,13 @@ function Leads() {
               </div>
 
               <div className="lead-actions">
-                  <button
+                <button
                   onClick={() => handleUpdateStatus(lead.id, 'lead')}
                   className={`btn-status ${lead.lead_status === 'lead' ? 'active' : ''}`}
                   disabled={lead.lead_status === 'lead'}
-                  >
+                >
                   Лид
-                  </button>
+                </button>
                 <button
                   onClick={() => handleUpdateStatus(lead.id, 'not_lead')}
                   className={`btn-status ${lead.lead_status === 'not_lead' ? 'active' : ''}`}
@@ -345,27 +345,27 @@ function Leads() {
                 >
                   Не лид
                 </button>
-                    <button
+                <button
                   onClick={() => handleUpdateStatus(lead.id, 'sale')}
                   className={`btn-status ${lead.lead_status === 'sale' ? 'active' : ''}`}
                   disabled={lead.lead_status === 'sale'}
-                  >
+                >
                   Продажа
-                    </button>
-                    <button
+                </button>
+                <button
                   onClick={() => handlePostToTelegram(lead.id)}
                   className={`btn-post-telegram ${lead.posted_to_telegram ? 'posted' : ''}`}
                   disabled={postingLeadId === lead.id}
-                    >
-                  {postingLeadId === lead.id ? '⏳' : '📤'} {lead.posted_to_telegram ? 'Опубликован' : 'В Telegram'}
-                    </button>
-                    <button
+                >
+                  {postingLeadId === lead.id ? 'Отправка...' : 'В Telegram'}
+                </button>
+                <button
                   onClick={() => handleDeleteLead(lead.id)}
                   className="btn-delete-single"
-                    >
+                >
                   Удалить
-                    </button>
-                  </div>
+                </button>
+              </div>
             </div>
           ))}
         </div>
