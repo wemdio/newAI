@@ -230,8 +230,8 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    // Use configured model or fallback to DeepSeek V3 (most cost effective)
-    const model = process.env.AI_MODEL || 'deepseek/deepseek-chat';
+    // Use configured model or fallback to OpenAI gpt-oss-120b (open-weight MoE model)
+    const model = process.env.AI_MODEL || 'openai/gpt-oss-120b';
     
     logger.info('Making OpenRouter API call', {
       messageId: message.id,
@@ -424,8 +424,8 @@ ${JSON.stringify(messagesArray)}
 
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    // Use configured model or fallback to DeepSeek V3 (most cost effective)
-    const model = process.env.AI_MODEL || 'deepseek/deepseek-chat';
+    // Use configured model or fallback to OpenAI gpt-oss-120b (open-weight MoE model)
+    const model = process.env.AI_MODEL || 'openai/gpt-oss-120b';
     
     // Estimate tokens
     const estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt);

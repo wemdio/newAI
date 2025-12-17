@@ -21,7 +21,7 @@ print(f"🔧 Config: Telegram Bot Token found: {'Yes' if TELEGRAM_BOT_TOKEN else
 # OpenRouter Configuration (AI Model)
 # NOTE: API key is now user-specific and loaded from database (user_config table)
 # Each user provides their own OpenRouter API key in the app settings
-AI_MODEL = 'google/gemini-3-pro-preview'
+AI_MODEL = 'openai/gpt-oss-120b'
 
 # Safety Limits (Anti-ban) - VERY Conservative settings to avoid PeerFlood
 MAX_MESSAGES_PER_DAY = int(os.getenv('MAX_MESSAGES_PER_DAY', '25'))  # Safe: 25 messages per day
