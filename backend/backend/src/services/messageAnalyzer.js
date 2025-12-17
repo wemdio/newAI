@@ -111,13 +111,8 @@ ${message.chat_name ? `Канал: ${message.chat_name}` : ''}
           ],
           response_format: { type: 'json_object' }, 
           temperature: 0.2,
-          max_tokens: 500,
-          // Provider filtering - use only specified providers
-          provider: {
-            order: ['DeepInfra', 'Novita', 'GMICloud', 'Ncompass', 'SiliconFlow'],
-            allow_fallbacks: false,
-            quantizations: ['fp4', 'fp8']
-          }
+          max_tokens: 500
+          // NOTE: No provider filtering for Gemini models - they're only available via Google
         });
       } catch (e) {
         // Handle 403 Forbidden specifically - often means model not accessible/exists
