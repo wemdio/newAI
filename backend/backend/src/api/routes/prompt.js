@@ -293,7 +293,13 @@ ${feedback ? `ОБРАТНАЯ СВЯЗЬ:\n${feedback}\n` : ''}
           { role: 'user', content: userMessage }
         ],
         temperature: 0.7,
-        max_tokens: 4000
+        max_tokens: 4000,
+        // Provider filtering - use only specified providers
+        provider: {
+          order: ['DeepInfra', 'Novita', 'GMICloud', 'Ncompass', 'SiliconFlow'],
+          allow_fallbacks: false,
+          quantizations: ['fp4', 'fp8']
+        }
       })
     });
 

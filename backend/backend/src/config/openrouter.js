@@ -79,7 +79,13 @@ export const testConnection = async (apiKey = null) => {
         { role: 'user', content: 'Say "test successful" and nothing else.' }
       ],
       max_tokens: 10,
-      temperature: 0
+      temperature: 0,
+      // Provider filtering - use only specified providers
+      provider: {
+        order: ['DeepInfra', 'Novita', 'GMICloud', 'Ncompass', 'SiliconFlow'],
+        allow_fallbacks: false,
+        quantizations: ['fp4', 'fp8']
+      }
     });
 
     const result = response.choices[0]?.message?.content;

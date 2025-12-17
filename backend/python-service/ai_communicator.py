@@ -246,7 +246,13 @@ Username: @{username}
             'model': AI_MODEL,
             'messages': messages,
             'temperature': 0.7,
-            'max_tokens': 4000  # Increased to 4000 to accommodate deep reasoning + long history analysis
+            'max_tokens': 4000,  # Increased to 4000 to accommodate deep reasoning + long history analysis
+            # Provider filtering - use only specified providers
+            'provider': {
+                'order': ['DeepInfra', 'Novita', 'GMICloud', 'Ncompass', 'SiliconFlow'],
+                'allow_fallbacks': False,
+                'quantizations': ['fp4', 'fp8']
+            }
         }
         
         async with aiohttp.ClientSession() as session:

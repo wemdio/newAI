@@ -111,7 +111,13 @@ ${message.chat_name ? `Канал: ${message.chat_name}` : ''}
           ],
           response_format: { type: 'json_object' }, 
           temperature: 0.2,
-          max_tokens: 500
+          max_tokens: 500,
+          // Provider filtering - use only specified providers
+          provider: {
+            order: ['DeepInfra', 'Novita', 'GMICloud', 'Ncompass', 'SiliconFlow'],
+            allow_fallbacks: false,
+            quantizations: ['fp4', 'fp8']
+          }
         });
       } catch (e) {
         // Handle 403 Forbidden specifically - often means model not accessible/exists
@@ -229,8 +235,8 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    // Hardcoded model to enforce switch from DeepSeek
-    const model = 'openai/gpt-oss-120b';
+    // Use configured model or fallback to DeepSeek V3 (most cost effective)
+    const model = process.env.AI_MODEL || 'deepseek/deepseek-chat';
     
     logger.info('Making OpenRouter API call', {
       messageId: message.id,
@@ -250,7 +256,13 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
         top_p: 1, // Disable nucleus sampling for consistency
         seed: 12345, // Fixed seed for reproducibility
         response_format: { type: 'json_object' },
-        max_tokens: 1000 // Increased to allow for reasoning
+        max_tokens: 1000, // Increased to allow for reasoning
+        // Provider filtering - use only specified providers
+        provider: {
+          order: ['DeepInfra', 'Novita', 'GMICloud', 'Ncompass', 'SiliconFlow'],
+          allow_fallbacks: false,
+          quantizations: ['fp4', 'fp8']
+        }
       });
     }, 3, 1000);
     
@@ -417,8 +429,8 @@ ${JSON.stringify(messagesArray)}
 
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    // Hardcoded model to enforce switch from DeepSeek
-    const model = 'openai/gpt-oss-120b';
+    // Use configured model or fallback to DeepSeek V3 (most cost effective)
+    const model = process.env.AI_MODEL || 'deepseek/deepseek-chat';
     
     // Estimate tokens
     const estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt);
@@ -444,7 +456,13 @@ ${JSON.stringify(messagesArray)}
         presence_penalty: 0, 
         seed: 12345,
         // Don't use response_format for arrays - Gemini returns plain JSON array
-        max_tokens: 4000 // Increased for batch + reasoning
+        max_tokens: 4000, // Increased for batch + reasoning
+        // Provider filtering - use only specified providers
+        provider: {
+          order: ['DeepInfra', 'Novita', 'GMICloud', 'Ncompass', 'SiliconFlow'],
+          allow_fallbacks: false,
+          quantizations: ['fp4', 'fp8']
+        }
       });
     }, 3, 1000);
     

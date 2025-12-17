@@ -119,7 +119,13 @@ ${lead.message}
             { role: 'user', content: userPrompt }
           ],
           temperature: 0.7, // More creative for message generation
-          max_tokens: 2500 // Further increased - Gemini 3 Pro uses lots of reasoning tokens
+          max_tokens: 2500, // Further increased - Gemini 3 Pro uses lots of reasoning tokens
+          // Provider filtering - use only specified providers
+          provider: {
+            order: ['DeepInfra', 'Novita', 'GMICloud', 'Ncompass', 'SiliconFlow'],
+            allow_fallbacks: false,
+            quantizations: ['fp4', 'fp8']
+          }
         });
         logger.info('✅ OpenRouter API call completed', { 
           leadId: lead.id, 
