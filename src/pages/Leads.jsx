@@ -1,4 +1,4 @@
-﻿9 import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { leadsApi } from '../services/api';
 import './Leads.css';
 
@@ -12,6 +12,7 @@ function Leads() {
     status: 'all'
   });
   const [selectedLeads, setSelectedLeads] = useState(new Set());
+  const [postingLeadId, setPostingLeadId] = useState(null); // Track which lead is being posted
 
   useEffect(() => {
     // Debounce: wait 500ms after filter change before loading
@@ -63,6 +64,23 @@ function Leads() {
       setLeads(leads.filter(lead => lead.id !== leadId));
     } catch (err) {
       alert('Не удалось удалить лид');
+    }
+  };
+
+  const handlePostToTelegram = async (leadId) => {
+    setPostingLeadId(leadId);
+    try {
+      await leadsApi.postToTelegram(leadId);
+      // Update lead's posted_to_telegram status in local state
+      setLeads(leads.map(lead => 
+        lead.id === leadId ? { ...lead, posted_to_telegram: true } : lead
+      ));
+      alert('Лид успешно опубликован в Telegram!');
+    } catch (err) {
+      const errorMessage = err.response?.data?.message || 'Не удалось опубликовать лид';
+      alert(errorMessage);
+    } finally {
+      setPostingLeadId(null);
     }
   };
 
@@ -333,6 +351,13 @@ function Leads() {
                   disabled={lead.lead_status === 'sale'}
                   >
                   Продажа
+                    </button>
+                    <button
+                  onClick={() => handlePostToTelegram(lead.id)}
+                  className={`btn-post-telegram ${lead.posted_to_telegram ? 'posted' : ''}`}
+                  disabled={postingLeadId === lead.id}
+                    >
+                  {postingLeadId === lead.id ? '⏳' : '📤'} {lead.posted_to_telegram ? 'Опубликован' : 'В Telegram'}
                     </button>
                     <button
                   onClick={() => handleDeleteLead(lead.id)}

@@ -311,6 +311,27 @@
   background: #1a2e1a;
 }
 
+.btn-post-telegram {
+  border: 1px solid #2a3e4a;
+  color: #7db8d1;
+}
+
+.btn-post-telegram:hover:not(:disabled) {
+  border-color: #7db8d1;
+  background: #1a2e3a;
+}
+
+.btn-post-telegram:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn-post-telegram.posted {
+  border-color: #2a3e2a;
+  color: #7dd17d;
+  background: #1a2e1a;
+}
+
 .btn-delete-single {
   margin-left: auto;
   border: 1px solid #3e2a2a;

@@ -83,6 +83,7 @@ export const leadsApi = {
   delete: (id) => api.delete(`/leads/${id}`),
   deleteAll: () => api.delete('/leads/all'),
   deleteBulk: (leadIds) => api.delete('/leads/bulk', { data: { lead_ids: leadIds } }),
+  postToTelegram: (id) => api.post(`/leads/${id}/post-telegram`),
 };
 
 // Analytics API

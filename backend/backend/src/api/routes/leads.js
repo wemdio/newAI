@@ -4,12 +4,14 @@ import {
   getDetectedLead,
   updateDetectedLead,
   deleteDetectedLead,
-  getLeadStatistics
+  getLeadStatistics,
+  getUserConfig
 } from '../../database/queries.js';
 import { authenticateUser } from '../middleware/auth.js';
 import { asyncHandler } from '../../utils/errorHandler.js';
 import logger from '../../utils/logger.js';
 import { getSupabase } from '../../config/database.js';
+import { postLeadToChannel, markLeadAsPosted } from '../../services/telegramPoster.js';
 
 const router = express.Router();
 
@@ -260,6 +262,123 @@ router.post('/:id/mark-contacted', authenticateUser, asyncHandler(async (req, re
     message: 'Lead marked as contacted',
     lead: updatedLead
   });
+}));
+
+/**
+ * POST /api/leads/:id/post-telegram
+ * Manually post lead to Telegram channel
+ */
+router.post('/:id/post-telegram', authenticateUser, asyncHandler(async (req, res) => {
+  const leadId = parseInt(req.params.id);
+  
+  if (isNaN(leadId)) {
+    return res.status(400).json({
+      error: 'Invalid lead ID',
+      message: 'Lead ID must be a number'
+    });
+  }
+  
+  // Get user config to find telegram channel
+  const userConfig = await getUserConfig(req.userId);
+  
+  if (!userConfig) {
+    return res.status(400).json({
+      error: 'Configuration not found',
+      message: 'Сначала настройте профиль в разделе Настройки'
+    });
+  }
+  
+  if (!userConfig.telegram_channel_id || userConfig.telegram_channel_id === 'not_configured') {
+    return res.status(400).json({
+      error: 'Telegram channel not configured',
+      message: 'Укажите ID Telegram канала в настройках профиля'
+    });
+  }
+  
+  // Get lead with message data
+  const lead = await getDetectedLead(leadId, req.userId);
+  
+  if (!lead) {
+    return res.status(404).json({
+      error: 'Lead not found',
+      message: 'Лид не найден'
+    });
+  }
+  
+  // Prepare lead data for posting (combining lead and message data)
+  const leadData = {
+    id: lead.messages?.id || lead.message_id,
+    first_name: lead.messages?.first_name,
+    last_name: lead.messages?.last_name,
+    username: lead.messages?.username,
+    bio: lead.messages?.bio,
+    profile_link: lead.messages?.profile_link,
+    chat_name: lead.messages?.chat_name,
+    chat_id: lead.messages?.chat_id,
+    telegram_message_id: lead.messages?.telegram_message_id,
+    telegram_message_link: lead.messages?.telegram_message_link,
+    message_time: lead.messages?.message_time,
+    message: lead.messages?.message
+  };
+  
+  // Prepare analysis data
+  const analysisData = {
+    confidence_score: lead.confidence_score,
+    matched_criteria: lead.matched_criteria,
+    reasoning: lead.reasoning
+  };
+  
+  logger.info('Manual Telegram post requested', {
+    leadId,
+    userId: req.userId,
+    channelId: userConfig.telegram_channel_id
+  });
+  
+  try {
+    // Post to Telegram (skip duplicate check for manual posts)
+    const postResult = await postLeadToChannel(
+      leadData,
+      analysisData,
+      userConfig.telegram_channel_id,
+      null, // botToken
+      null  // userId = null to skip duplicate check for manual posts
+    );
+    
+    if (postResult.skipped) {
+      return res.status(400).json({
+        error: 'Post skipped',
+        message: postResult.reason === 'no_channel_configured' 
+          ? 'Telegram канал не настроен'
+          : 'Лид не был опубликован'
+      });
+    }
+    
+    // Mark as posted in database
+    await markLeadAsPosted(leadId);
+    
+    logger.info('Lead manually posted to Telegram', {
+      leadId,
+      userId: req.userId,
+      messageId: postResult.messageId
+    });
+    
+    res.json({
+      success: true,
+      message: 'Лид успешно опубликован в Telegram канале',
+      telegramMessageId: postResult.messageId
+    });
+  } catch (postError) {
+    logger.error('Failed to post lead to Telegram', {
+      leadId,
+      userId: req.userId,
+      error: postError.message
+    });
+    
+    return res.status(500).json({
+      error: 'Telegram post failed',
+      message: `Ошибка публикации: ${postError.message}`
+    });
+  }
 }));
 
 /**
