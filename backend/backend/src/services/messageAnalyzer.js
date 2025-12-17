@@ -269,10 +269,29 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
       throw new AIServiceError('Empty response from AI');
     }
     
+    // Strip markdown code blocks (some models wrap JSON in ```json ... ```)
+    let cleanContent = content.trim();
+    if (cleanContent.startsWith('```json')) {
+      cleanContent = cleanContent.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+      logger.debug('Stripped markdown json block from response', { messageId: message.id });
+    } else if (cleanContent.startsWith('```')) {
+      cleanContent = cleanContent.replace(/^```\n?/, '').replace(/\n?```$/, '');
+      logger.debug('Stripped markdown code block from response', { messageId: message.id });
+    }
+    
+    // If still not valid JSON, try to find JSON object in text
+    if (!cleanContent.startsWith('{') && !cleanContent.startsWith('[')) {
+      const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleanContent = jsonMatch[0];
+        logger.debug('Extracted JSON from text response', { messageId: message.id });
+      }
+    }
+    
     // Parse JSON response
     let aiResponse;
     try {
-      aiResponse = JSON.parse(content);
+      aiResponse = JSON.parse(cleanContent);
     } catch (parseError) {
       logger.error('Failed to parse AI response as JSON', {
         messageId: message.id,
