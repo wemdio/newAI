@@ -79,39 +79,33 @@ export const doubleCheckLead = async (message, initialAnalysis, userCriteria, ap
 
     const client = getOpenRouter(apiKey);
     
-    const prompt = `Ты эксперт по верификации лидов. Перепроверь решение AI.
+    // Simplified prompt to reduce truncation issues
+    const prompt = `Проверь: это реальный лид по критериям?
 
-КРИТЕРИИ ПОИСКА ЛИДОВ:
+КРИТЕРИИ:
 ${userCriteria}
 
-АНАЛИЗИРУЕМОЕ СООБЩЕНИЕ:
-"${message.message || ''}"
-${message.bio ? `Био автора: ${message.bio}` : ''}
-${message.chat_name ? `Канал: ${message.chat_name}` : ''}
+СООБЩЕНИЕ: "${(message.message || '').substring(0, 500)}"
+${message.bio ? `БИО: ${message.bio.substring(0, 100)}` : ''}
 
-ПРЕДЫДУЩИЙ АНАЛИЗ AI:
-- Причина: "${initialAnalysis.reasoning}"
-- Уверенность: ${initialAnalysis.confidence_score}%
+ВОПРОСЫ:
+1. Человек ИЩЕТ услугу (не предлагает)?
+2. Не конкурент (проверь БИО)?
+3. Соответствует критериям?
 
-ТВОЯ ЗАДАЧА:
-1. Человек действительно ИЩЕТ/СПРАШИВАЕТ то, что в критериях? (не предлагает, не продает)
-2. Сообщение релевантно критериям поиска?
-3. При сомнениях - отвергай.
-
-ОБЯЗАТЕЛЬНО верни ТОЛЬКО JSON без markdown:
-{"verified": true или false, "confidence": число 0-100, "reasoning": "причина на русском"}`;
+Ответь ТОЛЬКО: {"verified":true} или {"verified":false}`;
 
     const response = await retryWithBackoff(async () => {
       try {
         return await client.chat.completions.create({
           model,
           messages: [
-            { role: 'system', content: 'Ты эксперт по верификации лидов. Отвечай ТОЛЬКО валидным JSON.' },
+            { role: 'system', content: 'Отвечай ТОЛЬКО JSON: {"verified":true} или {"verified":false}' },
             { role: 'user', content: prompt }
           ],
           response_format: { type: 'json_object' }, 
-          temperature: 0.2,
-          max_tokens: 500
+          temperature: 0,
+          max_tokens: 50 // Very short response expected
           // NOTE: No provider filtering for Gemini models - they're only available via Google
         });
       } catch (e) {
@@ -138,51 +132,47 @@ ${message.chat_name ? `Канал: ${message.chat_name}` : ''}
 
     let result;
     try {
-      // Multiple strategies to extract JSON from Gemini response
-      let cleanContent = content.trim();
+      // Clean the response
+      let cleanContent = content.trim()
+        .replace(/```json\n?|\n?```/g, '')
+        .trim();
       
-      // Strategy 1: Remove markdown code blocks
-      cleanContent = cleanContent.replace(/```json\n?|\n?```/g, '').trim();
-      
-      // Strategy 2: If still not valid JSON, try to find JSON object in text
-      if (!cleanContent.startsWith('{')) {
-        const jsonMatch = cleanContent.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          cleanContent = jsonMatch[0];
-        }
+      // Try to find JSON in response
+      const jsonMatch = cleanContent.match(/\{[^}]*verified[^}]*\}/i);
+      if (jsonMatch) {
+        cleanContent = jsonMatch[0];
       }
       
-      result = JSON.parse(cleanContent);
+      // Look for true/false in the content
+      const hasTrue = /verified["']?\s*:\s*true/i.test(cleanContent);
+      const hasFalse = /verified["']?\s*:\s*false/i.test(cleanContent);
       
-      // Validate required fields
-      if (typeof result.verified !== 'boolean') {
-        // Try to coerce from string
-        if (typeof result.verified === 'string') {
-          result.verified = result.verified.toLowerCase() === 'true';
-        } else {
-          result.verified = false;
+      if (hasTrue || hasFalse) {
+        result = {
+          verified: hasTrue && !hasFalse,
+          reasoning: hasTrue ? 'Verified by Gemini' : 'Rejected by Gemini',
+          confidence: hasTrue ? initialAnalysis.confidence_score : 0
+        };
+      } else {
+        // If we can't determine, try JSON parse as last resort
+        try {
+          const parsed = JSON.parse(cleanContent);
+          result = {
+            verified: parsed.verified === true,
+            reasoning: parsed.reasoning || (parsed.verified ? 'Verified' : 'Rejected'),
+            confidence: parsed.confidence || initialAnalysis.confidence_score
+          };
+        } catch {
+          throw new Error('Could not determine verified status from response');
         }
       }
       
     } catch (e) {
-      logger.warn('Failed to parse Gemini response, trying fallback extraction', { 
-        content: content.substring(0, 500),
+      logger.warn('Failed to parse Gemini response', { 
+        content: content.substring(0, 200),
         error: e.message 
       });
-      
-      // Fallback: look for verified: true/false pattern in text
-      const verifiedMatch = content.match(/verified["']?\s*:\s*(true|false)/i);
-      const reasoningMatch = content.match(/reasoning["']?\s*:\s*["']([^"']+)["']/i);
-      
-      if (verifiedMatch) {
-        result = {
-          verified: verifiedMatch[1].toLowerCase() === 'true',
-          reasoning: reasoningMatch ? reasoningMatch[1] : 'Extracted from text response',
-          confidence: initialAnalysis.confidence_score
-        };
-      } else {
-        throw new Error('Could not extract verification result from Gemini response');
-      }
+      throw e;
     }
 
     const duration = Date.now() - startTime;
@@ -197,9 +187,10 @@ ${message.chat_name ? `Канал: ${message.chat_name}` : ''}
 
   } catch (error) {
     logger.error('Double check failed', { error: error.message });
-    // If double check fails, we fall back to trusting the original analysis (fail open) 
-    // OR fail closed. Let's fail open but log it.
-    return { verified: true, reasoning: "Double check failed, trusting initial result", confidence: initialAnalysis.confidence_score }; 
+    // FAIL CLOSED: If double check fails (network issues, truncated responses), 
+    // REJECT the lead to prevent garbage from passing through.
+    // This is safer than trusting potentially invalid initial results.
+    return { verified: false, reasoning: "Double check failed - rejecting for safety", confidence: 0 }; 
   }
 };
 
