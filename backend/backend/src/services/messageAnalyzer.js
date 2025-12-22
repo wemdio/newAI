@@ -65,10 +65,10 @@ const normalizeBatchAIResult = (aiResult, expectedMessageId) => {
  */
 export const doubleCheckLead = async (message, initialAnalysis, userCriteria, apiKey) => {
   const startTime = Date.now();
-  // Gemini 2.0 Flash - Fast model WITHOUT reasoning overhead
-  // Gemini 2.5 Pro spends all tokens on "thinking" and returns empty content
-  // Flash is better for simple yes/no verification tasks
-  const model = 'google/gemini-2.0-flash-001';
+  // Gemini 3 Flash Preview - high speed thinking model with configurable reasoning
+  // Set thinking to "minimal" to avoid token exhaustion on simple verification
+  // https://openrouter.ai/google/gemini-3-flash-preview/api
+  const model = 'google/gemini-3-flash-preview';
 
   try {
     logger.info('Starting Double Check with AI', {
@@ -105,7 +105,9 @@ ${message.bio ? `БИО: ${message.bio.substring(0, 100)}` : ''}
           ],
           response_format: { type: 'json_object' }, 
           temperature: 0,
-          max_tokens: 256 // Enough for response even if model does some reasoning
+          max_tokens: 500,
+          // Minimize reasoning tokens - we just need yes/no answer
+          reasoning: { effort: 'low' }
           // NOTE: No provider filtering for Gemini models - they're only available via Google
         });
       } catch (e) {
