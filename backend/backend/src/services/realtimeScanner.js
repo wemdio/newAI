@@ -287,8 +287,9 @@ const processMessagesForUser = async (messages, userConfig) => {
               continue; // Skip saving this lead
             }
 
-            // Enrich reasoning with Gemini's confirmation
-            match.analysis.aiResponse.reasoning = `[Gemini Verified] ${verification.reasoning}`;
+            // PRESERVE original reasoning, just add verification prefix
+            const originalReasoning = match.analysis.aiResponse.reasoning || '';
+            match.analysis.aiResponse.reasoning = `[Gemini ✓] ${originalReasoning}`;
           } catch (dcError) {
             logger.warn('Double check failed, proceeding with original analysis', {
               userId,

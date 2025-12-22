@@ -248,6 +248,17 @@ export const formatLeadMessage = (lead, analysis, messageSuggestion = null) => {
 • *Уверенность:* ${confidenceEmoji} *${escapeMarkdown(String(analysis.confidence_score))}%*
 • *Обоснование:* ${escapeMarkdown(analysis.reasoning)}`;
 
+  // Add matched criteria if available
+  if (analysis.matched_criteria && analysis.matched_criteria.length > 0) {
+    const criteriaText = analysis.matched_criteria
+      .map(c => escapeMarkdown(c))
+      .join('\n• ');
+    message += `
+
+🔍 *AUDIT RESULT*
+Matched Criteria: ${criteriaText}`;
+  }
+
   // Add message suggestion if provided - compact format
   if (messageSuggestion) {
     message += `

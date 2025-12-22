@@ -414,8 +414,9 @@ export const detectLeads = async (userId, userConfig, options = {}) => {
             continue; // Skip saving this lead
           }
 
-          // Enrich reasoning with Gemini's confirmation
-          match.analysis.aiResponse.reasoning = `[Gemini Verified] ${verification.reasoning}`;
+          // PRESERVE original reasoning, just add verification prefix
+          const originalReasoning = match.analysis.aiResponse.reasoning || '';
+          match.analysis.aiResponse.reasoning = `[Gemini ✓] ${originalReasoning}`;
         } else {
           logger.info('Skipping Gemini Double Check (smart mode)', {
             messageId: match.message.id,
