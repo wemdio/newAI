@@ -105,7 +105,7 @@ ${message.bio ? `БИО: ${message.bio.substring(0, 100)}` : ''}
           ],
           response_format: { type: 'json_object' }, 
           temperature: 0,
-          max_tokens: 500,
+          max_tokens: 2000,
           // Minimize reasoning tokens - we just need yes/no answer
           reasoning: { effort: 'low' }
           // NOTE: No provider filtering for Gemini models - they're only available via Google
