@@ -224,7 +224,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
     // Use configured model or fallback to OpenAI gpt-oss-120b (open-weight MoE model)
-    const model = process.env.AI_MODEL || 'openai/gpt-oss-120b';
+    const model = process.env.AI_MODEL || 'qwen/qwen-2.5-72b-instruct';
     
     logger.info('Making OpenRouter API call', {
       messageId: message.id,
@@ -437,7 +437,7 @@ ${JSON.stringify(messagesArray)}
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
     // Use configured model or fallback to OpenAI gpt-oss-120b (open-weight MoE model)
-    const model = process.env.AI_MODEL || 'openai/gpt-oss-120b';
+    const model = process.env.AI_MODEL || 'qwen/qwen-2.5-72b-instruct';
     
     // Estimate tokens
     const estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt);
