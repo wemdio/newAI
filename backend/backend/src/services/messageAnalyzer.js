@@ -244,13 +244,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
         top_p: 1, // Disable nucleus sampling for consistency
         seed: 12345, // Fixed seed for reproducibility
         response_format: { type: 'json_object' },
-        max_tokens: 1000, // Increased to allow for reasoning
-        // Provider filtering - use only specified providers
-        provider: {
-          order: ['DeepInfra', 'Novita', 'GMICloud', 'Ncompass', 'SiliconFlow'],
-          allow_fallbacks: false,
-          quantizations: ['fp4', 'fp8']
-        }
+        max_tokens: 1000 // Increased to allow for reasoning
       });
     }, 3, 1000);
     
@@ -463,13 +457,7 @@ ${JSON.stringify(messagesArray)}
         presence_penalty: 0, 
         seed: 12345,
         // Don't use response_format for arrays - Gemini returns plain JSON array
-        max_tokens: 4000, // Increased for batch + reasoning
-        // Provider filtering - use only specified providers
-        provider: {
-          order: ['DeepInfra', 'Novita', 'GMICloud', 'Ncompass', 'SiliconFlow'],
-          allow_fallbacks: false,
-          quantizations: ['fp4', 'fp8']
-        }
+        max_tokens: 4000 // Increased for batch + reasoning
       });
     }, 3, 1000);
     
