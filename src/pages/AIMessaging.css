@@ -767,7 +767,8 @@
 }
 
 .modal.large {
-  max-width: 900px;
+  max-width: 800px;
+  width: 95%;
 }
 
 .modal-header {
@@ -807,22 +808,47 @@
 }
 
 .form-group {
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  width: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .form-group label {
   font-size: 13px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
   color: #ccc;
+  display: block;
+  font-weight: 500;
+  width: 100%;
 }
 
 .form-group input,
 .form-group textarea {
-  padding: 8px 10px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 12px;
   border-color: #333;
-  font-size: 13px;
+  font-size: 14px;
   background: #0a0a0a;
   color: #ffffff;
+  border-radius: 6px;
+  border: 1px solid #333;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  border-color: #555;
+  outline: none;
+}
+
+.form-group textarea {
+  resize: vertical;
+  min-height: 100px;
 }
 
 .form-actions {
@@ -958,8 +984,14 @@
 
 .chat-form {
   display: flex;
+  flex-direction: column;
   gap: 10px;
   margin-bottom: 10px;
+}
+
+.chat-form .btn {
+  align-self: flex-end;
+  min-width: 120px;
 }
 
 .chat-input {
@@ -977,6 +1009,15 @@
   outline: none;
 }
 
+.chat-textarea {
+  resize: vertical;
+  min-height: 60px;
+  max-height: 200px;
+  font-family: inherit;
+  line-height: 1.5;
+}
+
+
 .takeover-btn {
   width: 100%;
   margin-top: 8px;
@@ -990,11 +1031,11 @@
 
 /* Confidence Filter Styles */
 .confidence-filter-group {
-  background: rgba(255, 165, 0, 0.05);
-  border: 1px solid rgba(255, 165, 0, 0.2);
-  border-radius: 8px;
-  padding: 16px;
-  margin-top: 16px;
+  background: rgba(255, 165, 0, 0.08) !important;
+  border: 1px solid rgba(255, 165, 0, 0.4) !important;
+  border-radius: 8px !important;
+  padding: 16px !important;
+  margin-top: 16px !important;
 }
 
 .toggle-row {
@@ -1006,27 +1047,30 @@
   align-items: center;
   gap: 10px;
   cursor: pointer;
+  user-select: none;
 }
 
 .toggle-label input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   accent-color: #f59e0b;
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .toggle-text {
   font-weight: 600;
-  color: #f59e0b;
-  font-size: 14px;
+  color: #f59e0b !important;
+  font-size: 15px;
 }
 
 .filter-hint {
   display: block;
-  color: #888;
+  color: #999 !important;
   font-size: 12px;
-  line-height: 1.5;
+  line-height: 1.6;
   margin-bottom: 12px;
+  margin-top: 4px;
 }
 
 .confidence-threshold {

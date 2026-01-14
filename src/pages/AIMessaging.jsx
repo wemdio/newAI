@@ -1307,13 +1307,22 @@ const AIMessaging = () => {
               {/* Manual Messaging Input */}
               <div className="manual-input-area">
                 <form onSubmit={handleSendMessage} className="chat-form">
-                  <input
-                    type="text"
+                  <textarea
                     value={messageInput}
                     onChange={(e) => setMessageInput(e.target.value)}
-                    placeholder="Введите сообщение..."
+                    onKeyDown={(e) => {
+                      // Shift+Enter = new line, Enter alone = send
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        if (messageInput.trim() && !sending) {
+                          handleSendMessage(e);
+                        }
+                      }
+                    }}
+                    placeholder="Введите сообщение... (Shift+Enter для переноса строки)"
                     disabled={sending}
-                    className="chat-input"
+                    className="chat-input chat-textarea"
+                    rows={3}
                   />
                   <button type="submit" className="btn btn-primary" disabled={sending || !messageInput.trim()}>
                     {sending ? '...' : 'Отправить'}
