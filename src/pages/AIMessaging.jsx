@@ -50,7 +50,9 @@ const AIMessaging = () => {
     name: '',
     communication_prompt: '',
     hot_lead_criteria: '',
-    target_channel_id: ''
+    target_channel_id: '',
+    filter_by_confidence: false,
+    max_confidence_for_ai: 90
   });
 
   // --- HELPERS ---
@@ -212,7 +214,7 @@ const AIMessaging = () => {
       });
       alert('Кампания создана!');
       setShowCreateCampaign(false);
-      setNewCampaign({ name: '', communication_prompt: '', hot_lead_criteria: '', target_channel_id: '' });
+      setNewCampaign({ name: '', communication_prompt: '', hot_lead_criteria: '', target_channel_id: '', filter_by_confidence: false, max_confidence_for_ai: 90 });
       loadData();
     } catch (error) {
       alert('Ошибка: ' + (error.response?.data?.error || error.message));
@@ -259,7 +261,9 @@ const AIMessaging = () => {
       name: campaign.name,
       communication_prompt: campaign.communication_prompt,
       hot_lead_criteria: campaign.hot_lead_criteria,
-      target_channel_id: campaign.target_channel_id || ''
+      target_channel_id: campaign.target_channel_id || '',
+      filter_by_confidence: campaign.filter_by_confidence || false,
+      max_confidence_for_ai: campaign.max_confidence_for_ai || 90
     });
     setShowEditCampaign(true);
   };
@@ -668,6 +672,12 @@ const AIMessaging = () => {
                      <span className="stat-label">Канал:</span>
                      <span className="stat-value">{campaign.target_channel_id || 'Нет'}</span>
                   </div>
+                  {campaign.filter_by_confidence && (
+                    <div className="stat confidence-filter-badge">
+                       <span className="stat-label">🎯 Фильтр:</span>
+                       <span className="stat-value">AI пишет &lt; {campaign.max_confidence_for_ai}%</span>
+                    </div>
+                  )}
                 </div>
                 
                 <details className="campaign-details">
@@ -1024,6 +1034,46 @@ const AIMessaging = () => {
                 />
                 <small>ID канала куда постить горячие лиды</small>
               </div>
+
+              {/* Confidence Filter Settings */}
+              <div className="form-group confidence-filter-group">
+                <div className="toggle-row">
+                  <label className="toggle-label">
+                    <input
+                      type="checkbox"
+                      checked={newCampaign.filter_by_confidence}
+                      onChange={e => setNewCampaign({...newCampaign, filter_by_confidence: e.target.checked})}
+                    />
+                    <span className="toggle-text">Фильтр по уверенности</span>
+                  </label>
+                </div>
+                <small className="filter-hint">
+                  Если включено, AI пишет только лидам с уверенностью ниже порога. 
+                  Высокорелевантных лидов оставляет для ручной работы менеджера.
+                </small>
+                
+                {newCampaign.filter_by_confidence && (
+                  <div className="confidence-threshold">
+                    <label>Максимальная уверенность для AI: <strong>{newCampaign.max_confidence_for_ai}%</strong></label>
+                    <input
+                      type="range"
+                      min="50"
+                      max="100"
+                      value={newCampaign.max_confidence_for_ai}
+                      onChange={e => setNewCampaign({...newCampaign, max_confidence_for_ai: parseInt(e.target.value)})}
+                      className="confidence-slider"
+                    />
+                    <div className="confidence-labels">
+                      <span>50%</span>
+                      <span>AI пишет лидам &lt; {newCampaign.max_confidence_for_ai}%</span>
+                      <span>100%</span>
+                    </div>
+                    <small className="threshold-hint">
+                      Лиды с уверенностью ≥ {newCampaign.max_confidence_for_ai}% останутся для менеджера
+                    </small>
+                  </div>
+                )}
+              </div>
               
               <div className="modal-actions">
                 <button type="button" className="btn btn-secondary" onClick={() => setShowCreateCampaign(false)}>
@@ -1092,6 +1142,46 @@ const AIMessaging = () => {
                   placeholder="-100123456789"
                 />
                 <small>ID канала куда постить горячие лиды</small>
+              </div>
+
+              {/* Confidence Filter Settings */}
+              <div className="form-group confidence-filter-group">
+                <div className="toggle-row">
+                  <label className="toggle-label">
+                    <input
+                      type="checkbox"
+                      checked={editingCampaign.filter_by_confidence}
+                      onChange={e => setEditingCampaign({...editingCampaign, filter_by_confidence: e.target.checked})}
+                    />
+                    <span className="toggle-text">Фильтр по уверенности</span>
+                  </label>
+                </div>
+                <small className="filter-hint">
+                  Если включено, AI пишет только лидам с уверенностью ниже порога. 
+                  Высокорелевантных лидов оставляет для ручной работы менеджера.
+                </small>
+                
+                {editingCampaign.filter_by_confidence && (
+                  <div className="confidence-threshold">
+                    <label>Максимальная уверенность для AI: <strong>{editingCampaign.max_confidence_for_ai}%</strong></label>
+                    <input
+                      type="range"
+                      min="50"
+                      max="100"
+                      value={editingCampaign.max_confidence_for_ai}
+                      onChange={e => setEditingCampaign({...editingCampaign, max_confidence_for_ai: parseInt(e.target.value)})}
+                      className="confidence-slider"
+                    />
+                    <div className="confidence-labels">
+                      <span>50%</span>
+                      <span>AI пишет лидам &lt; {editingCampaign.max_confidence_for_ai}%</span>
+                      <span>100%</span>
+                    </div>
+                    <small className="threshold-hint">
+                      Лиды с уверенностью ≥ {editingCampaign.max_confidence_for_ai}% останутся для менеджера
+                    </small>
+                  </div>
+                )}
               </div>
               
               <div className="modal-actions">

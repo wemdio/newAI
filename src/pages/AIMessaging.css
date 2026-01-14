@@ -987,3 +987,137 @@
   border-top: 1px solid #1a1a1a;
   padding-top: 12px;
 }
+
+/* Confidence Filter Styles */
+.confidence-filter-group {
+  background: rgba(255, 165, 0, 0.05);
+  border: 1px solid rgba(255, 165, 0, 0.2);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.toggle-row {
+  margin-bottom: 8px;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.toggle-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #f59e0b;
+  cursor: pointer;
+}
+
+.toggle-text {
+  font-weight: 600;
+  color: #f59e0b;
+  font-size: 14px;
+}
+
+.filter-hint {
+  display: block;
+  color: #888;
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.confidence-threshold {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 165, 0, 0.2);
+}
+
+.confidence-threshold label {
+  display: block;
+  color: #ccc;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.confidence-threshold label strong {
+  color: #f59e0b;
+  font-size: 16px;
+}
+
+.confidence-slider {
+  width: 100%;
+  height: 8px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: linear-gradient(to right, #22c55e 0%, #f59e0b 50%, #ef4444 100%);
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+}
+
+.confidence-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border: 3px solid #f59e0b;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.confidence-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border: 3px solid #f59e0b;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.confidence-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #666;
+}
+
+.confidence-labels span:nth-child(2) {
+  color: #f59e0b;
+  font-weight: 500;
+}
+
+.threshold-hint {
+  display: block;
+  margin-top: 12px;
+  padding: 10px;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 6px;
+  color: #22c55e;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Confidence Filter Badge in Campaign Card */
+.confidence-filter-badge {
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 4px;
+  padding: 4px 8px;
+}
+
+.confidence-filter-badge .stat-label {
+  color: #f59e0b;
+}
+
+.confidence-filter-badge .stat-value {
+  color: #fbbf24;
+  font-weight: 600;
+}

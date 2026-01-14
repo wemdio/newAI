@@ -103,14 +103,22 @@ class SupabaseClient:
     
     # ============= LEADS =============
     
-    async def get_uncontacted_leads(self, user_id: str) -> List[Dict]:
-        """Get uncontacted leads - fetches detected_leads with is_contacted=false (last 24h only)"""
+    async def get_uncontacted_leads(self, user_id: str, max_confidence: int = None) -> List[Dict]:
+        """Get uncontacted leads - fetches detected_leads with is_contacted=false (last 24h only)
+        
+        Args:
+            user_id: User ID to fetch leads for
+            max_confidence: If provided, only return leads with confidence_score < max_confidence
+                           (for filtering high-confidence leads for manual handling)
+        """
         try:
             # Calculate timestamp for 24 hours ago
             twenty_four_hours_ago = (datetime.utcnow() - timedelta(hours=24)).isoformat()
             
             logger.info(f"🔍 Fetching uncontacted leads for user {user_id}")
             logger.info(f"   ⏰ From: {twenty_four_hours_ago} (last 24 hours)")
+            if max_confidence:
+                logger.info(f"   🎯 Confidence filter: < {max_confidence}%")
             
             # Get uncontacted detected_leads for this user (last 24 hours only)
             url = f"{self.url}/rest/v1/detected_leads"
@@ -118,6 +126,11 @@ class SupabaseClient:
             url += f"&user_id=eq.{user_id}"
             url += f"&is_contacted=eq.false"
             url += f"&detected_at=gte.{twenty_four_hours_ago}"  # Only last 24 hours
+            
+            # Apply confidence filter if specified
+            if max_confidence:
+                url += f"&confidence_score=lt.{max_confidence}"
+            
             url += f"&order=detected_at.desc"
             url += f"&limit=100"
             

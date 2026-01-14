@@ -33,14 +33,24 @@ class LeadManager:
         print(f"   Campaign ID: {campaign_id}")
         print(f"   User ID: {user_id}")
         
-        # Get uncontacted leads for this user
-        leads = await self.supabase.get_uncontacted_leads(user_id)
+        # Check if confidence filter is enabled for this campaign
+        filter_by_confidence = campaign.get('filter_by_confidence', False)
+        max_confidence_for_ai = campaign.get('max_confidence_for_ai', 90) if filter_by_confidence else None
+        
+        if filter_by_confidence:
+            print(f"   🎯 Confidence filter enabled: AI contacts leads < {max_confidence_for_ai}%")
+            print(f"   👔 Leads ≥ {max_confidence_for_ai}% left for manual handling")
+        
+        # Get uncontacted leads for this user (with optional confidence filter)
+        leads = await self.supabase.get_uncontacted_leads(user_id, max_confidence=max_confidence_for_ai)
         
         if not leads:
-            print(f"   ℹ️ No uncontacted leads for this campaign")
+            print(f"   ℹ️ No uncontacted leads for this campaign" + 
+                  (f" (with confidence < {max_confidence_for_ai}%)" if filter_by_confidence else ""))
             return
         
-        print(f"   📊 Found {len(leads)} uncontacted leads")
+        print(f"   📊 Found {len(leads)} uncontacted leads" +
+              (f" (confidence < {max_confidence_for_ai}%)" if filter_by_confidence else ""))
         
         # Process each lead
         contacted_count = 0
