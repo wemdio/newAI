@@ -5,12 +5,19 @@
 /* Telegram Navigation */
 .telegram-nav {
   display: flex;
-  justify-content: space-around;
+  align-items: center;
+  justify-content: space-between;
   background-color: var(--tg-theme-secondary-bg-color, #1a1a1a);
   border-bottom: 1px solid var(--tg-theme-hint-color, #333);
   position: sticky;
   top: 0;
   z-index: 100;
+  padding: 0 8px;
+}
+
+.telegram-nav-main {
+  display: flex;
+  flex: 1;
 }
 
 .telegram-nav-item {
@@ -33,6 +40,12 @@
 
 .telegram-nav-item:hover {
   background-color: var(--tg-theme-secondary-bg-color, #1a1a1a);
+}
+
+.telegram-nav-notifications {
+  padding: 8px;
+  display: flex;
+  align-items: center;
 }
 
 /* Telegram Mode Adjustments */

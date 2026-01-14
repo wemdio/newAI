@@ -486,6 +486,23 @@ class SupabaseClient:
     
     # ============= HOT LEADS =============
     
+    async def get_existing_hot_lead(self, conversation_id: str) -> Optional[Dict]:
+        """Check if hot_lead already exists for this conversation"""
+        try:
+            url = f"{self.url}/rest/v1/hot_leads"
+            url += f"?select=id,conversation_history,created_at"
+            url += f"&conversation_id=eq.{conversation_id}"
+            url += f"&limit=1"
+            
+            async with self.session.get(url) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    return data[0] if data else None
+                return None
+        except Exception as e:
+            logger.error(f"⚠️ Error checking existing hot_lead: {e}")
+            return None
+    
     async def create_hot_lead(
         self,
         campaign_id: str,
@@ -505,6 +522,13 @@ class SupabaseClient:
         })
         
         return result['id'] if result else None
+    
+    async def update_hot_lead_history(self, hot_lead_id: str, conversation_history: List[Dict]) -> bool:
+        """Update hot lead conversation history with new messages"""
+        return await self._patch('hot_leads', {'id': hot_lead_id}, {
+            'conversation_history': conversation_history,
+            'updated_at': datetime.utcnow().isoformat()
+        })
     
     async def mark_hot_lead_posted(self, hot_lead_id: str):
         """Mark hot lead as posted"""

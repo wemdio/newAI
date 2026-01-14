@@ -5,6 +5,8 @@ import './App.css';
 import './styles/telegram.css';
 import { isTelegramWebApp, initTelegram, getTelegramUser, getTelegramInitData } from './utils/telegram';
 import axios from 'axios';
+import { NotificationProvider } from './components/NotificationContext';
+import NotificationBell from './components/NotificationBell';
 
 // Lazy load pages
 const Configuration = React.lazy(() => import('./pages/Configuration'));
@@ -23,96 +25,106 @@ const LoadingSpinner = () => (
 
 // Component for the authenticated application layout
 const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setActiveTab }) => {
+  const userId = session?.user?.id;
+  
   return (
-    <div className={`app ${isTelegram ? 'telegram-mode' : 'browser-mode'}`}>
-      {/* Navigation - hidden in Telegram */}
-      {!isTelegram && (
-        <nav className="app-nav">
-          <div className="container">
-            <div className="nav-links">
+    <NotificationProvider userId={userId}>
+      <div className={`app ${isTelegram ? 'telegram-mode' : 'browser-mode'}`}>
+        {/* Navigation - hidden in Telegram */}
+        {!isTelegram && (
+          <nav className="app-nav">
+            <div className="container">
+              <div className="nav-links">
+                <Link 
+                  to="/leads" 
+                  className={`nav-link ${activeTab === 'leads' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('leads')}
+                >
+                  Лиды
+                </Link>
+                <Link 
+                  to="/messaging" 
+                  className={`nav-link ${activeTab === 'messaging' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('messaging')}
+                >
+                  AI Рассылки
+                </Link>
+                <Link 
+                  to="/config" 
+                  className={`nav-link ${activeTab === 'config' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('config')}
+                >
+                  Настройки
+                </Link>
+              </div>
+              <div className="user-info">
+                <NotificationBell />
+                <span className="user-email">{session.user.email}</span>
+                <button onClick={handleSignOut} className="btn-signout">
+                  Выйти
+                </button>
+              </div>
+            </div>
+          </nav>
+        )}
+
+        {/* Telegram Navigation (alternative for Telegram) */}
+        {isTelegram && (
+          <nav className="telegram-nav">
+            <div className="telegram-nav-main">
               <Link 
                 to="/leads" 
-                className={`nav-link ${activeTab === 'leads' ? 'active' : ''}`}
+                className={`telegram-nav-item ${activeTab === 'leads' ? 'active' : ''}`}
                 onClick={() => setActiveTab('leads')}
               >
                 Лиды
               </Link>
               <Link 
                 to="/messaging" 
-                className={`nav-link ${activeTab === 'messaging' ? 'active' : ''}`}
+                className={`telegram-nav-item ${activeTab === 'messaging' ? 'active' : ''}`}
                 onClick={() => setActiveTab('messaging')}
               >
                 AI Рассылки
               </Link>
               <Link 
                 to="/config" 
-                className={`nav-link ${activeTab === 'config' ? 'active' : ''}`}
+                className={`telegram-nav-item ${activeTab === 'config' ? 'active' : ''}`}
                 onClick={() => setActiveTab('config')}
               >
                 Настройки
               </Link>
             </div>
-            <div className="user-info">
-              <span className="user-email">{session.user.email}</span>
-              <button onClick={handleSignOut} className="btn-signout">
-                Выйти
-              </button>
+            <div className="telegram-nav-notifications">
+              <NotificationBell />
             </div>
-          </div>
-        </nav>
-      )}
+          </nav>
+        )}
 
-      {/* Telegram Navigation (alternative for Telegram) */}
-      {isTelegram && (
-        <nav className="telegram-nav">
-          <Link 
-            to="/leads" 
-            className={`telegram-nav-item ${activeTab === 'leads' ? 'active' : ''}`}
-            onClick={() => setActiveTab('leads')}
-          >
-            Лиды
-          </Link>
-          <Link 
-            to="/messaging" 
-            className={`telegram-nav-item ${activeTab === 'messaging' ? 'active' : ''}`}
-            onClick={() => setActiveTab('messaging')}
-          >
-            AI Рассылки
-          </Link>
-          <Link 
-            to="/config" 
-            className={`telegram-nav-item ${activeTab === 'config' ? 'active' : ''}`}
-            onClick={() => setActiveTab('config')}
-          >
-            Настройки
-          </Link>
-        </nav>
-      )}
-
-      {/* Main Content */}
-      <main className="app-main">
-        <div className="container">
-          <Suspense fallback={<LoadingSpinner />}>
-            <Routes>
-              <Route path="/leads" element={<Leads />} />
-              <Route path="/config" element={<Configuration />} />
-              <Route path="/messaging" element={<AIMessaging />} />
-              <Route path="/audit" element={<LeadAudit />} />
-              <Route path="*" element={<Navigate to="/leads" replace />} />
-            </Routes>
-          </Suspense>
-        </div>
-      </main>
-
-      {/* Footer - hidden in Telegram */}
-      {!isTelegram && (
-        <footer className="app-footer">
+        {/* Main Content */}
+        <main className="app-main">
           <div className="container">
-            <p>Сканер и анализатор лидов в Telegram © 2025</p>
+            <Suspense fallback={<LoadingSpinner />}>
+              <Routes>
+                <Route path="/leads" element={<Leads />} />
+                <Route path="/config" element={<Configuration />} />
+                <Route path="/messaging" element={<AIMessaging />} />
+                <Route path="/audit" element={<LeadAudit />} />
+                <Route path="*" element={<Navigate to="/leads" replace />} />
+              </Routes>
+            </Suspense>
           </div>
-        </footer>
-      )}
-    </div>
+        </main>
+
+        {/* Footer - hidden in Telegram */}
+        {!isTelegram && (
+          <footer className="app-footer">
+            <div className="container">
+              <p>Сканер и анализатор лидов в Telegram © 2025</p>
+            </div>
+          </footer>
+        )}
+      </div>
+    </NotificationProvider>
   );
 };
 

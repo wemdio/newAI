@@ -279,6 +279,20 @@ class SupabaseClient:
     
     # ============= HOT LEADS =============
     
+    async def get_existing_hot_lead(self, conversation_id: str) -> Optional[Dict]:
+        """Check if hot_lead already exists for this conversation"""
+        async with self.pool.acquire() as conn:
+            row = await conn.fetchrow(
+                """
+                SELECT id, conversation_history, created_at 
+                FROM hot_leads 
+                WHERE conversation_id = $1
+                LIMIT 1
+                """,
+                conversation_id
+            )
+            return dict(row) if row else None
+    
     async def create_hot_lead(
         self,
         campaign_id: str,
@@ -302,6 +316,19 @@ class SupabaseClient:
                 conversation_history, json.dumps(contact_info)
             )
             return row['id']
+    
+    async def update_hot_lead_history(self, hot_lead_id: str, conversation_history: List[Dict]) -> bool:
+        """Update hot lead conversation history with new messages"""
+        async with self.pool.acquire() as conn:
+            await conn.execute(
+                """
+                UPDATE hot_leads 
+                SET conversation_history = $2, updated_at = NOW() 
+                WHERE id = $1
+                """,
+                hot_lead_id, conversation_history
+            )
+            return True
     
     async def mark_hot_lead_posted(self, hot_lead_id: str):
         """Mark hot lead as posted to Telegram channel"""

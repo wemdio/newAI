@@ -426,14 +426,12 @@ class LeadManager:
     ):
         """
         Handle hot lead detection
-        - Mark conversation as hot_lead
-        - Create hot_lead record
-        - Post to Telegram channel
+        - Check if hot_lead already exists (continuing conversation)
+        - If new: mark as hot_lead, create record, post "NEW HOT LEAD"
+        - If existing: update history, post "NEW MESSAGE FROM HOT LEAD"
         """
-        print(f"\n🔥 HOT LEAD DETECTED in conversation {conversation_id}")
-        
-        # Update conversation status
-        await self.supabase.update_conversation_status(conversation_id, 'hot_lead')
+        # Check if this conversation already has a hot_lead record
+        existing_hot_lead = await self.supabase.get_existing_hot_lead(conversation_id)
         
         # Get detailed lead info
         lead_details = await self.supabase.get_lead_details(lead_id)
@@ -452,30 +450,61 @@ class LeadManager:
             'lead_details': lead_details
         }
         
-        hot_lead_id = await self.supabase.create_hot_lead(
-            campaign_id=campaign_id,
-            conversation_id=conversation_id,
-            lead_id=lead_id,
-            conversation_history=full_history,
-            contact_info=contact_info
-        )
-        
-        # Update campaign stats
-        await self.supabase.update_campaign_stats(campaign_id, hot_leads_found=1)
-        
-        # Post to Telegram channel if configured
         target_channel = campaign.get('target_channel_id')
-        if target_channel:
-            await self._post_hot_lead_to_channel(
-                hot_lead_id,
-                target_channel,
-                contact_info,
-                full_history,
-                lead_details,
-                user_id
-            )
         
-        print(f"   ✅ Hot lead saved: {hot_lead_id}")
+        if existing_hot_lead:
+            # This is a CONTINUING conversation with an existing hot lead
+            print(f"\n📬 NEW MESSAGE FROM EXISTING HOT LEAD in conversation {conversation_id}")
+            
+            hot_lead_id = existing_hot_lead['id']
+            old_history = existing_hot_lead.get('conversation_history', [])
+            
+            # Update hot_lead record with new conversation history
+            await self.supabase.update_hot_lead_history(hot_lead_id, full_history)
+            
+            # Post "NEW MESSAGE" notification instead of "NEW HOT LEAD"
+            if target_channel:
+                await self._post_hot_lead_update_to_channel(
+                    hot_lead_id,
+                    target_channel,
+                    contact_info,
+                    old_history,
+                    full_history,
+                    lead_details,
+                    user_id
+                )
+            
+            print(f"   ✅ Hot lead updated with new message: {hot_lead_id}")
+        else:
+            # This is a NEW hot lead
+            print(f"\n🔥 NEW HOT LEAD DETECTED in conversation {conversation_id}")
+            
+            # Update conversation status
+            await self.supabase.update_conversation_status(conversation_id, 'hot_lead')
+            
+            hot_lead_id = await self.supabase.create_hot_lead(
+                campaign_id=campaign_id,
+                conversation_id=conversation_id,
+                lead_id=lead_id,
+                conversation_history=full_history,
+                contact_info=contact_info
+            )
+            
+            # Update campaign stats (only for NEW hot leads)
+            await self.supabase.update_campaign_stats(campaign_id, hot_leads_found=1)
+            
+            # Post to Telegram channel if configured
+            if target_channel:
+                await self._post_hot_lead_to_channel(
+                    hot_lead_id,
+                    target_channel,
+                    contact_info,
+                    full_history,
+                    lead_details,
+                    user_id
+                )
+            
+            print(f"   ✅ Hot lead saved: {hot_lead_id}")
     
     def _escape_markdown(self, text: str) -> str:
         """
@@ -503,7 +532,7 @@ class LeadManager:
         user_id: str
     ):
         """
-        Post hot lead notification to Telegram channel using Bot API
+        Post NEW hot lead notification to Telegram channel using Bot API
         """
         try:
             print(f"   📢 Generating report for channel {channel_id}...")
@@ -584,3 +613,97 @@ ID: {contact_info.get('telegram_user_id', 'N/A')}
             
         except Exception as e:
             print(f"   ⚠️ Failed to post to channel: {e}")
+    
+    async def _post_hot_lead_update_to_channel(
+        self,
+        hot_lead_id: str,
+        channel_id: str,
+        contact_info: Dict,
+        old_history: List[Dict],
+        new_history: List[Dict],
+        lead_details: Dict,
+        user_id: str
+    ):
+        """
+        Post notification about NEW MESSAGE from existing hot lead
+        Highlights new messages since last notification
+        """
+        try:
+            print(f"   📢 Generating UPDATE report for channel {channel_id}...")
+            
+            # 1. Get Bot Token from config
+            bot_token = TELEGRAM_BOT_TOKEN
+            
+            if not bot_token:
+                print(f"   ⚠️ No TELEGRAM_BOT_TOKEN in env vars - cannot post to channel")
+                return
+
+            # 2. Get Lead Info
+            username = contact_info.get('username', 'Unknown')
+            original_msg = lead_details.get('original_message', {}) if lead_details else {}
+            chat_name = original_msg.get('chat_name', 'Unknown Chat')
+            
+            # 3. Find NEW messages (difference between old and new history)
+            old_count = len(old_history) if old_history else 0
+            new_messages = new_history[old_count:] if new_history else []
+            
+            # 4. Format full dialogue with NEW messages highlighted
+            dialogue_text = ""
+            for i, msg in enumerate(new_history):
+                role = "🤖" if msg['role'] == 'assistant' else "👤"
+                content = self._escape_markdown(msg['content'])
+                
+                # Highlight NEW messages with ⚡ marker
+                if i >= old_count:
+                    dialogue_text += f"⚡ {role} {content} ⬅️ НОВОЕ\n\n"
+                else:
+                    dialogue_text += f"{role} {content}\n\n"
+            
+            # 5. Format NEW messages separately for quick view
+            new_messages_text = ""
+            for msg in new_messages:
+                role = "🤖 Вы" if msg['role'] == 'assistant' else "👤 Лид"
+                content = self._escape_markdown(msg['content'])
+                new_messages_text += f"{role}: {content}\n\n"
+            
+            if not new_messages_text:
+                new_messages_text = "(нет новых сообщений)"
+            
+            # 6. Construct Message
+            message = f"""📬 НОВОЕ СООБЩЕНИЕ ОТ ГОРЯЧЕГО ЛИДА!
+
+👤 Лид: @{username}
+ID: {contact_info.get('telegram_user_id', 'N/A')}
+Чат-источник: {chat_name}
+
+🆕 Новые сообщения ({len(new_messages)} шт.):
+{new_messages_text}
+━━━━━━━━━━━━━━━━━━━━━━
+
+💬 Полная переписка:
+{dialogue_text}
+
+🔗 ID лида в системе: {hot_lead_id}
+"""
+            
+            # 7. Send via Telegram Bot API
+            url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+            target_chat_id = channel_id
+            
+            payload = {
+                'chat_id': target_chat_id,
+                'text': message
+            }
+            
+            print(f"   📤 Sending UPDATE to Telegram: chat_id={target_chat_id}")
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload) as resp:
+                    if resp.status == 200:
+                        print(f"   ✅ Posted hot lead UPDATE to channel {target_chat_id}")
+                    else:
+                        err_text = await resp.text()
+                        print(f"   ❌ Failed to send UPDATE via Bot: {resp.status} - {err_text}")
+            
+        except Exception as e:
+            print(f"   ⚠️ Failed to post update to channel: {e}")
