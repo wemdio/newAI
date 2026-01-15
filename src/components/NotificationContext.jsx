@@ -207,6 +207,70 @@ export const NotificationProvider = ({ children, userId }) => {
     }
   }, []);
 
+  // Update browser tab title with unread count
+  useEffect(() => {
+    const baseTitle = 'Lead Scanner';
+    
+    if (unreadCount > 0) {
+      document.title = `(${unreadCount}) ${baseTitle}`;
+      
+      // Also update favicon with badge (optional visual cue)
+      updateFaviconWithBadge(unreadCount);
+    } else {
+      document.title = baseTitle;
+      resetFavicon();
+    }
+
+    return () => {
+      document.title = baseTitle;
+      resetFavicon();
+    };
+  }, [unreadCount]);
+
+  // Create favicon with notification badge
+  const updateFaviconWithBadge = (count) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 32;
+    canvas.height = 32;
+    const ctx = canvas.getContext('2d');
+    
+    // Load original favicon
+    const img = new Image();
+    img.onload = () => {
+      // Draw original icon
+      ctx.drawImage(img, 0, 0, 32, 32);
+      
+      // Draw red badge circle
+      ctx.beginPath();
+      ctx.arc(24, 8, 8, 0, 2 * Math.PI);
+      ctx.fillStyle = '#ef4444';
+      ctx.fill();
+      
+      // Draw count text
+      ctx.fillStyle = 'white';
+      ctx.font = 'bold 10px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(count > 9 ? '9+' : count.toString(), 24, 8);
+      
+      // Update favicon
+      const link = document.querySelector("link[rel*='icon']") || document.createElement('link');
+      link.type = 'image/x-icon';
+      link.rel = 'shortcut icon';
+      link.href = canvas.toDataURL();
+      document.getElementsByTagName('head')[0].appendChild(link);
+    };
+    img.src = '/favicon.svg';
+  };
+
+  // Reset favicon to original
+  const resetFavicon = () => {
+    const link = document.querySelector("link[rel*='icon']");
+    if (link) {
+      link.href = '/favicon.svg';
+    }
+  };
+
   const value = {
     notifications,
     unreadCount,
