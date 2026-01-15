@@ -362,6 +362,37 @@ export const searchMessages = async (filters = {}) => {
   }
 };
 
+// ============= AI MESSAGING CAMPAIGN QUERIES =============
+
+/**
+ * Get active AI campaign with confidence filter settings for user
+ * Returns the first active campaign with filter_by_confidence enabled
+ * @param {string} userId - User ID
+ * @returns {object|null} Campaign settings or null if no active campaign with filter
+ */
+export const getActiveConfidenceFilter = async (userId) => {
+  try {
+    const supabase = getSupabase();
+    
+    const { data, error } = await supabase
+      .from('messaging_campaigns')
+      .select('id, filter_by_confidence, max_confidence_for_ai')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+      .eq('filter_by_confidence', true)
+      .limit(1)
+      .maybeSingle();
+    
+    if (error) throw error;
+    
+    return data; // null if no matching campaign
+  } catch (error) {
+    logger.error('Failed to get active confidence filter', { userId, error: error.message });
+    // Return null on error - don't block posting
+    return null;
+  }
+};
+
 export default {
   getUserConfig,
   saveUserConfig,
@@ -371,6 +402,7 @@ export default {
   updateDetectedLead,
   deleteDetectedLead,
   getLeadStatistics,
-  searchMessages
+  searchMessages,
+  getActiveConfidenceFilter
 };
 

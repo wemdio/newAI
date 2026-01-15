@@ -1,5 +1,5 @@
 import { getSupabase } from '../config/database.js';
-import { getActiveUserConfigs } from '../database/queries.js';
+import { getActiveUserConfigs, getActiveConfidenceFilter } from '../database/queries.js';
 import { preFilterMessages } from '../validators/messagePreFilter.js';
 import { analyzeBatch, doubleCheckLead } from './messageAnalyzer.js';
 import { saveDetectedLead } from './leadDetector.js';
@@ -367,11 +367,31 @@ const processMessagesForUser = async (messages, userConfig) => {
 
         // Post to Telegram immediately (with duplicate check and message suggestion)
         try {
+          const confidenceScore = match.analysis.aiResponse?.confidence_score || 0;
+          
+          // Check if user has active AI campaign with confidence filter
+          // If enabled, skip Telegram posting for leads below threshold (AI will handle them)
+          const confidenceFilter = await getActiveConfidenceFilter(userId);
+          
+          if (confidenceFilter && confidenceScore < confidenceFilter.max_confidence_for_ai) {
+            logger.info('⏭️ Skipping Telegram post - lead below AI threshold (AI will contact)', {
+              userId,
+              leadId: savedLead.id,
+              confidenceScore,
+              threshold: confidenceFilter.max_confidence_for_ai,
+              campaignId: confidenceFilter.id
+            });
+            // Lead is saved but not posted - AI campaign will handle outreach
+            continue;
+          }
+          
           logger.info('🚀 ATTEMPTING TO POST LEAD TO TELEGRAM', {
             userId,
             leadId: savedLead.id,
             channelId: userConfig.telegram_channel_id,
             hasMessageSuggestion: !!messageSuggestion,
+            confidenceScore,
+            passedConfidenceFilter: !confidenceFilter || confidenceScore >= (confidenceFilter?.max_confidence_for_ai || 0),
             messagePreview: match.message.message?.substring(0, 100)
           });
 
