@@ -15,6 +15,7 @@ const Login = React.lazy(() => import('./pages/Login'));
 const AIMessaging = React.lazy(() => import('./pages/AIMessaging'));
 const LeadAudit = React.lazy(() => import('./pages/LeadAudit'));
 const LandingPage = React.lazy(() => import('./pages/LandingPage'));
+const Contacts = React.lazy(() => import('./pages/Contacts'));
 
 const LoadingSpinner = () => (
   <div className="app loading-screen">
@@ -48,6 +49,13 @@ const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setAc
                   onClick={() => setActiveTab('messaging')}
                 >
                   AI Рассылки
+                </Link>
+                <Link 
+                  to="/contacts" 
+                  className={`nav-link ${activeTab === 'contacts' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('contacts')}
+                >
+                  Контакты
                 </Link>
                 <Link 
                   to="/config" 
@@ -87,6 +95,13 @@ const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setAc
                 AI Рассылки
               </Link>
               <Link 
+                to="/contacts" 
+                className={`telegram-nav-item ${activeTab === 'contacts' ? 'active' : ''}`}
+                onClick={() => setActiveTab('contacts')}
+              >
+                Контакты
+              </Link>
+              <Link 
                 to="/config" 
                 className={`telegram-nav-item ${activeTab === 'config' ? 'active' : ''}`}
                 onClick={() => setActiveTab('config')}
@@ -108,6 +123,7 @@ const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setAc
                 <Route path="/leads" element={<Leads />} />
                 <Route path="/config" element={<Configuration />} />
                 <Route path="/messaging" element={<AIMessaging />} />
+                <Route path="/contacts" element={<Contacts />} />
                 <Route path="/audit" element={<LeadAudit />} />
                 <Route path="*" element={<Navigate to="/leads" replace />} />
               </Routes>

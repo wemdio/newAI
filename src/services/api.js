@@ -121,4 +121,14 @@ export const auditApi = {
   run: (data) => api.post('/audit/run', data)
 };
 
+// Contacts API
+export const contactsApi = {
+  getAll: (params) => api.get('/contacts', { params }),
+  getOne: (id) => api.get(`/contacts/${id}`),
+  getStats: () => api.get('/contacts/stats'),
+  aggregate: (data) => api.post('/contacts/aggregate', data),
+  enrich: (data) => api.post('/contacts/enrich', data),
+  delete: (id) => api.delete(`/contacts/${id}`),
+};
+
 export default api;
