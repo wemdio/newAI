@@ -64,9 +64,23 @@ async function getUnaggregatedUsernames(limit = 1000) {
 }
 
 /**
+ * Проверить, является ли username ботом
+ */
+function isBot(username) {
+  if (!username) return true;
+  const lower = username.toLowerCase();
+  return lower.endsWith('bot') || lower.endsWith('бот') || lower.includes('_bot_');
+}
+
+/**
  * Агрегировать данные для одного username
  */
 async function aggregateContactData(username) {
+  // Пропускаем ботов
+  if (isBot(username)) {
+    return null;
+  }
+  
   const supabase = getSupabase();
   
   const { data: messages, error } = await supabase

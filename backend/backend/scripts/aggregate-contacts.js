@@ -23,6 +23,13 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const BATCH_SIZE = 100; // Сколько контактов обрабатывать за раз
 
+// Проверка на бота
+function isBot(username) {
+  if (!username) return true;
+  const lower = username.toLowerCase();
+  return lower.endsWith('bot') || lower.endsWith('бот') || lower.includes('_bot_');
+}
+
 async function getUniqueUsernames(offset, limit) {
   const { data, error } = await supabase
     .from('messages')
@@ -114,8 +121,9 @@ async function main() {
         continue;
       }
       
-      // Обрабатываем новых
-      for (const username of newUsernames.slice(0, BATCH_SIZE)) {
+      // Обрабатываем новых (пропускаем ботов)
+      const filteredUsernames = newUsernames.filter(u => !isBot(u));
+      for (const username of filteredUsernames.slice(0, BATCH_SIZE)) {
         try {
           const contactData = await aggregateContact(username);
           if (contactData) {
