@@ -127,6 +127,7 @@ export const contactsApi = {
   getOne: (id) => api.get(`/contacts/${id}`),
   getStats: () => api.get('/contacts/stats'),
   aggregate: (data) => api.post('/contacts/aggregate', data),
+  updateData: (data) => api.post('/contacts/update-data', data),
   enrich: (data) => api.post('/contacts/enrich', data),
   delete: (id) => api.delete(`/contacts/${id}`),
 };

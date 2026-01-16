@@ -41,6 +41,7 @@ function Contacts() {
   // Enrichment state
   const [enriching, setEnriching] = useState(false);
   const [aggregating, setAggregating] = useState(false);
+  const [updatingData, setUpdatingData] = useState(false);
   const [showEnrichModal, setShowEnrichModal] = useState(false);
   const [apiKey, setApiKey] = useState('');
 
@@ -109,6 +110,29 @@ function Contacts() {
       alert('Ошибка: ' + (err.response?.data?.error || err.message));
     } finally {
       setAggregating(false);
+    }
+  };
+
+  // Update contact data (bio, names) from messages
+  const handleUpdateData = async () => {
+    if (updatingData) return;
+    
+    if (!confirm('Обновить данные контактов (bio, имена) из сообщений?\nЭто может занять несколько минут.')) {
+      return;
+    }
+    
+    try {
+      setUpdatingData(true);
+      await contactsApi.updateData({ batchSize: 500 });
+      alert('Обновление данных запущено в фоне. Обновите страницу через пару минут.');
+      setTimeout(() => {
+        loadStats();
+        loadContacts();
+      }, 30000);
+    } catch (err) {
+      alert('Ошибка: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setUpdatingData(false);
     }
   };
 
@@ -232,6 +256,14 @@ function Contacts() {
             disabled={aggregating}
           >
             {aggregating ? '⏳ Агрегация...' : '📥 Собрать контакты'}
+          </button>
+          <button 
+            className="btn btn-warning" 
+            onClick={handleUpdateData}
+            disabled={updatingData}
+            title="Подтянуть bio и имена из сообщений"
+          >
+            {updatingData ? '⏳ Обновление...' : '🔄 Обновить данные'}
           </button>
           <button 
             className="btn btn-success" 

@@ -277,6 +277,88 @@ router.post('/aggregate', async (req, res) => {
   }
 });
 
+// ============= POST /api/contacts/update-data =============
+// Обновить данные контактов (bio, имена) из messages
+router.post('/update-data', async (req, res) => {
+  try {
+    const { batchSize = 500 } = req.body;
+    const supabase = getSupabase();
+    
+    logger.info('Starting contact data update from messages');
+    
+    res.json({
+      success: true,
+      message: 'Data update started in background'
+    });
+    
+    // Асинхронное обновление
+    (async () => {
+      let totalUpdated = 0;
+      let offset = 0;
+      let hasMore = true;
+      
+      while (hasMore) {
+        // Получаем контакты без bio
+        const { data: contacts, error } = await supabase
+          .from('contacts')
+          .select('id, username')
+          .or('bio.is.null,bio.eq.')
+          .range(offset, offset + batchSize - 1);
+        
+        if (error || !contacts?.length) {
+          hasMore = false;
+          break;
+        }
+        
+        // Обновляем каждый контакт
+        for (const contact of contacts) {
+          try {
+            const { data: messages } = await supabase
+              .from('messages')
+              .select('first_name, last_name, bio, user_id, profile_link')
+              .eq('username', contact.username)
+              .not('bio', 'is', null)
+              .neq('bio', '')
+              .order('message_time', { ascending: false })
+              .limit(1);
+            
+            if (messages?.length) {
+              const msg = messages[0];
+              await supabase
+                .from('contacts')
+                .update({
+                  first_name: msg.first_name || null,
+                  last_name: msg.last_name || null,
+                  bio: msg.bio,
+                  telegram_user_id: msg.user_id,
+                  profile_link: msg.profile_link,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', contact.id);
+              
+              totalUpdated++;
+            }
+          } catch (err) {
+            // Ignore individual errors
+          }
+        }
+        
+        logger.info('Contact data update progress', { checked: offset + contacts.length, updated: totalUpdated });
+        offset += batchSize;
+        
+        // Small delay to not overload API
+        await new Promise(r => setTimeout(r, 50));
+      }
+      
+      logger.info('Contact data update completed', { totalUpdated });
+    })();
+    
+  } catch (error) {
+    logger.error('Error starting data update', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ============= POST /api/contacts/enrich =============
 // Запустить обогащение контактов
 router.post('/enrich', async (req, res) => {
