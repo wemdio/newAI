@@ -282,29 +282,21 @@ router.post('/aggregate', async (req, res) => {
 router.post('/enrich', async (req, res) => {
   try {
     const {
+      apiKey,  // API ключ передаётся в запросе
       maxContacts = 1000,
       onlyWithBio = false,
       minMessages = 1
     } = req.body;
     
-    const supabase = getSupabase();
-    
-    // Получаем API ключ пользователя
-    // Для простоты берём первый активный конфиг
-    const { data: config } = await supabase
-      .from('user_config')
-      .select('openrouter_api_key')
-      .eq('is_active', true)
-      .not('openrouter_api_key', 'is', null)
-      .limit(1)
-      .single();
-    
-    if (!config?.openrouter_api_key) {
+    // Проверяем наличие API ключа
+    if (!apiKey || !apiKey.trim()) {
       return res.status(400).json({
         success: false,
-        error: 'OpenRouter API key not found. Please configure it in Settings.'
+        error: 'OpenRouter API key is required. Please enter your API key.'
       });
     }
+    
+    const supabase = getSupabase();
     
     logger.info('Starting contact enrichment via API', { maxContacts, onlyWithBio, minMessages });
     
@@ -323,9 +315,18 @@ router.post('/enrich', async (req, res) => {
     
     const actualMax = Math.min(maxContacts, count || 0);
     
-    // Оценка стоимости (примерно)
-    // ~500 токенов на контакт при батче по 30
-    const estimatedTokens = actualMax * 100; // ~100 токенов на контакт с батчингом
+    if (actualMax === 0) {
+      return res.json({
+        success: true,
+        message: 'No contacts to enrich',
+        contactsToEnrich: 0,
+        estimatedCostUsd: '0.0000'
+      });
+    }
+    
+    // Оценка стоимости (Qwen 2.5-7B: $0.04/1M input, $0.10/1M output)
+    // ~100 токенов на контакт с батчингом по 30
+    const estimatedTokens = actualMax * 100;
     const estimatedCost = (estimatedTokens * 0.04 / 1000000) + (estimatedTokens * 0.3 * 0.10 / 1000000);
     
     res.json({
@@ -335,9 +336,9 @@ router.post('/enrich', async (req, res) => {
       estimatedCostUsd: estimatedCost.toFixed(4)
     });
     
-    // Асинхронное обогащение
+    // Асинхронное обогащение с переданным ключом
     enrichContacts({
-      apiKey: config.openrouter_api_key,
+      apiKey: apiKey.trim(),
       maxContacts: actualMax,
       onlyWithBio,
       minMessages

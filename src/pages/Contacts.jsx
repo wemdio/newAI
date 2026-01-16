@@ -41,6 +41,8 @@ function Contacts() {
   // Enrichment state
   const [enriching, setEnriching] = useState(false);
   const [aggregating, setAggregating] = useState(false);
+  const [showEnrichModal, setShowEnrichModal] = useState(false);
+  const [apiKey, setApiKey] = useState('');
 
   // Load contacts
   const loadContacts = useCallback(async () => {
@@ -110,31 +112,42 @@ function Contacts() {
     }
   };
 
-  // Enrich contacts
-  const handleEnrich = async () => {
-    if (enriching) return;
-    
+  // Open enrich modal
+  const handleEnrichClick = () => {
     const count = stats?.notEnriched || 0;
     if (count === 0) {
       alert('Все контакты уже обогащены!');
       return;
     }
+    setShowEnrichModal(true);
+  };
+
+  // Enrich contacts with API key
+  const handleEnrich = async () => {
+    if (enriching) return;
     
-    const toEnrich = Math.min(count, 1000);
-    const estimatedCost = (toEnrich * 0.00015).toFixed(4);
-    
-    if (!confirm(`Обогатить ${toEnrich} контактов?\nПримерная стоимость: $${estimatedCost}`)) {
+    if (!apiKey.trim()) {
+      alert('Введите OpenRouter API ключ');
       return;
     }
+    
+    const count = stats?.notEnriched || 0;
+    const toEnrich = Math.min(count, 1000);
     
     try {
       setEnriching(true);
       const response = await contactsApi.enrich({ 
+        apiKey: apiKey.trim(),
         maxContacts: toEnrich,
         onlyWithBio: false,
         minMessages: 1
       });
+      
+      setShowEnrichModal(false);
+      setApiKey(''); // Очищаем ключ из памяти
+      
       alert(`Обогащение запущено!\nКонтактов: ${response.data.contactsToEnrich}\nОценка стоимости: $${response.data.estimatedCostUsd}`);
+      
       setTimeout(() => {
         loadStats();
         loadContacts();
@@ -222,7 +235,7 @@ function Contacts() {
           </button>
           <button 
             className="btn btn-success" 
-            onClick={handleEnrich}
+            onClick={handleEnrichClick}
             disabled={enriching || !stats?.notEnriched}
           >
             {enriching ? '⏳ Обогащение...' : `🤖 Обогатить (${stats?.notEnriched || 0})`}
@@ -460,6 +473,75 @@ function Contacts() {
               >
                 »»
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enrich API Key Modal */}
+      {showEnrichModal && (
+        <div className="modal-overlay" onClick={() => setShowEnrichModal(false)}>
+          <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
+            <div className="modal-header">
+              <h2>🤖 Обогащение контактов</h2>
+              <button className="modal-close" onClick={() => setShowEnrichModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="detail-section">
+                <h4>Информация</h4>
+                <div className="detail-grid">
+                  <div className="detail-item">
+                    <span className="detail-label">Контактов для обогащения</span>
+                    <span className="detail-value">{Math.min(stats?.notEnriched || 0, 1000).toLocaleString()}</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-label">Примерная стоимость</span>
+                    <span className="detail-value" style={{ color: '#00c853' }}>
+                      ~${(Math.min(stats?.notEnriched || 0, 1000) * 0.00008).toFixed(2)}
+                    </span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-label">Модель</span>
+                    <span className="detail-value">Qwen 2.5-7B</span>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-label">Время</span>
+                    <span className="detail-value">~{Math.ceil(Math.min(stats?.notEnriched || 0, 1000) / 30 / 2)} мин</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="filter-group" style={{ marginTop: '20px' }}>
+                <label>OpenRouter API Key</label>
+                <input 
+                  type="password"
+                  placeholder="sk-or-v1-..."
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  style={{ width: '100%' }}
+                />
+                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginTop: '4px', display: 'block' }}>
+                  Получить ключ: <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" style={{ color: '#00d4ff' }}>openrouter.ai/keys</a>
+                </span>
+              </div>
+              
+              <div style={{ display: 'flex', gap: '12px', marginTop: '24px' }}>
+                <button 
+                  className="btn btn-secondary" 
+                  onClick={() => setShowEnrichModal(false)}
+                  style={{ flex: 1 }}
+                >
+                  Отмена
+                </button>
+                <button 
+                  className="btn btn-success" 
+                  onClick={handleEnrich}
+                  disabled={enriching || !apiKey.trim()}
+                  style={{ flex: 1 }}
+                >
+                  {enriching ? '⏳ Запуск...' : '🚀 Запустить обогащение'}
+                </button>
+              </div>
             </div>
           </div>
         </div>
