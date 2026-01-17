@@ -446,10 +446,10 @@ export async function enrichContacts(options = {}) {
       .from('contacts')
       .select('*')
       .eq('is_enriched', false)
-      .gte('messages_count', minMessages)
-      .order('messages_count', { ascending: false })
+      .order('created_at', { ascending: true })
       .limit(batchSize);
     
+    // Опционально фильтруем только с bio
     if (onlyWithBio) {
       query = query.not('bio', 'is', null).neq('bio', '');
     }
@@ -466,40 +466,85 @@ export async function enrichContacts(options = {}) {
       break;
     }
     
-    // Получаем top_messages для каждого контакта
+    // Получаем top_messages и bio для каждого контакта из messages
+    const contactsWithData = [];
     for (const contact of contacts) {
       const { data: messages } = await supabase
         .from('messages')
-        .select('message')
+        .select('message, bio, first_name, last_name')
         .eq('username', contact.username)
-        .not('message', 'is', null)
         .order('message_time', { ascending: false })
-        .limit(5);
+        .limit(10);
       
-      contact.top_messages = messages?.map(m => m.message?.substring(0, CONFIG.MAX_MESSAGE_LENGTH)) || [];
+      // Берём bio из messages если нет в контакте
+      const msgWithBio = messages?.find(m => m.bio);
+      const msgWithName = messages?.find(m => m.first_name);
+      
+      contact.bio = contact.bio || msgWithBio?.bio || null;
+      contact.first_name = contact.first_name || msgWithName?.first_name || null;
+      contact.last_name = contact.last_name || msgWithName?.last_name || null;
+      contact.top_messages = messages
+        ?.filter(m => m.message && m.message.length > 10)
+        ?.map(m => m.message?.substring(0, CONFIG.MAX_MESSAGE_LENGTH)) || [];
+      
+      // Добавляем только если есть хоть какие-то данные
+      if (contact.bio || contact.top_messages.length > 0) {
+        contactsWithData.push(contact);
+      } else {
+        // Помечаем как обогащённый с низким score (нет данных)
+        await supabase.from('contacts').update({
+          is_enriched: true,
+          enriched_at: new Date().toISOString(),
+          lead_score: 0,
+          enrichment_confidence: 0,
+          ai_summary: 'Нет данных для анализа',
+          updated_at: new Date().toISOString()
+        }).eq('id', contact.id);
+        totalFailed++;
+      }
+    }
+    
+    // Пропускаем если нет контактов с данными
+    if (contactsWithData.length === 0) {
+      logger.info('No contacts with data in this batch, skipping AI call');
+      continue;
     }
     
     // Обогащаем батч
-    const result = await enrichBatch(contacts, apiKey);
+    const result = await enrichBatch(contactsWithData, apiKey);
     
     totalEnriched += result.enrichedCount;
-    totalFailed += contacts.length - result.enrichedCount;
+    totalFailed += contactsWithData.length - result.enrichedCount;
     totalTokens += result.tokensUsed;
     totalCost += result.cost;
     
     logger.info('Enrichment progress', {
-      batch: contacts.length,
+      batch: contactsWithData.length,
       enriched: result.enrichedCount,
       totalEnriched,
+      totalFailed,
       totalCost: totalCost.toFixed(4)
     });
+    
+    // Обновляем лог после каждого батча
+    await supabase
+      .from('contact_enrichment_logs')
+      .update({
+        contacts_processed: totalEnriched + totalFailed,
+        contacts_enriched: totalEnriched,
+        contacts_failed: totalFailed,
+        tokens_used: totalTokens,
+        cost_usd: totalCost,
+        updated_at: new Date().toISOString()
+      })
+      .eq('batch_id', batchId);
     
     if (maxContacts && totalEnriched >= maxContacts) {
       break;
     }
     
-    // Небольшая пауза между батчами
-    await new Promise(resolve => setTimeout(resolve, 500));
+    // Пауза между батчами для стабильности API
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
   
   // Обновляем лог
