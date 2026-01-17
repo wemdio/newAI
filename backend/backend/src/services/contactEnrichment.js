@@ -13,10 +13,11 @@ const CONFIG = {
   
   // Батчинг
   AGGREGATION_BATCH_SIZE: 1000,    // Сколько username обрабатывать за раз при агрегации
-  ENRICHMENT_BATCH_SIZE: 20,       // Сколько контактов отправлять в один запрос AI
+  ENRICHMENT_BATCH_SIZE: 10,       // Сколько контактов отправлять в один запрос AI (уменьшено для надёжности)
   
   // API
   OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1/chat/completions',
+  MAX_TOKENS: 3000,                // Лимит токенов на ответ (увеличено с 2000)
   
   // Цены Qwen 2.5-7B (за 1M токенов)
   PRICE_INPUT: 0.04,
@@ -28,7 +29,7 @@ const CONFIG = {
   
   // Параллельность
   PARALLEL_DB_REQUESTS: 10,  // Сколько запросов к БД делать параллельно
-  BATCH_DELAY_MS: 500,       // Пауза между батчами AI (мс)
+  BATCH_DELAY_MS: 300,       // Пауза между батчами AI (мс)
 };
 
 // ============= АГРЕГАЦИЯ КОНТАКТОВ =============
@@ -252,37 +253,24 @@ export async function aggregateContacts(options = {}) {
 // ============= ОБОГАЩЕНИЕ AI =============
 
 /**
- * Промпт для обогащения контактов
+ * Промпт для обогащения контактов (компактный)
  */
 function buildEnrichmentPrompt(contacts) {
   const contactsText = contacts.map((c, i) => {
-    const bio = c.bio ? c.bio.substring(0, CONFIG.MAX_BIO_LENGTH) : '-';
-    const msgs = c.top_messages?.slice(0, 3).join(' | ') || '-';
-    return `[${i}] @${c.username} | Bio: ${bio} | Msgs: ${msgs}`;
+    const bio = c.bio ? c.bio.substring(0, CONFIG.MAX_BIO_LENGTH) : '';
+    const msgs = c.top_messages?.slice(0, 2).join(' | ') || '';
+    const data = [bio, msgs].filter(Boolean).join(' | ') || 'нет данных';
+    return `[${i}] @${c.username}: ${data}`;
   }).join('\n');
   
-  return `Проанализируй ${contacts.length} профилей Telegram. ВСЯ ИНФОРМАЦИЯ ДОЛЖНА БЫТЬ НА РУССКОМ ЯЗЫКЕ.
+  return `Анализ ${contacts.length} Telegram профилей. Ответ НА РУССКОМ.
 
-Определи для каждого:
-- company: название компании на русском (если есть)
-- position: должность НА РУССКОМ (например: Директор, Менеджер, Разработчик, Маркетолог, Предприниматель)
-- type: CEO/DIRECTOR/MANAGER/SPECIALIST/FREELANCER/OTHER (это оставь на английском для системы)
-- lpr: true если ЛПР (владелец, директор, основатель, CEO)
-- industry: отрасль бизнеса НА РУССКОМ (например: IT, Маркетинг, Образование, E-commerce, Финансы)
-- size: SOLO/SMALL/MEDIUM/LARGE/UNKNOWN (это оставь на английском)
-- interests: массив интересов НА РУССКОМ (макс 3)
-- pains: массив проблем/болей НА РУССКОМ (макс 3)
-- score: 0-100 (качество как лида)
-- confidence: 0-100 (уверенность анализа)
-- summary: 1 предложение о человеке НА РУССКОМ
-
-ПРОФИЛИ:
 ${contactsText}
 
-ВАЖНО: Все текстовые поля (position, industry, interests, pains, summary) ОБЯЗАТЕЛЬНО на русском языке!
+JSON ответ (без markdown):
+[{"i":0,"company":"ООО...","position":"Директор","type":"CEO|DIRECTOR|MANAGER|SPECIALIST|FREELANCER|OTHER","lpr":true|false,"industry":"IT","size":"SOLO|SMALL|MEDIUM|LARGE","score":0-100,"summary":"Краткое описание"}]
 
-Ответь ТОЛЬКО JSON массивом (без markdown):
-[{"i":0,"company":"...","position":"...","type":"...","lpr":true,"industry":"...","size":"...","interests":[],"pains":[],"score":50,"confidence":70,"summary":"..."},...]`;
+Поля: company,position,industry,summary - на русском. type,size - английские коды. Если нет данных: score=0.`;
 }
 
 /**
@@ -310,7 +298,7 @@ async function callOpenRouter(prompt, apiKey) {
         }
       ],
       temperature: 0.3,
-      max_tokens: 2000
+      max_tokens: CONFIG.MAX_TOKENS
     })
   });
   
@@ -367,17 +355,19 @@ async function enrichBatch(contacts, apiKey) {
       const contact = contacts[result.i];
       if (!contact) continue;
       
+      const score = Math.min(100, Math.max(0, parseInt(result.score) || 0));
+      
       const updateData = {
         company_name: result.company || null,
         position: result.position || null,
-        position_type: result.type || 'OTHER',
-        is_decision_maker: result.lpr === true,
+        position_type: ['CEO', 'DIRECTOR', 'MANAGER', 'SPECIALIST', 'FREELANCER', 'OTHER'].includes(result.type) ? result.type : 'OTHER',
+        is_decision_maker: result.lpr === true || result.type === 'CEO' || result.type === 'DIRECTOR',
         industry: result.industry || null,
-        company_size: result.size || 'UNKNOWN',
+        company_size: ['SOLO', 'SMALL', 'MEDIUM', 'LARGE', 'UNKNOWN'].includes(result.size) ? result.size : 'UNKNOWN',
         interests: result.interests || [],
         pain_points: result.pains || [],
-        lead_score: Math.min(100, Math.max(0, result.score || 0)),
-        enrichment_confidence: Math.min(100, Math.max(0, result.confidence || 0)),
+        lead_score: score,
+        enrichment_confidence: score > 0 ? 70 : 0, // Если есть score, confidence = 70
         ai_summary: result.summary || null,
         raw_ai_response: result,
         is_enriched: true,
