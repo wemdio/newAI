@@ -13,7 +13,7 @@ const CONFIG = {
   
   // Батчинг
   AGGREGATION_BATCH_SIZE: 1000,    // Сколько username обрабатывать за раз при агрегации
-  ENRICHMENT_BATCH_SIZE: 30,       // Сколько контактов отправлять в один запрос AI
+  ENRICHMENT_BATCH_SIZE: 20,       // Сколько контактов отправлять в один запрос AI
   
   // API
   OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1/chat/completions',
@@ -25,6 +25,10 @@ const CONFIG = {
   // Лимиты
   MAX_BIO_LENGTH: 200,
   MAX_MESSAGE_LENGTH: 300,
+  
+  // Параллельность
+  PARALLEL_DB_REQUESTS: 10,  // Сколько запросов к БД делать параллельно
+  BATCH_DELAY_MS: 500,       // Пауза между батчами AI (мс)
 };
 
 // ============= АГРЕГАЦИЯ КОНТАКТОВ =============
@@ -407,6 +411,50 @@ async function enrichBatch(contacts, apiKey) {
 }
 
 /**
+ * Получить данные контакта из messages (параллельно)
+ */
+async function fetchContactData(supabase, contact) {
+  try {
+    const { data: messages } = await supabase
+      .from('messages')
+      .select('message, bio, first_name, last_name')
+      .eq('username', contact.username)
+      .order('message_time', { ascending: false })
+      .limit(10);
+    
+    // Берём bio из messages если нет в контакте
+    const msgWithBio = messages?.find(m => m.bio);
+    const msgWithName = messages?.find(m => m.first_name);
+    
+    return {
+      ...contact,
+      bio: contact.bio || msgWithBio?.bio || null,
+      first_name: contact.first_name || msgWithName?.first_name || null,
+      last_name: contact.last_name || msgWithName?.last_name || null,
+      top_messages: messages
+        ?.filter(m => m.message && m.message.length > 10)
+        ?.map(m => m.message?.substring(0, CONFIG.MAX_MESSAGE_LENGTH)) || []
+    };
+  } catch (err) {
+    logger.error('Error fetching contact data', { username: contact.username, error: err.message });
+    return { ...contact, bio: null, top_messages: [] };
+  }
+}
+
+/**
+ * Обработать массив батчами параллельно
+ */
+async function processInParallelBatches(items, batchSize, processor) {
+  const results = [];
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(processor));
+    results.push(...batchResults);
+  }
+  return results;
+}
+
+/**
  * Обогатить контакты
  */
 export async function enrichContacts(options = {}) {
@@ -414,15 +462,14 @@ export async function enrichContacts(options = {}) {
     apiKey,
     batchSize = CONFIG.ENRICHMENT_BATCH_SIZE,
     maxContacts = null,
-    onlyWithBio = false,
-    minMessages = 1
+    onlyWithBio = false
   } = options;
   
   if (!apiKey) {
     throw new Error('OpenRouter API key is required');
   }
   
-  logger.info('Starting contact enrichment...', { batchSize, maxContacts, onlyWithBio, minMessages });
+  logger.info('Starting contact enrichment...', { batchSize, maxContacts, onlyWithBio });
   
   const supabase = getSupabase();
   const batchId = crypto.randomUUID();
@@ -437,10 +484,14 @@ export async function enrichContacts(options = {}) {
   let totalFailed = 0;
   let totalTokens = 0;
   let totalCost = 0;
+  let batchNumber = 0;
   
   let hasMore = true;
   
   while (hasMore) {
+    batchNumber++;
+    const batchStartTime = Date.now();
+    
     // Получаем контакты для обогащения
     let query = supabase
       .from('contacts')
@@ -466,64 +517,61 @@ export async function enrichContacts(options = {}) {
       break;
     }
     
-    // Получаем top_messages и bio для каждого контакта из messages
-    const contactsWithData = [];
-    for (const contact of contacts) {
-      const { data: messages } = await supabase
-        .from('messages')
-        .select('message, bio, first_name, last_name')
-        .eq('username', contact.username)
-        .order('message_time', { ascending: false })
-        .limit(10);
-      
-      // Берём bio из messages если нет в контакте
-      const msgWithBio = messages?.find(m => m.bio);
-      const msgWithName = messages?.find(m => m.first_name);
-      
-      contact.bio = contact.bio || msgWithBio?.bio || null;
-      contact.first_name = contact.first_name || msgWithName?.first_name || null;
-      contact.last_name = contact.last_name || msgWithName?.last_name || null;
-      contact.top_messages = messages
-        ?.filter(m => m.message && m.message.length > 10)
-        ?.map(m => m.message?.substring(0, CONFIG.MAX_MESSAGE_LENGTH)) || [];
-      
-      // Добавляем только если есть хоть какие-то данные
-      if (contact.bio || contact.top_messages.length > 0) {
-        contactsWithData.push(contact);
+    // ⚡ ПАРАЛЛЕЛЬНОЕ получение данных из messages
+    const contactsWithData = await processInParallelBatches(
+      contacts,
+      CONFIG.PARALLEL_DB_REQUESTS,
+      (contact) => fetchContactData(supabase, contact)
+    );
+    
+    // Разделяем на контакты с данными и без
+    const toEnrich = [];
+    const noData = [];
+    
+    for (const contact of contactsWithData) {
+      if (contact.bio || contact.top_messages?.length > 0) {
+        toEnrich.push(contact);
       } else {
-        // Помечаем как обогащённый с низким score (нет данных)
-        await supabase.from('contacts').update({
+        noData.push(contact);
+      }
+    }
+    
+    // Помечаем контакты без данных (параллельно)
+    if (noData.length > 0) {
+      const updatePromises = noData.map(contact => 
+        supabase.from('contacts').update({
           is_enriched: true,
           enriched_at: new Date().toISOString(),
           lead_score: 0,
           enrichment_confidence: 0,
           ai_summary: 'Нет данных для анализа',
           updated_at: new Date().toISOString()
-        }).eq('id', contact.id);
-        totalFailed++;
-      }
+        }).eq('id', contact.id)
+      );
+      await Promise.all(updatePromises);
+      totalFailed += noData.length;
     }
     
-    // Пропускаем если нет контактов с данными
-    if (contactsWithData.length === 0) {
-      logger.info('No contacts with data in this batch, skipping AI call');
-      continue;
+    // Обогащаем батч если есть контакты с данными
+    if (toEnrich.length > 0) {
+      const result = await enrichBatch(toEnrich, apiKey);
+      
+      totalEnriched += result.enrichedCount;
+      totalFailed += toEnrich.length - result.enrichedCount;
+      totalTokens += result.tokensUsed;
+      totalCost += result.cost;
     }
     
-    // Обогащаем батч
-    const result = await enrichBatch(contactsWithData, apiKey);
+    const batchTime = ((Date.now() - batchStartTime) / 1000).toFixed(1);
     
-    totalEnriched += result.enrichedCount;
-    totalFailed += contactsWithData.length - result.enrichedCount;
-    totalTokens += result.tokensUsed;
-    totalCost += result.cost;
-    
-    logger.info('Enrichment progress', {
-      batch: contactsWithData.length,
-      enriched: result.enrichedCount,
+    logger.info(`Batch #${batchNumber} complete`, {
+      contacts: contacts.length,
+      withData: toEnrich.length,
+      noData: noData.length,
       totalEnriched,
       totalFailed,
-      totalCost: totalCost.toFixed(4)
+      totalCost: totalCost.toFixed(4),
+      batchTimeSec: batchTime
     });
     
     // Обновляем лог после каждого батча
@@ -539,12 +587,12 @@ export async function enrichContacts(options = {}) {
       })
       .eq('batch_id', batchId);
     
-    if (maxContacts && totalEnriched >= maxContacts) {
+    if (maxContacts && (totalEnriched + totalFailed) >= maxContacts) {
       break;
     }
     
-    // Пауза между батчами для стабильности API
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    // Короткая пауза между батчами
+    await new Promise(resolve => setTimeout(resolve, CONFIG.BATCH_DELAY_MS));
   }
   
   // Обновляем лог
