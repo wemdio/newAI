@@ -365,7 +365,7 @@ router.post('/enrich', async (req, res) => {
   try {
     const {
       apiKey,  // API ключ передаётся в запросе
-      maxContacts = 1000,
+      maxContacts = 50000,  // По умолчанию до 50k, можно обогатить все
       onlyWithBio = false,
       minMessages = 1
     } = req.body;

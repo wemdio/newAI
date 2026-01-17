@@ -44,6 +44,7 @@ function Contacts() {
   const [updatingData, setUpdatingData] = useState(false);
   const [showEnrichModal, setShowEnrichModal] = useState(false);
   const [apiKey, setApiKey] = useState('');
+  const [enrichCount, setEnrichCount] = useState(1000);
 
   // Load contacts
   const loadContacts = useCallback(async () => {
@@ -156,7 +157,7 @@ function Contacts() {
     }
     
     const count = stats?.notEnriched || 0;
-    const toEnrich = Math.min(count, 1000);
+    const toEnrich = enrichCount === 0 ? count : Math.min(count, enrichCount);
     
     try {
       setEnriching(true);
@@ -520,16 +521,32 @@ function Contacts() {
             </div>
             <div className="modal-body">
               <div className="detail-section">
-                <h4>Информация</h4>
+                <h4>Настройки</h4>
+                <div className="filter-group" style={{ marginBottom: '16px' }}>
+                  <label>Количество контактов</label>
+                  <select 
+                    value={enrichCount} 
+                    onChange={(e) => setEnrichCount(parseInt(e.target.value))}
+                    style={{ width: '100%' }}
+                  >
+                    <option value={1000}>1,000 контактов (~$0.08)</option>
+                    <option value={5000}>5,000 контактов (~$0.40)</option>
+                    <option value={10000}>10,000 контактов (~$0.80)</option>
+                    <option value={0}>Все ({(stats?.notEnriched || 0).toLocaleString()}) (~${((stats?.notEnriched || 0) * 0.00008).toFixed(2)})</option>
+                  </select>
+                </div>
+                
                 <div className="detail-grid">
                   <div className="detail-item">
-                    <span className="detail-label">Контактов для обогащения</span>
-                    <span className="detail-value">{Math.min(stats?.notEnriched || 0, 1000).toLocaleString()}</span>
+                    <span className="detail-label">Будет обогащено</span>
+                    <span className="detail-value">
+                      {(enrichCount === 0 ? stats?.notEnriched || 0 : Math.min(stats?.notEnriched || 0, enrichCount)).toLocaleString()}
+                    </span>
                   </div>
                   <div className="detail-item">
                     <span className="detail-label">Примерная стоимость</span>
                     <span className="detail-value" style={{ color: '#00c853' }}>
-                      ~${(Math.min(stats?.notEnriched || 0, 1000) * 0.00008).toFixed(2)}
+                      ~${((enrichCount === 0 ? stats?.notEnriched || 0 : Math.min(stats?.notEnriched || 0, enrichCount)) * 0.00008).toFixed(2)}
                     </span>
                   </div>
                   <div className="detail-item">
@@ -537,8 +554,10 @@ function Contacts() {
                     <span className="detail-value">Qwen 2.5-7B</span>
                   </div>
                   <div className="detail-item">
-                    <span className="detail-label">Время</span>
-                    <span className="detail-value">~{Math.ceil(Math.min(stats?.notEnriched || 0, 1000) / 30 / 2)} мин</span>
+                    <span className="detail-label">Примерное время</span>
+                    <span className="detail-value">
+                      ~{Math.ceil((enrichCount === 0 ? stats?.notEnriched || 0 : Math.min(stats?.notEnriched || 0, enrichCount)) / 30 / 2)} мин
+                    </span>
                   </div>
                 </div>
               </div>
