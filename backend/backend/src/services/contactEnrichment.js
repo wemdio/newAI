@@ -257,21 +257,25 @@ function buildEnrichmentPrompt(contacts) {
     return `[${i}] @${c.username} | Bio: ${bio} | Msgs: ${msgs}`;
   }).join('\n');
   
-  return `Проанализируй ${contacts.length} профилей Telegram. Определи для каждого:
-- company: название компании (если есть)
-- position: должность
-- type: CEO/DIRECTOR/MANAGER/SPECIALIST/FREELANCER/OTHER
-- lpr: true если ЛПР (owner, CEO, director, founder)
-- industry: отрасль бизнеса
-- size: SOLO/SMALL/MEDIUM/LARGE/UNKNOWN
-- interests: массив интересов (макс 3)
-- pains: массив проблем/болей (макс 3)  
+  return `Проанализируй ${contacts.length} профилей Telegram. ВСЯ ИНФОРМАЦИЯ ДОЛЖНА БЫТЬ НА РУССКОМ ЯЗЫКЕ.
+
+Определи для каждого:
+- company: название компании на русском (если есть)
+- position: должность НА РУССКОМ (например: Директор, Менеджер, Разработчик, Маркетолог, Предприниматель)
+- type: CEO/DIRECTOR/MANAGER/SPECIALIST/FREELANCER/OTHER (это оставь на английском для системы)
+- lpr: true если ЛПР (владелец, директор, основатель, CEO)
+- industry: отрасль бизнеса НА РУССКОМ (например: IT, Маркетинг, Образование, E-commerce, Финансы)
+- size: SOLO/SMALL/MEDIUM/LARGE/UNKNOWN (это оставь на английском)
+- interests: массив интересов НА РУССКОМ (макс 3)
+- pains: массив проблем/болей НА РУССКОМ (макс 3)
 - score: 0-100 (качество как лида)
 - confidence: 0-100 (уверенность анализа)
-- summary: 1 предложение о человеке
+- summary: 1 предложение о человеке НА РУССКОМ
 
 ПРОФИЛИ:
 ${contactsText}
+
+ВАЖНО: Все текстовые поля (position, industry, interests, pains, summary) ОБЯЗАТЕЛЬНО на русском языке!
 
 Ответь ТОЛЬКО JSON массивом (без markdown):
 [{"i":0,"company":"...","position":"...","type":"...","lpr":true,"industry":"...","size":"...","interests":[],"pains":[],"score":50,"confidence":70,"summary":"..."},...]`;
