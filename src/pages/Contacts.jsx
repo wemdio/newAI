@@ -387,7 +387,7 @@ function Contacts() {
 
       {/* Error */}
       {error && (
-        <div className="error-banner">
+        <div className="error-banner" style={{ padding: '12px', background: '#2e1a1a', border: '1px solid #3e2a2a', color: '#d17d7d', borderRadius: '4px', marginBottom: '20px' }}>
           ⚠️ {error}
         </div>
       )}
@@ -545,7 +545,7 @@ function Contacts() {
                   </div>
                   <div className="detail-item">
                     <span className="detail-label">Примерная стоимость</span>
-                    <span className="detail-value" style={{ color: '#00c853' }}>
+                    <span className="detail-value" style={{ color: '#7dd17d' }}>
                       ~${((enrichCount === 0 ? stats?.notEnriched || 0 : Math.min(stats?.notEnriched || 0, enrichCount)) * 0.00008).toFixed(2)}
                     </span>
                   </div>
@@ -571,8 +571,8 @@ function Contacts() {
                   onChange={(e) => setApiKey(e.target.value)}
                   style={{ width: '100%' }}
                 />
-                <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.4)', marginTop: '4px', display: 'block' }}>
-                  Получить ключ: <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" style={{ color: '#00d4ff' }}>openrouter.ai/keys</a>
+                <span style={{ fontSize: '12px', color: '#666', marginTop: '4px', display: 'block' }}>
+                  Получить ключ: <a href="https://openrouter.ai/keys" target="_blank" rel="noopener noreferrer" style={{ color: '#7db8d1' }}>openrouter.ai/keys</a>
                 </span>
               </div>
               
@@ -700,7 +700,7 @@ function Contacts() {
                         <h4>Боли / Проблемы</h4>
                         <div className="tags-list">
                           {selectedContact.pain_points.map((pain, i) => (
-                            <span key={i} className="tag" style={{ borderColor: 'rgba(255,152,0,0.3)', color: '#ff9800', background: 'rgba(255,152,0,0.15)' }}>
+                            <span key={i} className="tag-pain">
                               {pain}
                             </span>
                           ))}
