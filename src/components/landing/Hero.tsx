@@ -97,8 +97,6 @@ const Hero: React.FC<{ onOpenLeadForm?: () => void }> = ({ onOpenLeadForm }) => 
           <div className="max-w-xl mx-auto mb-8">
              <p className="text-base md:text-lg text-gray-300 leading-relaxed font-medium antialiased">
                 Сканируем Telegram, квалифицируем лидов и автоматически, пишем от вашего имени.
-                <br />
-                <span className="text-brand-500 font-bold block mt-2 text-lg">15 первых лидов — бесплатно.</span>
             </p>
           </div>
 
@@ -109,7 +107,7 @@ const Hero: React.FC<{ onOpenLeadForm?: () => void }> = ({ onOpenLeadForm }) => 
                   className="group relative px-8 py-3 bg-white text-black hover:bg-brand-500 hover:text-white rounded-full font-bold text-base shadow-[0_0_30px_-10px_rgba(255,255,255,0.3)] hover:shadow-[0_0_50px_-10px_rgba(249,115,22,0.6)] transition-all duration-300 hover:scale-105 active:scale-95 overflow-hidden min-w-[260px]"
                 >
                     <span className="relative flex items-center justify-center gap-3 z-20">
-                        Получить 15 лидов бесплатно
+                        Связаться
                         <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
                     </span>
                 </button>

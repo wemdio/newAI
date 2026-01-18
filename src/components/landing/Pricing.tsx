@@ -1,6 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Gift, Plus } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
 const pricingData = [
   {
@@ -132,21 +132,6 @@ const Pricing: React.FC<{ onOpenLeadForm?: (interest?: string) => void }> = ({ o
 
           <PricingCard item={pricingData[1]} index={1} onOpenLeadForm={onOpenLeadForm} />
         </div>
-
-        <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ delay: 0.4 }}
-            className="flex justify-center"
-        >
-            <div className="inline-flex items-center gap-3 bg-brand-500/10 border border-brand-500/20 rounded-full px-6 py-3 backdrop-blur-sm">
-                <Gift className="w-5 h-5 text-brand-500" />
-                <span className="text-brand-500 font-bold">
-                    Подарок: <span className="text-white font-medium">15 бесплатных лидов под вашу нишу</span>
-                </span>
-            </div>
-        </motion.div>
       </div>
     </section>
   );
