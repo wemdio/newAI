@@ -43,8 +43,9 @@ api.interceptors.request.use(async (config) => {
     const { data: { session } } = await supabase.auth.getSession();
     
     if (session?.user) {
-      // Use user ID from Supabase Auth
+      // Use user ID and email from Supabase Auth
       config.headers['x-user-id'] = session.user.id;
+      config.headers['x-user-email'] = session.user.email;
     }
   } catch (e) {
     console.error('Error getting session for API request:', e);
@@ -129,6 +130,8 @@ export const contactsApi = {
   aggregate: (data) => api.post('/contacts/aggregate', data),
   updateData: (data) => api.post('/contacts/update-data', data),
   enrich: (data) => api.post('/contacts/enrich', data),
+  resetEnrichment: () => api.post('/contacts/reset-enrichment'),
+  checkAdmin: () => api.get('/contacts/admin/check'),
   delete: (id) => api.delete(`/contacts/${id}`),
 };
 

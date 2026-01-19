@@ -10,6 +10,19 @@ import logger from '../../utils/logger.js';
 
 const router = express.Router();
 
+// ============= ADMIN CONFIG =============
+// Список email администраторов
+const ADMIN_EMAILS = [
+  'egorkanigin@polzaagency.ru',
+  'admin@leadparser.app'
+];
+
+// Проверка админа по email
+function isAdmin(userEmail) {
+  if (!userEmail) return false;
+  return ADMIN_EMAILS.includes(userEmail.toLowerCase());
+}
+
 // ============= GET /api/contacts =============
 // Получить список контактов с фильтрацией и пагинацией
 router.get('/', async (req, res) => {
@@ -539,6 +552,96 @@ router.delete('/:id', async (req, res) => {
     res.json({ success: true, message: 'Contact deleted' });
   } catch (error) {
     logger.error('Error deleting contact', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ============= GET /api/contacts/admin/check =============
+// Проверка прав администратора
+router.get('/admin/check', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    
+    if (!userId) {
+      return res.json({ success: true, isAdmin: false });
+    }
+    
+    const supabase = getSupabase();
+    
+    // Получаем email пользователя из auth.users
+    const { data: user, error } = await supabase
+      .from('users')
+      .select('email')
+      .eq('id', userId)
+      .single();
+    
+    // Если не нашли в таблице users, пробуем получить из Supabase Auth
+    if (error || !user) {
+      // Fallback: проверяем по x-user-email если есть
+      const userEmail = req.headers['x-user-email'];
+      return res.json({
+        success: true,
+        isAdmin: isAdmin(userEmail)
+      });
+    }
+    
+    res.json({
+      success: true,
+      isAdmin: isAdmin(user.email)
+    });
+  } catch (error) {
+    logger.error('Error checking admin status', { error: error.message });
+    res.json({ success: true, isAdmin: false });
+  }
+});
+
+// ============= POST /api/contacts/reset-enrichment =============
+// Сбросить обогащение для повторной обработки (только для админа)
+router.post('/reset-enrichment', async (req, res) => {
+  try {
+    const supabase = getSupabase();
+    
+    logger.info('Resetting enrichment status for all contacts');
+    
+    // Сбрасываем флаг обогащения и все AI-данные
+    const { data, error } = await supabase
+      .from('contacts')
+      .update({
+        is_enriched: false,
+        company_name: null,
+        position: null,
+        position_type: 'UNKNOWN',
+        is_decision_maker: false,
+        industry: null,
+        company_size: 'UNKNOWN',
+        interests: null,
+        pain_points: null,
+        lead_score: 0,
+        enrichment_confidence: null,
+        ai_summary: null,
+        raw_ai_response: null,
+        enriched_at: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('is_enriched', true);
+    
+    if (error) throw error;
+    
+    // Считаем сколько сбросили
+    const { count } = await supabase
+      .from('contacts')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_enriched', false);
+    
+    logger.info('Enrichment reset completed', { resetCount: count });
+    
+    res.json({
+      success: true,
+      message: 'Enrichment reset completed',
+      resetCount: count
+    });
+  } catch (error) {
+    logger.error('Error resetting enrichment', { error: error.message });
     res.status(500).json({ success: false, error: error.message });
   }
 });

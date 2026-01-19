@@ -21,6 +21,9 @@ function Contacts() {
   const [selectedContact, setSelectedContact] = useState(null);
   const [contactMessages, setContactMessages] = useState([]);
   
+  // Admin state
+  const [isAdmin, setIsAdmin] = useState(false);
+  
   // Pagination
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -42,6 +45,7 @@ function Contacts() {
   const [enriching, setEnriching] = useState(false);
   const [aggregating, setAggregating] = useState(false);
   const [updatingData, setUpdatingData] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const [showEnrichModal, setShowEnrichModal] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [enrichCount, setEnrichCount] = useState(1000);
@@ -82,9 +86,21 @@ function Contacts() {
     }
   };
 
+  // Check admin status
+  const checkAdminStatus = async () => {
+    try {
+      const response = await contactsApi.checkAdmin();
+      setIsAdmin(response.data.isAdmin);
+    } catch (err) {
+      console.error('Error checking admin status:', err);
+      setIsAdmin(false);
+    }
+  };
+
   // Initial load
   useEffect(() => {
     loadStats();
+    checkAdminStatus();
   }, []);
 
   // Load contacts when filters/page change
@@ -145,6 +161,27 @@ function Contacts() {
       return;
     }
     setShowEnrichModal(true);
+  };
+
+  // Reset enrichment
+  const handleResetEnrichment = async () => {
+    if (resetting) return;
+    
+    if (!confirm('Сбросить обогащение для ВСЕХ контактов?\nВсе AI-данные (компания, должность, score и т.д.) будут удалены.\nПосле этого можно будет запустить обогащение заново.')) {
+      return;
+    }
+    
+    try {
+      setResetting(true);
+      const response = await contactsApi.resetEnrichment();
+      alert(`Обогащение сброшено!\nТеперь ${response.data.resetCount?.toLocaleString() || 'все'} контактов готовы к повторному обогащению.`);
+      loadStats();
+      loadContacts();
+    } catch (err) {
+      alert('Ошибка: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setResetting(false);
+    }
   };
 
   // Enrich contacts with API key
@@ -249,30 +286,44 @@ function Contacts() {
     <div className="contacts-page">
       {/* Header */}
       <div className="contacts-header">
-        <h1>База контактов</h1>
+        <h1>👥 База контактов</h1>
         <div className="header-actions">
-          <button 
-            className="btn btn-secondary" 
-            onClick={handleAggregate}
-            disabled={aggregating}
-          >
-            {aggregating ? '⏳ Агрегация...' : '📥 Собрать контакты'}
-          </button>
-          <button 
-            className="btn btn-warning" 
-            onClick={handleUpdateData}
-            disabled={updatingData}
-            title="Подтянуть bio и имена из сообщений"
-          >
-            {updatingData ? '⏳ Обновление...' : '🔄 Обновить данные'}
-          </button>
-          <button 
-            className="btn btn-success" 
-            onClick={handleEnrichClick}
-            disabled={enriching || !stats?.notEnriched}
-          >
-            {enriching ? '⏳ Обогащение...' : `🤖 Обогатить (${stats?.notEnriched || 0})`}
-          </button>
+          {/* Кнопки админа - только для администраторов */}
+          {isAdmin && (
+            <>
+              <button 
+                className="btn btn-secondary" 
+                onClick={handleAggregate}
+                disabled={aggregating}
+              >
+                {aggregating ? '⏳ Агрегация...' : '📥 Собрать контакты'}
+              </button>
+              <button 
+                className="btn btn-warning" 
+                onClick={handleUpdateData}
+                disabled={updatingData}
+                title="Подтянуть bio и имена из сообщений"
+              >
+                {updatingData ? '⏳ Обновление...' : '🔄 Обновить данные'}
+              </button>
+              <button 
+                className="btn btn-success" 
+                onClick={handleEnrichClick}
+                disabled={enriching || !stats?.notEnriched}
+              >
+                {enriching ? '⏳ Обогащение...' : `🤖 Обогатить (${stats?.notEnriched || 0})`}
+              </button>
+              <button 
+                className="btn btn-danger" 
+                onClick={handleResetEnrichment}
+                disabled={resetting || !stats?.enriched}
+                title="Сбросить все AI-данные для повторного обогащения"
+              >
+                {resetting ? '⏳ Сброс...' : '🔄 Сбросить обогащение'}
+              </button>
+            </>
+          )}
+          {/* Экспорт доступен всем */}
           <button className="btn btn-primary" onClick={handleExport}>
             📊 Экспорт CSV
           </button>
@@ -396,10 +447,16 @@ function Contacts() {
       {contacts.length === 0 ? (
         <div className="empty-state">
           <h3>Контакты не найдены</h3>
-          <p>Нажмите "Собрать контакты" чтобы агрегировать данные из сообщений</p>
-          <button className="btn btn-primary" onClick={handleAggregate}>
-            📥 Собрать контакты
-          </button>
+          {isAdmin ? (
+            <>
+              <p>Нажмите "Собрать контакты" чтобы агрегировать данные из сообщений</p>
+              <button className="btn btn-primary" onClick={handleAggregate}>
+                📥 Собрать контакты
+              </button>
+            </>
+          ) : (
+            <p>База контактов пока пустая. Администратор скоро её заполнит.</p>
+          )}
         </div>
       ) : (
         <div className="contacts-table-container">
