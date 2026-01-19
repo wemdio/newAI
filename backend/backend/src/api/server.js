@@ -38,7 +38,7 @@ app.set('trust proxy', 1);
 app.use(cors({
   origin: '*', // Allow ANY origin to fix CORS issues
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-user-id', 'x-user-email'],
   credentials: false,
   optionsSuccessStatus: 200
 }));
