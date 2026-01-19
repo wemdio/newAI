@@ -257,20 +257,25 @@ export async function aggregateContacts(options = {}) {
  */
 function buildEnrichmentPrompt(contacts) {
   const contactsText = contacts.map((c, i) => {
-    const bio = c.bio ? c.bio.substring(0, CONFIG.MAX_BIO_LENGTH) : '';
-    const msgs = c.top_messages?.slice(0, 2).join(' | ') || '';
-    const data = [bio, msgs].filter(Boolean).join(' | ') || 'нет данных';
+    const bio = c.bio ? `[BIO]: ${c.bio.substring(0, CONFIG.MAX_BIO_LENGTH)}` : '';
+    const msgs = c.top_messages?.slice(0, 2).map(m => `[MSG]: ${m}`).join(' ') || '';
+    const data = [bio, msgs].filter(Boolean).join(' ') || 'нет данных';
     return `[${i}] @${c.username}: ${data}`;
   }).join('\n');
   
   return `Анализ ${contacts.length} Telegram профилей. Ответ НА РУССКОМ.
 
+ВАЖНО:
+- company/position: ТОЛЬКО из [BIO] или явных утверждений в [MSG] типа "я работаю в...", "я директор...", "моя компания...". 
+- Если человек просто УПОМИНАЕТ компанию (обсуждает, жалуется, хвалит) — НЕ записывай её как его место работы!
+- Если в BIO нет инфо о работе — оставь company/position пустыми (null).
+
 ${contactsText}
 
-JSON ответ (без markdown):
-[{"i":0,"company":"ООО...","position":"Директор","type":"CEO|DIRECTOR|MANAGER|SPECIALIST|FREELANCER|OTHER","lpr":true|false,"industry":"IT","size":"SOLO|SMALL|MEDIUM|LARGE","score":0-100,"summary":"Краткое описание"}]
+JSON (без markdown):
+[{"i":0,"company":null,"position":null,"type":"CEO|DIRECTOR|MANAGER|SPECIALIST|FREELANCER|OTHER","lpr":false,"industry":null,"size":"UNKNOWN","score":0-100,"summary":"Краткое описание"}]
 
-Поля: company,position,industry,summary - на русском. type,size - английские коды. Если нет данных: score=0.`;
+type/size - английские коды. Если нет явных данных о работе: company=null, position=null, score=0-20.`;
 }
 
 /**

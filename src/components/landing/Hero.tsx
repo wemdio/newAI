@@ -111,10 +111,6 @@ const Hero: React.FC<{ onOpenLeadForm?: () => void }> = ({ onOpenLeadForm }) => 
                         <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
                     </span>
                 </button>
-                <p className="mt-4 text-xs text-gray-500 font-medium">
-                    Никаких обязательств. <br className="md:hidden" />
-                    <span className="text-gray-400 ml-1">Настроим ваш AI-Radar за 24 часа.</span>
-                </p>
             </div>
       </div>
 
