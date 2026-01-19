@@ -223,6 +223,25 @@ router.get('/stats', async (req, res) => {
   }
 });
 
+// ============= GET /api/contacts/admin/check =============
+// Проверка прав администратора (должен быть ПЕРЕД /:id !)
+router.get('/admin/check', async (req, res) => {
+  try {
+    // Используем email из заголовка (добавляется в api.js интерцепторе)
+    const userEmail = req.headers['x-user-email'];
+    
+    logger.info('Admin check', { userEmail });
+    
+    res.json({
+      success: true,
+      isAdmin: isAdmin(userEmail)
+    });
+  } catch (error) {
+    logger.error('Error checking admin status', { error: error.message });
+    res.json({ success: true, isAdmin: false });
+  }
+});
+
 // ============= GET /api/contacts/:id =============
 // Получить контакт с его сообщениями
 router.get('/:id', async (req, res) => {
@@ -553,45 +572,6 @@ router.delete('/:id', async (req, res) => {
   } catch (error) {
     logger.error('Error deleting contact', { error: error.message });
     res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// ============= GET /api/contacts/admin/check =============
-// Проверка прав администратора
-router.get('/admin/check', async (req, res) => {
-  try {
-    const userId = req.headers['x-user-id'];
-    
-    if (!userId) {
-      return res.json({ success: true, isAdmin: false });
-    }
-    
-    const supabase = getSupabase();
-    
-    // Получаем email пользователя из auth.users
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('email')
-      .eq('id', userId)
-      .single();
-    
-    // Если не нашли в таблице users, пробуем получить из Supabase Auth
-    if (error || !user) {
-      // Fallback: проверяем по x-user-email если есть
-      const userEmail = req.headers['x-user-email'];
-      return res.json({
-        success: true,
-        isAdmin: isAdmin(userEmail)
-      });
-    }
-    
-    res.json({
-      success: true,
-      isAdmin: isAdmin(user.email)
-    });
-  } catch (error) {
-    logger.error('Error checking admin status', { error: error.message });
-    res.json({ success: true, isAdmin: false });
   }
 });
 
