@@ -319,7 +319,7 @@ async function callOpenRouter(prompt, apiKey, options = {}) {
       'X-Title': 'LeadParser Contact Enrichment'
     },
     body: JSON.stringify({
-      model: CONFIG.MODEL,
+      model,
       messages: [
         {
           role: 'system',
