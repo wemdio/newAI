@@ -286,15 +286,18 @@ ${stage === 'advanced' ? '\nЭто 2-й проход (проверка/уточ�
 - Если в BIO нет инфо о работе — оставь company/position пустыми (null).
 - Для каждого заполненного поля company/position/lpr ОБЯЗАТЕЛЬНО дай короткую цитату-доказательство (evidence) из [BIO] или [MSG].
 - Если не можешь привести точную цитату — ставь null/false.
+- score и confidence: ТОЛЬКО целые числа 0..100 (НЕ диапазоны, НЕ строки).
 
 ${contactsText}
 
 JSON (без markdown):
-[{"i":0,"company":null,"company_evidence":null,"position":null,"position_evidence":null,"type":"CEO|DIRECTOR|MANAGER|SPECIALIST|FREELANCER|OTHER","lpr":false,"lpr_evidence":null,"industry":null,"size":"SOLO|SMALL|MEDIUM|LARGE|UNKNOWN","score":0-100,"confidence":0-100,"interests":[],"pains":[],"summary":"1 короткое предложение (до 180 символов)"}]
+[{"i":0,"company":null,"company_evidence":null,"position":null,"position_evidence":null,"type":"OTHER","lpr":false,"lpr_evidence":null,"industry":null,"size":"UNKNOWN","score":0,"confidence":0,"interests":[],"pains":[],"summary":"1 короткое предложение (до 180 символов)"}]
 
 Правила:
-- type/size - английские коды.
-- Если нет явных данных о работе: company=null, position=null, score=0-20, confidence=0-40.
+- Верни массив длины ${contacts.length}. Индекс i должен соответствовать входному [i].
+- type: строго один из CEO|DIRECTOR|MANAGER|SPECIALIST|FREELANCER|OTHER.
+- size: строго один из SOLO|SMALL|MEDIUM|LARGE|UNKNOWN.
+- Если нет явных данных о работе: company=null, position=null, score=0, confidence=0.
 - interests/pains: максимум 5 коротких пунктов, только если явно следует из текста.
 - evidence поля: короткая точная цитата (до 140 символов).`;
 }
@@ -355,6 +358,25 @@ async function callOpenRouter(prompt, apiKey, options = {}) {
  * Парсинг ответа AI
  */
 function parseAIResponse(content) {
+  const sanitize = (text) => {
+    if (typeof text !== 'string') return '';
+    let t = text;
+
+    // Частые проблемы: “умные” кавычки, лишние запятые, диапазоны вместо чисел
+    t = t.replace(/[\u201C\u201D]/g, '"').replace(/[\u2018\u2019]/g, "'");
+    t = t.replace(/,\s*([}\]])/g, '$1'); // trailing commas
+
+    // Диапазоны типа 0-20 в числовых полях → берём нижнюю границу
+    t = t.replace(/("score"\s*:\s*)(\d+)\s*-\s*(\d+)/g, '$1$2');
+    t = t.replace(/("confidence"\s*:\s*)(\d+)\s*-\s*(\d+)/g, '$1$2');
+
+    // Лишняя кавычка после числа: "confidence":0" → "confidence":0
+    t = t.replace(/("score"\s*:\s*)(\d+)"\s*([,}])/g, '$1$2$3');
+    t = t.replace(/("confidence"\s*:\s*)(\d+)"\s*([,}])/g, '$1$2$3');
+
+    return t;
+  };
+
   try {
     // Убираем возможные markdown-обёртки
     let cleaned = content.trim();
@@ -369,10 +391,22 @@ function parseAIResponse(content) {
       cleaned = cleaned.substring(start, end + 1);
     }
 
+    cleaned = sanitize(cleaned);
     return JSON.parse(cleaned);
   } catch (err) {
-    logger.error('Failed to parse AI response', { content: content.substring(0, 200), error: err.message });
-    return null;
+    // 2-я попытка: иногда JSON валиден, но вокруг есть мусор/скобки. Пробуем санитайз + извлечение снова.
+    try {
+      let cleaned = sanitize(String(content || '').trim());
+      const start = cleaned.indexOf('[');
+      const end = cleaned.lastIndexOf(']');
+      if (start !== -1 && end !== -1 && end > start) {
+        cleaned = cleaned.substring(start, end + 1);
+      }
+      return JSON.parse(cleaned);
+    } catch (err2) {
+      logger.error('Failed to parse AI response', { content: content.substring(0, 200), error: err2.message });
+      return null;
+    }
   }
 }
 
