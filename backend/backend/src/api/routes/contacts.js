@@ -7,6 +7,7 @@ import express from 'express';
 import { getSupabase } from '../../config/database.js';
 import { aggregateContacts, enrichContacts, getContactStats } from '../../services/contactEnrichment.js';
 import logger from '../../utils/logger.js';
+import { normalizeCompanyName, normalizePositionTitle, normalizePositionType } from '../../utils/contactNormalization.js';
 
 const router = express.Router();
 
@@ -283,6 +284,11 @@ router.get('/:id', async (req, res) => {
 // Запустить агрегацию контактов
 router.post('/aggregate', async (req, res) => {
   try {
+    const userEmail = req.headers['x-user-email'];
+    if (!isAdmin(userEmail)) {
+      return res.status(403).json({ success: false, error: 'Admin only' });
+    }
+
     const { maxContacts = 5000 } = req.body;
     
     logger.info('Starting contact aggregation via API', { maxContacts });
@@ -313,6 +319,11 @@ router.post('/aggregate', async (req, res) => {
 // Обновить данные контактов (bio, имена) из messages
 router.post('/update-data', async (req, res) => {
   try {
+    const userEmail = req.headers['x-user-email'];
+    if (!isAdmin(userEmail)) {
+      return res.status(403).json({ success: false, error: 'Admin only' });
+    }
+
     const { batchSize = 500 } = req.body;
     const supabase = getSupabase();
     
@@ -391,10 +402,119 @@ router.post('/update-data', async (req, res) => {
   }
 });
 
+// ============= POST /api/contacts/normalize =============
+// Нормализовать компании/должности/типы ролей (без AI, только чистка) — только для админа
+router.post('/normalize', async (req, res) => {
+  try {
+    const userEmail = req.headers['x-user-email'];
+    if (!isAdmin(userEmail)) {
+      return res.status(403).json({ success: false, error: 'Admin only' });
+    }
+
+    const {
+      batchSize = 1000,
+      maxContacts = null,
+      onlyEnriched = true
+    } = req.body || {};
+
+    const supabase = getSupabase();
+
+    res.json({
+      success: true,
+      message: 'Normalization started in background',
+      batchSize,
+      onlyEnriched
+    });
+
+    (async () => {
+      let offset = 0;
+      let processed = 0;
+      let updated = 0;
+
+      try {
+        while (true) {
+          let query = supabase
+            .from('contacts')
+            .select('id, company_name, position, position_type, raw_ai_response')
+            .order('created_at', { ascending: true })
+            .range(offset, offset + batchSize - 1);
+
+          if (onlyEnriched) {
+            query = query.eq('is_enriched', true);
+          }
+
+          const { data: contacts, error } = await query;
+          if (error) throw error;
+          if (!contacts?.length) break;
+
+          const updates = [];
+
+          for (const c of contacts) {
+            const raw = c.raw_ai_response || {};
+
+            const companySource = c.company_name || raw.company || null;
+            const positionSource = c.position || raw.position || null;
+            const typeSource = c.position_type || raw.type || 'OTHER';
+
+            const normalizedCompany = normalizeCompanyName(companySource);
+            const normalizedPosition = normalizePositionTitle(positionSource);
+            const normalizedType = normalizePositionType(typeSource, `${normalizedPosition || ''} ${raw.position_evidence || ''}`);
+
+            const changed =
+              (normalizedCompany || null) !== (c.company_name || null) ||
+              (normalizedPosition || null) !== (c.position || null) ||
+              (normalizedType || 'OTHER') !== (c.position_type || 'OTHER');
+
+            if (changed) {
+              updates.push({
+                id: c.id,
+                company_name: normalizedCompany,
+                position: normalizedPosition,
+                position_type: normalizedType,
+                updated_at: new Date().toISOString()
+              });
+            }
+          }
+
+          if (updates.length > 0) {
+            const { error: upsertError } = await supabase
+              .from('contacts')
+              .upsert(updates, { onConflict: 'id' });
+
+            if (!upsertError) updated += updates.length;
+          }
+
+          processed += contacts.length;
+          offset += batchSize;
+
+          logger.info('Contacts normalization progress', { processed, updated });
+
+          if (maxContacts && processed >= maxContacts) break;
+
+          await new Promise(r => setTimeout(r, 50));
+        }
+
+        logger.info('Contacts normalization completed', { processed, updated });
+      } catch (err) {
+        logger.error('Contacts normalization failed', { error: err.message, processed, updated });
+      }
+    })();
+
+  } catch (error) {
+    logger.error('Error starting contacts normalization', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ============= POST /api/contacts/enrich =============
 // Запустить обогащение контактов
 router.post('/enrich', async (req, res) => {
   try {
+    const userEmail = req.headers['x-user-email'];
+    if (!isAdmin(userEmail)) {
+      return res.status(403).json({ success: false, error: 'Admin only' });
+    }
+
     const {
       apiKey,  // API ключ передаётся в запросе
       maxContacts = 50000,  // По умолчанию до 50k, можно обогатить все
@@ -570,6 +690,11 @@ router.get('/export/csv', async (req, res) => {
 // Удалить контакт
 router.delete('/:id', async (req, res) => {
   try {
+    const userEmail = req.headers['x-user-email'];
+    if (!isAdmin(userEmail)) {
+      return res.status(403).json({ success: false, error: 'Admin only' });
+    }
+
     const { id } = req.params;
     const supabase = getSupabase();
     
@@ -591,6 +716,11 @@ router.delete('/:id', async (req, res) => {
 // Сбросить обогащение для повторной обработки (только для админа)
 router.post('/reset-enrichment', async (req, res) => {
   try {
+    const userEmail = req.headers['x-user-email'];
+    if (!isAdmin(userEmail)) {
+      return res.status(403).json({ success: false, error: 'Admin only' });
+    }
+
     const supabase = getSupabase();
     
     logger.info('Resetting enrichment status for all contacts');

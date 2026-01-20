@@ -129,6 +129,7 @@ export const contactsApi = {
   getStats: () => api.get('/contacts/stats'),
   aggregate: (data) => api.post('/contacts/aggregate', data),
   updateData: (data) => api.post('/contacts/update-data', data),
+  normalize: (data) => api.post('/contacts/normalize', data),
   enrich: (data) => api.post('/contacts/enrich', data),
   resetEnrichment: () => api.post('/contacts/reset-enrichment'),
   checkAdmin: () => api.get('/contacts/admin/check'),

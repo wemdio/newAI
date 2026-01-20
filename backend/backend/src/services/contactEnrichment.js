@@ -5,6 +5,7 @@
 
 import { getSupabase } from '../config/database.js';
 import logger from '../utils/logger.js';
+import { normalizeCompanyName, normalizePositionTitle, normalizePositionType } from '../utils/contactNormalization.js';
 
 // ============= КОНФИГУРАЦИЯ =============
 const CONFIG = {
@@ -376,41 +377,6 @@ function parseAIResponse(content) {
 }
 
 /**
- * Нормализация компании (убираем ООО/ИП/LLC и кавычки)
- */
-function normalizeCompanyName(value) {
-  if (typeof value !== 'string') return null;
-  let s = value.trim();
-  if (!s) return null;
-
-  // Убираем кавычки/ёлочки по краям
-  s = s.replace(/^[«"'\s]+/g, '').replace(/[»"'\s]+$/g, '').trim();
-
-  // Убираем юридические формы в начале
-  s = s.replace(/^(ооо|ип|оао|зао|пао|ао|llc|inc|ltd|gmbh|sarl|srl|sas)\.?\s+/i, '');
-
-  // Снова чистим пробелы/кавычки
-  s = s.replace(/^[«"'\s]+/g, '').replace(/[»"'\s]+$/g, '').replace(/\s+/g, ' ').trim();
-
-  return s.length ? s : null;
-}
-
-/**
- * Нормализация должности (убираем мусор/эмодзи, нормализуем пробелы)
- */
-function normalizePositionTitle(value) {
-  if (typeof value !== 'string') return null;
-  let s = value.trim();
-  if (!s) return null;
-
-  // Убираем эмодзи (грубая, но полезная чистка)
-  s = s.replace(/[\u{1F300}-\u{1FAFF}]/gu, '').trim();
-  s = s.replace(/\s+/g, ' ').trim();
-
-  return s.length ? s : null;
-}
-
-/**
  * Обогатить батч контактов
  */
 async function enrichBatch(contacts, apiKey, options = {}) {
@@ -472,12 +438,20 @@ async function enrichBatch(contacts, apiKey, options = {}) {
         _model: model,
         _ts: new Date().toISOString()
       };
+
+      const positionTextForType = [
+        result?.position,
+        result?.position_evidence,
+        result?.lpr_evidence
+      ].filter(Boolean).join(' ');
+
+      const normalizedType = normalizePositionType(result?.type, positionTextForType);
       
       const updateData = {
         company_name: normalizeCompanyName(result?.company),
         position: normalizePositionTitle(result?.position),
-        position_type: ['CEO', 'DIRECTOR', 'MANAGER', 'SPECIALIST', 'FREELANCER', 'OTHER'].includes(result?.type) ? result.type : 'OTHER',
-        is_decision_maker: result?.lpr === true || result?.type === 'CEO' || result?.type === 'DIRECTOR',
+        position_type: normalizedType,
+        is_decision_maker: result?.lpr === true || normalizedType === 'CEO' || normalizedType === 'DIRECTOR',
         industry: normalizeText(result?.industry),
         company_size: ['SOLO', 'SMALL', 'MEDIUM', 'LARGE', 'UNKNOWN'].includes(result?.size) ? result.size : 'UNKNOWN',
         interests: normalizeStringArray(result?.interests),

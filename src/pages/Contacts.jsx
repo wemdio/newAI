@@ -45,6 +45,7 @@ function Contacts() {
   const [enriching, setEnriching] = useState(false);
   const [aggregating, setAggregating] = useState(false);
   const [updatingData, setUpdatingData] = useState(false);
+  const [normalizing, setNormalizing] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [showEnrichModal, setShowEnrichModal] = useState(false);
   const [apiKey, setApiKey] = useState('');
@@ -151,6 +152,29 @@ function Contacts() {
       alert('Ошибка: ' + (err.response?.data?.error || err.message));
     } finally {
       setUpdatingData(false);
+    }
+  };
+
+  // Normalize contacts (no AI): company/title cleanup + role mapping
+  const handleNormalize = async () => {
+    if (normalizing) return;
+
+    if (!confirm('Нормализовать контакты?\n\nЭто НЕ использует AI.\nМы очистим названия компаний (ООО/ИП/LLC), должности (мусор/эмодзи) и приведём роли к единому справочнику (CEO/DIRECTOR/MANAGER/...).\n\nМожет занять несколько минут.')) {
+      return;
+    }
+
+    try {
+      setNormalizing(true);
+      await contactsApi.normalize({ batchSize: 1000, onlyEnriched: true });
+      alert('Нормализация запущена в фоне. Обновите страницу через 1-2 минуты.');
+      setTimeout(() => {
+        loadStats();
+        loadContacts();
+      }, 10000);
+    } catch (err) {
+      alert('Ошибка: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setNormalizing(false);
     }
   };
 
@@ -307,6 +331,14 @@ function Contacts() {
                 title="Подтянуть bio и имена из сообщений"
               >
                 {updatingData ? '⏳ Обновление...' : '🔄 Обновить данные'}
+              </button>
+              <button 
+                className="btn btn-secondary" 
+                onClick={handleNormalize}
+                disabled={normalizing}
+                title="Очистка компании/должности и маппинг ролей (без AI)"
+              >
+                {normalizing ? '⏳ Нормализация...' : '🧼 Нормализовать'}
               </button>
               <button 
                 className="btn btn-success" 
