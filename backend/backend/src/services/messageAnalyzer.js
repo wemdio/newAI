@@ -8,12 +8,38 @@ import { AIServiceError, retryWithBackoff } from '../utils/errorHandler.js';
 import PQueue from 'p-queue';
 
 /**
- * Normalize common model output inconsistencies in batch mode.
- * Batch responses can't use response_format=json_object, so some models return
- * booleans/numbers as strings. We coerce safely to avoid false positives.
+ * Normalize common model output inconsistencies.
+ * Some models return booleans/numbers as strings, use different key names
+ * (confidence vs confidence_score), or return confidence as 0..1.
+ * We coerce safely to avoid false positives and reduce validation failures.
  */
 const normalizeBatchAIResult = (aiResult, expectedMessageId) => {
-  const normalized = { ...(aiResult || {}) };
+  let normalized = { ...(aiResult || {}) };
+
+  // Some models wrap the actual payload
+  if (normalized.result && typeof normalized.result === 'object') {
+    normalized = { ...normalized, ...normalized.result };
+  }
+  if (normalized.data && typeof normalized.data === 'object') {
+    normalized = { ...normalized, ...normalized.data };
+  }
+
+  // Key aliases
+  if (normalized.is_match == null && normalized.isMatch != null) normalized.is_match = normalized.isMatch;
+  if (normalized.is_match == null && normalized.match != null) normalized.is_match = normalized.match;
+  if (normalized.is_match == null && normalized.is_lead != null) normalized.is_match = normalized.is_lead;
+
+  if (normalized.confidence_score == null && normalized.confidence != null) normalized.confidence_score = normalized.confidence;
+  if (normalized.confidence_score == null && normalized.confidenceScore != null) normalized.confidence_score = normalized.confidenceScore;
+  if (normalized.confidence_score == null && normalized.confidence_percent != null) normalized.confidence_score = normalized.confidence_percent;
+
+  if (normalized.reasoning == null && normalized.reason != null) normalized.reasoning = normalized.reason;
+  if (normalized.reasoning == null && normalized.explanation != null) normalized.reasoning = normalized.explanation;
+  if (normalized.reasoning == null && normalized.rationale != null) normalized.reasoning = normalized.rationale;
+
+  if (normalized.matched_criteria == null && normalized.matchedCriteria != null) normalized.matched_criteria = normalized.matchedCriteria;
+  if (normalized.matched_criteria == null && normalized.criteria != null) normalized.matched_criteria = normalized.criteria;
+  if (normalized.matched_criteria == null && normalized.matched != null) normalized.matched_criteria = normalized.matched;
 
   // Ensure id is a string for stable comparisons/logs
   if (normalized.id != null) normalized.id = String(normalized.id);
@@ -26,6 +52,9 @@ const normalizeBatchAIResult = (aiResult, expectedMessageId) => {
     const v = normalized.is_match.trim().toLowerCase();
     if (v === 'true') normalized.is_match = true;
     if (v === 'false') normalized.is_match = false;
+  } else if (typeof normalized.is_match === 'number') {
+    // Some models return 0/1
+    normalized.is_match = normalized.is_match >= 1;
   }
 
   // Coerce numeric strings to numbers
@@ -33,13 +62,34 @@ const normalizeBatchAIResult = (aiResult, expectedMessageId) => {
     const n = Number(normalized.confidence_score);
     if (Number.isFinite(n)) normalized.confidence_score = n;
   }
+  // Normalize 0..1 confidence to 0..100
+  if (typeof normalized.confidence_score === 'number' && Number.isFinite(normalized.confidence_score)) {
+    if (normalized.confidence_score > 0 && normalized.confidence_score <= 1) {
+      normalized.confidence_score = Math.round(normalized.confidence_score * 100);
+    }
+    normalized.confidence_score = Math.max(0, Math.min(100, normalized.confidence_score));
+  }
 
   // Normalize matched_criteria
   if (typeof normalized.matched_criteria === 'string') {
     const s = normalized.matched_criteria.trim();
-    normalized.matched_criteria = s ? [s] : [];
+    // Try parse JSON array-as-string first, otherwise wrap as single item
+    if (s.startsWith('[') && s.endsWith(']')) {
+      try {
+        const parsed = JSON.parse(s);
+        normalized.matched_criteria = Array.isArray(parsed) ? parsed : (s ? [s] : []);
+      } catch {
+        normalized.matched_criteria = s ? [s] : [];
+      }
+    } else {
+      normalized.matched_criteria = s ? [s] : [];
+    }
   } else if (!Array.isArray(normalized.matched_criteria)) {
     normalized.matched_criteria = [];
+  } else {
+    normalized.matched_criteria = normalized.matched_criteria
+      .map(x => (typeof x === 'string' ? x.trim() : (x == null ? '' : String(x).trim())))
+      .filter(Boolean);
   }
 
   // Normalize reasoning
@@ -290,6 +340,9 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
         parseError: parseError.message
       });
     }
+
+    // Normalize model output to expected schema before validation
+    aiResponse = normalizeBatchAIResult(aiResponse, message.id?.toString?.() ?? message.id);
     
     // Calculate actual cost
     const actualInputTokens = response.usage?.prompt_tokens || inputTokens;

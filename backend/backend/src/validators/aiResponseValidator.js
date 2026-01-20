@@ -33,8 +33,11 @@ export const validateResponseStructure = (response) => {
   }
   
   // Validate reasoning
-  if (typeof response.reasoning !== 'string' || response.reasoning.trim().length === 0) {
-    errors.push('reasoning must be a non-empty string');
+  if (typeof response.reasoning !== 'string') {
+    errors.push('reasoning must be a string');
+  } else if (response.is_match === true && response.reasoning.trim().length === 0) {
+    // For positives we require a human-readable reason; for negatives allow empty to reduce false invalids.
+    errors.push('reasoning must be a non-empty string when is_match=true');
   }
   
   // Validate matched_criteria

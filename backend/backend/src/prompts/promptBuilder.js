@@ -35,7 +35,19 @@ ${chat_name ? `Канал: ${chat_name}` : ''}
    - ВНИМАНИЕ: Разделяй критерии на "КОГО ИСКАТЬ" и "КОГО ИСКЛЮЧИТЬ".
    - Если сообщение совпадает с описанием из категории "исключения/не искать/конкуренты" -> is_match: false.
 
-Верни JSON: { "is_match": boolean, "confidence_score": number, "reasoning": string }`;
+ОТВЕТ:
+Верни ТОЛЬКО валидный JSON-объект (без markdown/текста), со СТРОГО такими полями:
+{
+  "is_match": false,
+  "confidence_score": 0,
+  "reasoning": "кратко 5-12 слов",
+  "matched_criteria": []
+}
+
+Правила:
+- confidence_score: целое число 0..100 (НЕ 0..1)
+- matched_criteria: массив строк (может быть пустым)
+`;
   
   return prompt;
 };
