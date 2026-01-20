@@ -739,6 +739,38 @@ function Contacts() {
                           {selectedContact.ai_summary}
                         </p>
                       )}
+
+                      {/* Evidence (why AI set these fields) */}
+                      {selectedContact.raw_ai_response && (
+                        <div style={{ marginTop: 12 }}>
+                          {[
+                            { label: 'Компания', value: selectedContact.raw_ai_response.company_evidence },
+                            { label: 'Должность', value: selectedContact.raw_ai_response.position_evidence },
+                            { label: 'ЛПР', value: selectedContact.raw_ai_response.lpr_evidence }
+                          ].some(x => !!x.value) && (
+                            <div className="evidence-block">
+                              <div className="evidence-title">Основание (цитаты)</div>
+                              <div className="evidence-list">
+                                {selectedContact.raw_ai_response.company_evidence && (
+                                  <div className="evidence-item">
+                                    <span className="evidence-label">Компания:</span> {selectedContact.raw_ai_response.company_evidence}
+                                  </div>
+                                )}
+                                {selectedContact.raw_ai_response.position_evidence && (
+                                  <div className="evidence-item">
+                                    <span className="evidence-label">Должность:</span> {selectedContact.raw_ai_response.position_evidence}
+                                  </div>
+                                )}
+                                {selectedContact.raw_ai_response.lpr_evidence && (
+                                  <div className="evidence-item">
+                                    <span className="evidence-label">ЛПР:</span> {selectedContact.raw_ai_response.lpr_evidence}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {selectedContact.interests?.length > 0 && (

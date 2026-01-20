@@ -24,8 +24,9 @@ const CONFIG = {
   PRICE_OUTPUT: 0.10,
   
   // Лимиты
-  MAX_BIO_LENGTH: 200,
-  MAX_MESSAGE_LENGTH: 300,
+  MAX_BIO_LENGTH: 450,          // было 200 — часто отрезало ключевую инфу о работе
+  MAX_MESSAGE_LENGTH: 260,      // чуть компактнее для токенов, но достаточно для смысла
+  FETCH_MESSAGES_LIMIT: 30,     // сколько последних сообщений подтягиваем для выбора релевантных
   
   // Параллельность
   PARALLEL_DB_REQUESTS: 10,  // Сколько запросов к БД делать параллельно
@@ -258,7 +259,8 @@ export async function aggregateContacts(options = {}) {
 function buildEnrichmentPrompt(contacts) {
   const contactsText = contacts.map((c, i) => {
     const bio = c.bio ? `[BIO]: ${c.bio.substring(0, CONFIG.MAX_BIO_LENGTH)}` : '';
-    const msgs = c.top_messages?.slice(0, 2).map(m => `[MSG]: ${m}`).join(' ') || '';
+    // Берём больше сообщений, но они уже отфильтрованы как "самоописание/работа"
+    const msgs = c.top_messages?.slice(0, 4).map(m => `[MSG]: ${m}`).join(' ') || '';
     const data = [bio, msgs].filter(Boolean).join(' ') || 'нет данных';
     return `[${i}] @${c.username}: ${data}`;
   }).join('\n');
@@ -269,13 +271,19 @@ function buildEnrichmentPrompt(contacts) {
 - company/position: ТОЛЬКО из [BIO] или явных утверждений в [MSG] типа "я работаю в...", "я директор...", "моя компания...". 
 - Если человек просто УПОМИНАЕТ компанию (обсуждает, жалуется, хвалит) — НЕ записывай её как его место работы!
 - Если в BIO нет инфо о работе — оставь company/position пустыми (null).
+- Для каждого заполненного поля company/position/lpr ОБЯЗАТЕЛЬНО дай короткую цитату-доказательство (evidence) из [BIO] или [MSG].
+- Если не можешь привести точную цитату — ставь null/false.
 
 ${contactsText}
 
 JSON (без markdown):
-[{"i":0,"company":null,"position":null,"type":"CEO|DIRECTOR|MANAGER|SPECIALIST|FREELANCER|OTHER","lpr":false,"industry":null,"size":"UNKNOWN","score":0-100,"summary":"Краткое описание"}]
+[{"i":0,"company":null,"company_evidence":null,"position":null,"position_evidence":null,"type":"CEO|DIRECTOR|MANAGER|SPECIALIST|FREELANCER|OTHER","lpr":false,"lpr_evidence":null,"industry":null,"size":"SOLO|SMALL|MEDIUM|LARGE|UNKNOWN","score":0-100,"confidence":0-100,"interests":[],"pains":[],"summary":"1 короткое предложение (до 180 символов)"}]
 
-type/size - английские коды. Если нет явных данных о работе: company=null, position=null, score=0-20.`;
+Правила:
+- type/size - английские коды.
+- Если нет явных данных о работе: company=null, position=null, score=0-20, confidence=0-40.
+- interests/pains: максимум 5 коротких пунктов, только если явно следует из текста.
+- evidence поля: короткая точная цитата (до 140 символов).`;
 }
 
 /**
@@ -330,7 +338,14 @@ function parseAIResponse(content) {
     if (cleaned.startsWith('```')) {
       cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
     }
-    
+
+    // Если модель добавила текст вокруг JSON — пробуем вытащить массив
+    const start = cleaned.indexOf('[');
+    const end = cleaned.lastIndexOf(']');
+    if (start !== -1 && end !== -1 && end > start) {
+      cleaned = cleaned.substring(start, end + 1);
+    }
+
     return JSON.parse(cleaned);
   } catch (err) {
     logger.error('Failed to parse AI response', { content: content.substring(0, 200), error: err.message });
@@ -357,23 +372,46 @@ async function enrichBatch(contacts, apiKey) {
     let enrichedCount = 0;
     
     for (const result of results) {
-      const contact = contacts[result.i];
+      const idx = Number(result?.i);
+      const contact = contacts[idx];
       if (!contact) continue;
       
-      const score = Math.min(100, Math.max(0, parseInt(result.score) || 0));
+      const score = Math.min(100, Math.max(0, parseInt(result?.score) || 0));
+      const confidenceRaw = parseInt(result?.confidence);
+      const confidence = Number.isFinite(confidenceRaw)
+        ? Math.min(100, Math.max(0, confidenceRaw))
+        : (score > 0 ? 60 : 0);
+
+      const normalizeText = (v) => {
+        if (typeof v !== 'string') return null;
+        const t = v.trim();
+        return t.length ? t : null;
+      };
+
+      const normalizeStringArray = (v) => {
+        if (!v) return [];
+        if (Array.isArray(v)) {
+          return v.map(x => (typeof x === 'string' ? x.trim() : '')).filter(Boolean).slice(0, 10);
+        }
+        if (typeof v === 'string') {
+          const t = v.trim();
+          return t ? [t] : [];
+        }
+        return [];
+      };
       
       const updateData = {
-        company_name: result.company || null,
-        position: result.position || null,
-        position_type: ['CEO', 'DIRECTOR', 'MANAGER', 'SPECIALIST', 'FREELANCER', 'OTHER'].includes(result.type) ? result.type : 'OTHER',
-        is_decision_maker: result.lpr === true || result.type === 'CEO' || result.type === 'DIRECTOR',
-        industry: result.industry || null,
-        company_size: ['SOLO', 'SMALL', 'MEDIUM', 'LARGE', 'UNKNOWN'].includes(result.size) ? result.size : 'UNKNOWN',
-        interests: result.interests || [],
-        pain_points: result.pains || [],
+        company_name: normalizeText(result?.company),
+        position: normalizeText(result?.position),
+        position_type: ['CEO', 'DIRECTOR', 'MANAGER', 'SPECIALIST', 'FREELANCER', 'OTHER'].includes(result?.type) ? result.type : 'OTHER',
+        is_decision_maker: result?.lpr === true || result?.type === 'CEO' || result?.type === 'DIRECTOR',
+        industry: normalizeText(result?.industry),
+        company_size: ['SOLO', 'SMALL', 'MEDIUM', 'LARGE', 'UNKNOWN'].includes(result?.size) ? result.size : 'UNKNOWN',
+        interests: normalizeStringArray(result?.interests),
+        pain_points: normalizeStringArray(result?.pains || result?.pain_points),
         lead_score: score,
-        enrichment_confidence: score > 0 ? 70 : 0, // Если есть score, confidence = 70
-        ai_summary: result.summary || null,
+        enrichment_confidence: confidence,
+        ai_summary: normalizeText(result?.summary),
         raw_ai_response: result,
         is_enriched: true,
         enriched_at: new Date().toISOString(),
@@ -412,23 +450,72 @@ async function fetchContactData(supabase, contact) {
   try {
     const { data: messages } = await supabase
       .from('messages')
-      .select('message, bio, first_name, last_name')
+      .select('message, bio, first_name, last_name, chat_name')
       .eq('username', contact.username)
       .order('message_time', { ascending: false })
-      .limit(10);
+      .limit(CONFIG.FETCH_MESSAGES_LIMIT);
     
     // Берём bio из messages если нет в контакте
     const msgWithBio = messages?.find(m => m.bio);
     const msgWithName = messages?.find(m => m.first_name);
+
+    // Выбираем "самоописательные" сообщения вместо просто последних/длинных
+    const SELF_PATTERNS = [
+      // роли/должности
+      /\b(ceo|founder|co-founder|owner|cto|cmo|coo|vp|head of|директор|гендир|генеральн\w*\s+директор|руководител\w*|владелец|собственник|основател\w*|соосновател\w*)\b/i,
+      // "я работаю/занимаюсь"
+      /\bя\s+(работаю|занимаюсь|делаю|помогаю|руковожу|управляю|веду)\b/i,
+      // "моя/наша компания"
+      /\b(моя|наша)\s+компани\w+\b/i,
+      // явные формулировки услуг/профиля
+      /\b(оказываю|предлагаю|продаю|настраиваю|делаю)\b/i,
+      /\b(агентств\w+|студ\w+|компани\w+|стартап)\b/i
+    ];
+
+    const clean = (t) => (typeof t === 'string' ? t.replace(/\s+/g, ' ').trim() : '');
+
+    const scored = (messages || [])
+      .map(m => {
+        const text = clean(m.message);
+        if (!text || text.length < 20) return null;
+        let score = 0;
+        for (const re of SELF_PATTERNS) {
+          if (re.test(text)) score += 3;
+        }
+        // предпочитаем информативные, но не бесконечно длинные
+        score += Math.min(3, Math.floor(text.length / 120));
+        // небольшой бонус за био-совпадение (часто первое сообщение в чате "кто я")
+        if (text.includes('@') || /https?:\/\//i.test(text)) score += 1;
+        return { text, score };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.score - a.score);
+
+    // Дедуп по тексту и берём топ-4
+    const seen = new Set();
+    const selected = [];
+    for (const item of scored) {
+      if (selected.length >= 4) break;
+      const key = item.text.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      selected.push(item.text.substring(0, CONFIG.MAX_MESSAGE_LENGTH));
+    }
+
+    // Фолбэк: если ничего не выбрали, возьмём просто 2 самых длинных из последних
+    const fallback = (messages || [])
+      .map(m => clean(m.message))
+      .filter(t => t && t.length > 30)
+      .sort((a, b) => b.length - a.length)
+      .slice(0, 2)
+      .map(t => t.substring(0, CONFIG.MAX_MESSAGE_LENGTH));
     
     return {
       ...contact,
       bio: contact.bio || msgWithBio?.bio || null,
       first_name: contact.first_name || msgWithName?.first_name || null,
       last_name: contact.last_name || msgWithName?.last_name || null,
-      top_messages: messages
-        ?.filter(m => m.message && m.message.length > 10)
-        ?.map(m => m.message?.substring(0, CONFIG.MAX_MESSAGE_LENGTH)) || []
+      top_messages: selected.length ? selected : fallback
     };
   } catch (err) {
     logger.error('Error fetching contact data', { username: contact.username, error: err.message });

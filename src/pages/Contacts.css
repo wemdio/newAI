@@ -544,6 +544,40 @@
   font-size: 14px;
 }
 
+.evidence-block {
+  margin-top: 10px;
+  padding: 12px;
+  background: #111;
+  border: 1px solid #222;
+  border-radius: 4px;
+}
+
+.evidence-title {
+  font-size: 11px;
+  color: #666;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.evidence-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.evidence-item {
+  color: #bdbdbd;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.evidence-label {
+  color: #7db8d1;
+  font-weight: 600;
+}
+
 .tags-list {
   display: flex;
   flex-wrap: wrap;
