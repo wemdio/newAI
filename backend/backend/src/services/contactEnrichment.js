@@ -9,19 +9,24 @@ import logger from '../utils/logger.js';
 // ============= КОНФИГУРАЦИЯ =============
 const CONFIG = {
   // Модель для обогащения (супер-дешёвая)
-  MODEL: 'qwen/qwen-2.5-7b-instruct',
+  BASIC_MODEL: 'qwen/qwen-2.5-7b-instruct',
+  // Более сильная модель для 2-го прохода (точность > цена)
+  // https://openrouter.ai/google/gemini-3-flash-preview/api
+  ADVANCED_MODEL: process.env.CONTACT_ENRICHMENT_ADVANCED_MODEL || 'google/gemini-3-flash-preview',
   
   // Батчинг
   AGGREGATION_BATCH_SIZE: 1000,    // Сколько username обрабатывать за раз при агрегации
   ENRICHMENT_BATCH_SIZE: 10,       // Сколько контактов отправлять в один запрос AI (уменьшено для надёжности)
+  ADVANCED_ENRICHMENT_BATCH_SIZE: 5, // Для Gemini лучше меньшие батчи
   
   // API
   OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1/chat/completions',
   MAX_TOKENS: 3000,                // Лимит токенов на ответ (увеличено с 2000)
+  ADVANCED_MAX_TOKENS: 2500,
   
   // Цены Qwen 2.5-7B (за 1M токенов)
-  PRICE_INPUT: 0.04,
-  PRICE_OUTPUT: 0.10,
+  PRICE_INPUT_BASIC: 0.04,
+  PRICE_OUTPUT_BASIC: 0.10,
   
   // Лимиты
   MAX_BIO_LENGTH: 450,          // было 200 — часто отрезало ключевую инфу о работе
@@ -256,16 +261,23 @@ export async function aggregateContacts(options = {}) {
 /**
  * Промпт для обогащения контактов (компактный)
  */
-function buildEnrichmentPrompt(contacts) {
+function buildEnrichmentPrompt(contacts, options = {}) {
+  const { stage = 'basic' } = options;
+  const msgLimit = stage === 'advanced' ? 6 : 4;
+
   const contactsText = contacts.map((c, i) => {
     const bio = c.bio ? `[BIO]: ${c.bio.substring(0, CONFIG.MAX_BIO_LENGTH)}` : '';
     // Берём больше сообщений, но они уже отфильтрованы как "самоописание/работа"
-    const msgs = c.top_messages?.slice(0, 4).map(m => `[MSG]: ${m}`).join(' ') || '';
-    const data = [bio, msgs].filter(Boolean).join(' ') || 'нет данных';
+    const msgs = c.top_messages?.slice(0, msgLimit).map(m => `[MSG]: ${m}`).join(' ') || '';
+
+    const basicHint = (stage === 'advanced' && c?._basic) ? ` [BASIC]: company=${c._basic.company ?? null}; position=${c._basic.position ?? null}; type=${c._basic.type ?? null}; lpr=${c._basic.lpr ?? false}; score=${c._basic.score ?? null}; confidence=${c._basic.confidence ?? null}; company_evidence=${c._basic.company_evidence ?? null}; position_evidence=${c._basic.position_evidence ?? null}; lpr_evidence=${c._basic.lpr_evidence ?? null}` : '';
+
+    const data = [bio, msgs, basicHint].filter(Boolean).join(' ') || 'нет данных';
     return `[${i}] @${c.username}: ${data}`;
   }).join('\n');
   
   return `Анализ ${contacts.length} Telegram профилей. Ответ НА РУССКОМ.
+${stage === 'advanced' ? '\nЭто 2-й проход (проверка/уточнение). Поля из [BASIC] могут быть неверными — доверяй только цитатам из [BIO]/[MSG].\n' : ''}
 
 ВАЖНО:
 - company/position: ТОЛЬКО из [BIO] или явных утверждений в [MSG] типа "я работаю в...", "я директор...", "моя компания...". 
@@ -289,7 +301,14 @@ JSON (без markdown):
 /**
  * Вызов OpenRouter API
  */
-async function callOpenRouter(prompt, apiKey) {
+async function callOpenRouter(prompt, apiKey, options = {}) {
+  const {
+    model = CONFIG.BASIC_MODEL,
+    temperature = 0.3,
+    maxTokens = CONFIG.MAX_TOKENS,
+    reasoning = null
+  } = options;
+
   const response = await fetch(CONFIG.OPENROUTER_BASE_URL, {
     method: 'POST',
     headers: {
@@ -310,8 +329,9 @@ async function callOpenRouter(prompt, apiKey) {
           content: prompt
         }
       ],
-      temperature: 0.3,
-      max_tokens: CONFIG.MAX_TOKENS
+      temperature,
+      max_tokens: maxTokens,
+      ...(reasoning ? { reasoning } : {})
     })
   });
   
@@ -324,7 +344,9 @@ async function callOpenRouter(prompt, apiKey) {
   
   return {
     content: data.choices[0]?.message?.content || '',
-    usage: data.usage || { prompt_tokens: 0, completion_tokens: 0 }
+    usage: data.usage || { prompt_tokens: 0, completion_tokens: 0 },
+    // Некоторые провайдеры/модели могут возвращать стоимость прямо в ответе
+    costUsd: (typeof data?.usage?.cost === 'number' ? data.usage.cost : (typeof data?.cost === 'number' ? data.cost : null))
   };
 }
 
@@ -354,13 +376,56 @@ function parseAIResponse(content) {
 }
 
 /**
+ * Нормализация компании (убираем ООО/ИП/LLC и кавычки)
+ */
+function normalizeCompanyName(value) {
+  if (typeof value !== 'string') return null;
+  let s = value.trim();
+  if (!s) return null;
+
+  // Убираем кавычки/ёлочки по краям
+  s = s.replace(/^[«"'\s]+/g, '').replace(/[»"'\s]+$/g, '').trim();
+
+  // Убираем юридические формы в начале
+  s = s.replace(/^(ооо|ип|оао|зао|пао|ао|llc|inc|ltd|gmbh|sarl|srl|sas)\.?\s+/i, '');
+
+  // Снова чистим пробелы/кавычки
+  s = s.replace(/^[«"'\s]+/g, '').replace(/[»"'\s]+$/g, '').replace(/\s+/g, ' ').trim();
+
+  return s.length ? s : null;
+}
+
+/**
+ * Нормализация должности (убираем мусор/эмодзи, нормализуем пробелы)
+ */
+function normalizePositionTitle(value) {
+  if (typeof value !== 'string') return null;
+  let s = value.trim();
+  if (!s) return null;
+
+  // Убираем эмодзи (грубая, но полезная чистка)
+  s = s.replace(/[\u{1F300}-\u{1FAFF}]/gu, '').trim();
+  s = s.replace(/\s+/g, ' ').trim();
+
+  return s.length ? s : null;
+}
+
+/**
  * Обогатить батч контактов
  */
-async function enrichBatch(contacts, apiKey) {
-  const prompt = buildEnrichmentPrompt(contacts);
+async function enrichBatch(contacts, apiKey, options = {}) {
+  const {
+    model = CONFIG.BASIC_MODEL,
+    stage = 'basic',
+    temperature = 0.3,
+    maxTokens = CONFIG.MAX_TOKENS,
+    reasoning = null
+  } = options;
+
+  const prompt = buildEnrichmentPrompt(contacts, { stage });
   
   try {
-    const { content, usage } = await callOpenRouter(prompt, apiKey);
+    const { content, usage, costUsd } = await callOpenRouter(prompt, apiKey, { model, temperature, maxTokens, reasoning });
     const results = parseAIResponse(content);
     
     if (!Array.isArray(results)) {
@@ -370,6 +435,7 @@ async function enrichBatch(contacts, apiKey) {
     // Обновляем контакты
     const supabase = getSupabase();
     let enrichedCount = 0;
+    const applied = [];
     
     for (const result of results) {
       const idx = Number(result?.i);
@@ -399,10 +465,17 @@ async function enrichBatch(contacts, apiKey) {
         }
         return [];
       };
+
+      const resultWithMeta = {
+        ...(result || {}),
+        _stage: stage,
+        _model: model,
+        _ts: new Date().toISOString()
+      };
       
       const updateData = {
-        company_name: normalizeText(result?.company),
-        position: normalizeText(result?.position),
+        company_name: normalizeCompanyName(result?.company),
+        position: normalizePositionTitle(result?.position),
         position_type: ['CEO', 'DIRECTOR', 'MANAGER', 'SPECIALIST', 'FREELANCER', 'OTHER'].includes(result?.type) ? result.type : 'OTHER',
         is_decision_maker: result?.lpr === true || result?.type === 'CEO' || result?.type === 'DIRECTOR',
         industry: normalizeText(result?.industry),
@@ -412,7 +485,7 @@ async function enrichBatch(contacts, apiKey) {
         lead_score: score,
         enrichment_confidence: confidence,
         ai_summary: normalizeText(result?.summary),
-        raw_ai_response: result,
+        raw_ai_response: resultWithMeta,
         is_enriched: true,
         enriched_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -425,21 +498,28 @@ async function enrichBatch(contacts, apiKey) {
       
       if (!error) {
         enrichedCount++;
+        applied.push({ contact, score, confidence, result: resultWithMeta });
       }
     }
     
     // Расчёт стоимости
-    const cost = (usage.prompt_tokens * CONFIG.PRICE_INPUT / 1000000) +
-                 (usage.completion_tokens * CONFIG.PRICE_OUTPUT / 1000000);
+    let cost = 0;
+    if (typeof costUsd === 'number' && Number.isFinite(costUsd)) {
+      cost = costUsd;
+    } else if (model === CONFIG.BASIC_MODEL) {
+      cost = (usage.prompt_tokens * CONFIG.PRICE_INPUT_BASIC / 1000000) +
+             (usage.completion_tokens * CONFIG.PRICE_OUTPUT_BASIC / 1000000);
+    }
     
     return {
       enrichedCount,
       tokensUsed: usage.prompt_tokens + usage.completion_tokens,
-      cost
+      cost,
+      applied
     };
   } catch (err) {
     logger.error('Batch enrichment failed', { error: err.message });
-    return { enrichedCount: 0, tokensUsed: 0, cost: 0, error: err.message };
+    return { enrichedCount: 0, tokensUsed: 0, cost: 0, applied: [], error: err.message };
   }
 }
 
@@ -491,11 +571,11 @@ async function fetchContactData(supabase, contact) {
       .filter(Boolean)
       .sort((a, b) => b.score - a.score);
 
-    // Дедуп по тексту и берём топ-4
+    // Дедуп по тексту и берём топ-6 (в базовом промпте используем меньше, но это пригодится для 2-го прохода)
     const seen = new Set();
     const selected = [];
     for (const item of scored) {
-      if (selected.length >= 4) break;
+      if (selected.length >= 6) break;
       const key = item.text.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
@@ -536,6 +616,27 @@ async function processInParallelBatches(items, batchSize, processor) {
   return results;
 }
 
+function shouldUpgradeToAdvanced(enrichedItem, options = {}) {
+  const {
+    advancedMinScore = 70,
+    advancedMaxConfidence = 50,
+    advancedMinScoreForLowConfidence = 40
+  } = options;
+
+  const score = Number(enrichedItem?.score ?? 0);
+  const confidence = Number(enrichedItem?.confidence ?? 0);
+  const r = enrichedItem?.result || {};
+
+  const isTop = score >= advancedMinScore;
+  const isDecisionMaker = r?.lpr === true || r?.type === 'CEO' || r?.type === 'DIRECTOR';
+  const lowConfidence = confidence > 0 && confidence <= advancedMaxConfidence && score >= advancedMinScoreForLowConfidence;
+
+  const jobMissing = !r?.company && !r?.position;
+  const missingButImportant = jobMissing && score >= 50;
+
+  return isTop || isDecisionMaker || lowConfidence || missingButImportant;
+}
+
 /**
  * Обогатить контакты
  */
@@ -545,6 +646,17 @@ export async function enrichContacts(options = {}) {
     batchSize = CONFIG.ENRICHMENT_BATCH_SIZE,
     maxContacts = null,
     onlyWithBio = false
+    ,
+    // 2-tier режим
+    twoTier = false,
+    advancedModel = CONFIG.ADVANCED_MODEL,
+    advancedBatchSize = CONFIG.ADVANCED_ENRICHMENT_BATCH_SIZE,
+    advancedMinScore = 70,
+    advancedMaxConfidence = 50,
+    advancedMinScoreForLowConfidence = 40,
+    maxAdvancedContacts = null,
+    // фильтр по активности (из API передаётся)
+    minMessages = 1
   } = options;
   
   if (!apiKey) {
@@ -559,14 +671,23 @@ export async function enrichContacts(options = {}) {
   // Создаём лог
   await supabase.from('contact_enrichment_logs').insert({
     batch_id: batchId,
-    model_used: CONFIG.MODEL
+    model_used: twoTier ? `${CONFIG.BASIC_MODEL} + ${advancedModel}` : CONFIG.BASIC_MODEL
   });
   
   let totalEnriched = 0;
+  let totalRefined = 0;
   let totalFailed = 0;
   let totalTokens = 0;
   let totalCost = 0;
   let batchNumber = 0;
+  let totalAdvancedProcessed = 0;
+
+  const autoMaxAdvanced = (typeof maxContacts === 'number' && maxContacts > 0)
+    ? Math.max(1, Math.ceil(maxContacts * 0.2))
+    : 5000;
+  const effectiveMaxAdvanced = typeof maxAdvancedContacts === 'number'
+    ? Math.max(0, maxAdvancedContacts)
+    : autoMaxAdvanced;
   
   let hasMore = true;
   
@@ -579,6 +700,7 @@ export async function enrichContacts(options = {}) {
       .from('contacts')
       .select('*')
       .eq('is_enriched', false)
+      .gte('messages_count', minMessages)
       .order('created_at', { ascending: true })
       .limit(batchSize);
     
@@ -636,12 +758,53 @@ export async function enrichContacts(options = {}) {
     
     // Обогащаем батч если есть контакты с данными
     if (toEnrich.length > 0) {
-      const result = await enrichBatch(toEnrich, apiKey);
+      const result = await enrichBatch(toEnrich, apiKey, {
+        model: CONFIG.BASIC_MODEL,
+        stage: 'basic',
+        temperature: 0.3,
+        maxTokens: CONFIG.MAX_TOKENS
+      });
       
       totalEnriched += result.enrichedCount;
       totalFailed += toEnrich.length - result.enrichedCount;
       totalTokens += result.tokensUsed;
       totalCost += result.cost;
+
+      // ===== 2-TIER: дополнительный проход сильной моделью для топ/сомнительных =====
+      if (twoTier && result.applied?.length > 0 && totalAdvancedProcessed < effectiveMaxAdvanced) {
+        const candidates = result.applied.filter((item) => shouldUpgradeToAdvanced(item, {
+          advancedMinScore,
+          advancedMaxConfidence,
+          advancedMinScoreForLowConfidence
+        }));
+
+        const remaining = Math.max(0, effectiveMaxAdvanced - totalAdvancedProcessed);
+        const toUpgrade = candidates.slice(0, remaining).map((item) => ({
+          ...item.contact,
+          _basic: item.result
+        }));
+
+        if (toUpgrade.length > 0) {
+          for (let i = 0; i < toUpgrade.length; i += advancedBatchSize) {
+            const chunk = toUpgrade.slice(i, i + advancedBatchSize);
+            const adv = await enrichBatch(chunk, apiKey, {
+              model: advancedModel,
+              stage: 'advanced',
+              temperature: 0,
+              maxTokens: CONFIG.ADVANCED_MAX_TOKENS,
+              reasoning: { effort: 'low' }
+            });
+
+            totalRefined += adv.enrichedCount;
+            totalTokens += adv.tokensUsed;
+            totalCost += adv.cost;
+            totalAdvancedProcessed += chunk.length;
+
+            // маленькая пауза между запросами Gemini
+            await new Promise(resolve => setTimeout(resolve, 150));
+          }
+        }
+      }
     }
     
     const batchTime = ((Date.now() - batchStartTime) / 1000).toFixed(1);
@@ -651,6 +814,7 @@ export async function enrichContacts(options = {}) {
       withData: toEnrich.length,
       noData: noData.length,
       totalEnriched,
+      totalRefined,
       totalFailed,
       totalCost: totalCost.toFixed(4),
       batchTimeSec: batchTime
@@ -692,6 +856,7 @@ export async function enrichContacts(options = {}) {
   
   logger.info('Contact enrichment complete', {
     totalEnriched,
+    totalRefined,
     totalFailed,
     totalTokens,
     totalCost: totalCost.toFixed(4)
@@ -700,6 +865,7 @@ export async function enrichContacts(options = {}) {
   return {
     batchId,
     totalEnriched,
+    totalRefined,
     totalFailed,
     totalTokens,
     totalCost

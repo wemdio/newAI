@@ -399,7 +399,12 @@ router.post('/enrich', async (req, res) => {
       apiKey,  // API ключ передаётся в запросе
       maxContacts = 50000,  // По умолчанию до 50k, можно обогатить все
       onlyWithBio = false,
-      minMessages = 1
+      minMessages = 1,
+      // 2-tier: второй проход сильной моделью для топ/сомнительных
+      twoTier = false,
+      advancedMinScore = 70,
+      advancedMaxConfidence = 50,
+      maxAdvancedContacts = null
     } = req.body;
     
     // Проверяем наличие API ключа
@@ -447,7 +452,10 @@ router.post('/enrich', async (req, res) => {
       success: true,
       message: 'Enrichment started in background',
       contactsToEnrich: actualMax,
-      estimatedCostUsd: estimatedCost.toFixed(4)
+      estimatedCostUsd: estimatedCost.toFixed(4),
+      twoTier: !!twoTier,
+      // оценка второго прохода зависит от модели; тут показываем только лимит/правила отбора
+      advancedSelection: twoTier ? { advancedMinScore, advancedMaxConfidence, maxAdvancedContacts } : null
     });
     
     // Асинхронное обогащение с переданным ключом
@@ -455,7 +463,11 @@ router.post('/enrich', async (req, res) => {
       apiKey: apiKey.trim(),
       maxContacts: actualMax,
       onlyWithBio,
-      minMessages
+      minMessages,
+      twoTier: !!twoTier,
+      advancedMinScore,
+      advancedMaxConfidence,
+      maxAdvancedContacts
     })
       .then(result => {
         logger.info('Enrichment completed', result);

@@ -49,6 +49,7 @@ function Contacts() {
   const [showEnrichModal, setShowEnrichModal] = useState(false);
   const [apiKey, setApiKey] = useState('');
   const [enrichCount, setEnrichCount] = useState(1000);
+  const [twoTier, setTwoTier] = useState(true);
 
   // Load contacts
   const loadContacts = useCallback(async () => {
@@ -202,7 +203,8 @@ function Contacts() {
         apiKey: apiKey.trim(),
         maxContacts: toEnrich,
         onlyWithBio: false,
-        minMessages: 1
+        minMessages: 1,
+        twoTier
       });
       
       setShowEnrichModal(false);
@@ -592,6 +594,20 @@ function Contacts() {
                     <option value={0}>Все ({(stats?.notEnriched || 0).toLocaleString()}) (~${((stats?.notEnriched || 0) * 0.00008).toFixed(2)})</option>
                   </select>
                 </div>
+
+                <div className="filter-group" style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <input
+                      type="checkbox"
+                      checked={twoTier}
+                      onChange={(e) => setTwoTier(e.target.checked)}
+                    />
+                    Двухуровневое обогащение (Gemini 3 Flash для топ/сомнительных)
+                  </label>
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
+                    1-й проход: Qwen 2.5-7B для всех. 2-й проход: только для контактов с высоким score или низкой уверенностью.
+                  </div>
+                </div>
                 
                 <div className="detail-grid">
                   <div className="detail-item">
@@ -608,7 +624,9 @@ function Contacts() {
                   </div>
                   <div className="detail-item">
                     <span className="detail-label">Модель</span>
-                    <span className="detail-value">Qwen 2.5-7B</span>
+                    <span className="detail-value">
+                      {twoTier ? 'Qwen 2.5-7B + Gemini 3 Flash (частично)' : 'Qwen 2.5-7B'}
+                    </span>
                   </div>
                   <div className="detail-item">
                     <span className="detail-label">Примерное время</span>
