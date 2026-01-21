@@ -180,10 +180,9 @@ const Features: React.FC<{ onOpenLeadForm?: () => void }> = ({ onOpenLeadForm })
           >
             <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-soft-light"></div>
             <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent"></div>
-            
-            <h3 className="text-3xl font-bold text-white mb-6 relative z-10 drop-shadow-lg">15 лидов бесплатно</h3>
+
             <button className="relative z-10 px-8 py-4 bg-white text-brand-600 rounded-full font-bold text-base transition-transform shadow-xl flex items-center gap-2 group/btn hover:bg-gray-50">
-                Получить сейчас
+                Связаться
                 <ArrowRight size={18} className="group-hover/btn:translate-x-1 transition-transform" />
             </button>
           </motion.div>

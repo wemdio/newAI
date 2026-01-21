@@ -139,7 +139,7 @@ const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose, initialI
             {step === 1 ? (
               <>
                 <div className="text-center mb-8">
-                  <h3 className="text-2xl font-bold text-white mb-2">Получить 15 лидов</h3>
+                  <h3 className="text-2xl font-bold text-white mb-2">Связаться</h3>
                   <p className="text-gray-400 text-sm">
                     Оставьте контакты, и мы свяжемся с вами для настройки тестового периода.
                   </p>
