@@ -37,6 +37,110 @@ const DOUBLECHECK_RISK_PATTERNS = [
   /\bподписывай(тесь)?\b/i
 ];
 
+const toPositiveInt = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const SUPABASE_FETCH_RETRY_ATTEMPTS = toPositiveInt(process.env.SUPABASE_FETCH_RETRY_ATTEMPTS || '3', 3);
+const SUPABASE_FETCH_RETRY_BASE_DELAY_MS = toPositiveInt(process.env.SUPABASE_FETCH_RETRY_BASE_DELAY_MS || '500', 500);
+const SUPABASE_FETCH_RETRY_MAX_DELAY_MS = toPositiveInt(process.env.SUPABASE_FETCH_RETRY_MAX_DELAY_MS || '5000', 5000);
+
+const RETRYABLE_ERROR_CODES = new Set([
+  'ETIMEDOUT',
+  'ECONNRESET',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'ECONNREFUSED',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_SOCKET'
+]);
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const buildSupabaseErrorMeta = (error) => {
+  if (!error) return {};
+  const meta = {
+    error: error?.message || String(error),
+    code: error?.code,
+    details: error?.details,
+    hint: error?.hint,
+    status: error?.status || error?.statusCode,
+    cause: error?.cause?.message,
+    causeCode: error?.cause?.code,
+    stack: error?.stack
+  };
+
+  return Object.fromEntries(
+    Object.entries(meta).filter(([, value]) => value !== undefined && value !== null && value !== '')
+  );
+};
+
+const isRetryableSupabaseError = (error) => {
+  if (!error) return false;
+  const message = String(error?.message || error).toLowerCase();
+  const code = String(error?.code || error?.cause?.code || '').toUpperCase();
+  const status = Number(error?.status || error?.statusCode || 0);
+
+  if (RETRYABLE_ERROR_CODES.has(code)) return true;
+  if (message.includes('fetch failed')) return true;
+  if (message.includes('network') || message.includes('timeout') || message.includes('timed out')) return true;
+  if (status >= 500) return true;
+
+  return false;
+};
+
+const runSupabaseQueryWithRetry = async (queryFn, context) => {
+  const attempts = SUPABASE_FETCH_RETRY_ATTEMPTS;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const { data, error } = await queryFn();
+      if (!error) {
+        return { data, error: null, attempt };
+      }
+
+      lastError = error;
+      const retryable = isRetryableSupabaseError(error);
+      logger.warn('Supabase query failed', {
+        ...context,
+        attempt,
+        attempts,
+        retryable,
+        ...buildSupabaseErrorMeta(error)
+      });
+
+      if (!retryable || attempt === attempts) {
+        break;
+      }
+    } catch (error) {
+      lastError = error;
+      const retryable = isRetryableSupabaseError(error);
+      logger.warn('Supabase query exception', {
+        ...context,
+        attempt,
+        attempts,
+        retryable,
+        ...buildSupabaseErrorMeta(error)
+      });
+
+      if (!retryable || attempt === attempts) {
+        break;
+      }
+    }
+
+    const delay = Math.min(
+      SUPABASE_FETCH_RETRY_BASE_DELAY_MS * 2 ** (attempt - 1),
+      SUPABASE_FETCH_RETRY_MAX_DELAY_MS
+    );
+    await sleep(delay);
+  }
+
+  return { data: null, error: lastError, attempt: attempts };
+};
+
 const getRiskCheckText = (message) => {
   return [message?.message, message?.bio, message?.chat_name].filter(Boolean).join(' ');
 };
@@ -135,15 +239,26 @@ const processBatch = async () => {
         // Fetch new messages for this user (messages after their lastProcessedId)
         // Limit can be configured via env var, default 1000 messages per user per cycle
         const messagesLimit = parseInt(process.env.MESSAGES_PER_CYCLE || '1000', 10);
-        const { data: messages, error } = await supabase
-          .from('messages')
-          .select('*')
-          .gt('id', userLastId)
-          .order('id', { ascending: true })
-          .limit(messagesLimit);
+        const { data: messages, error } = await runSupabaseQueryWithRetry(
+          () => supabase
+            .from('messages')
+            .select('*')
+            .gt('id', userLastId)
+            .order('id', { ascending: true })
+            .limit(messagesLimit),
+          {
+            userId,
+            action: 'fetch_messages',
+            lastProcessedId: userLastId,
+            limit: messagesLimit
+          }
+        );
         
         if (error) {
-          logger.error('Error fetching messages for user', { userId, error: error.message });
+          logger.error('Error fetching messages for user', {
+            userId,
+            ...buildSupabaseErrorMeta(error)
+          });
           continue;
         }
         
