@@ -312,7 +312,7 @@ function Contacts() {
     <div className="contacts-page">
       {/* Header */}
       <div className="contacts-header">
-        <h1>👥 База контактов</h1>
+        <h1>База контактов</h1>
         <div className="header-actions">
           {/* Кнопки админа - только для администраторов */}
           {isAdmin && (
@@ -322,7 +322,7 @@ function Contacts() {
                 onClick={handleAggregate}
                 disabled={aggregating}
               >
-                {aggregating ? '⏳ Агрегация...' : '📥 Собрать контакты'}
+                {aggregating ? 'Агрегация...' : 'Собрать контакты'}
               </button>
               <button 
                 className="btn btn-warning" 
@@ -330,7 +330,7 @@ function Contacts() {
                 disabled={updatingData}
                 title="Подтянуть bio и имена из сообщений"
               >
-                {updatingData ? '⏳ Обновление...' : '🔄 Обновить данные'}
+                {updatingData ? 'Обновление...' : 'Обновить данные'}
               </button>
               <button 
                 className="btn btn-secondary" 
@@ -338,14 +338,14 @@ function Contacts() {
                 disabled={normalizing}
                 title="Очистка компании/должности и маппинг ролей (без AI)"
               >
-                {normalizing ? '⏳ Нормализация...' : '🧼 Нормализовать'}
+                {normalizing ? 'Нормализация...' : 'Нормализовать'}
               </button>
               <button 
                 className="btn btn-success" 
                 onClick={handleEnrichClick}
                 disabled={enriching || !stats?.notEnriched}
               >
-                {enriching ? '⏳ Обогащение...' : `🤖 Обогатить (${stats?.notEnriched || 0})`}
+                {enriching ? 'Обогащение...' : `Обогатить (${stats?.notEnriched || 0})`}
               </button>
               <button 
                 className="btn btn-danger" 
@@ -353,13 +353,13 @@ function Contacts() {
                 disabled={resetting || !stats?.enriched}
                 title="Сбросить все AI-данные для повторного обогащения"
               >
-                {resetting ? '⏳ Сброс...' : '🔄 Сбросить обогащение'}
+                {resetting ? 'Сброс...' : 'Сбросить обогащение'}
               </button>
             </>
           )}
           {/* Экспорт доступен всем */}
           <button className="btn btn-primary" onClick={handleExport}>
-            📊 Экспорт CSV
+            Экспорт CSV
           </button>
         </div>
       </div>
@@ -382,10 +382,6 @@ function Contacts() {
           <div className="stat-card">
             <span className="stat-label">С биографией</span>
             <span className="stat-value">{stats.withBio?.toLocaleString()}</span>
-          </div>
-          <div className="stat-card">
-            <span className="stat-label">Потрачено на AI</span>
-            <span className="stat-value">${stats.enrichmentCost?.totalUsd || '0.00'}</span>
           </div>
         </div>
       )}
@@ -485,7 +481,7 @@ function Contacts() {
             <>
               <p>Нажмите "Собрать контакты" чтобы агрегировать данные из сообщений</p>
               <button className="btn btn-primary" onClick={handleAggregate}>
-                📥 Собрать контакты
+                Собрать контакты
               </button>
             </>
           ) : (
@@ -607,7 +603,7 @@ function Contacts() {
         <div className="modal-overlay" onClick={() => setShowEnrichModal(false)}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
             <div className="modal-header">
-              <h2>🤖 Обогащение контактов</h2>
+              <h2>Обогащение контактов</h2>
               <button className="modal-close" onClick={() => setShowEnrichModal(false)}>×</button>
             </div>
             <div className="modal-body">
@@ -697,7 +693,7 @@ function Contacts() {
                   disabled={enriching || !apiKey.trim()}
                   style={{ flex: 1 }}
                 >
-                  {enriching ? '⏳ Запуск...' : '🚀 Запустить обогащение'}
+                  {enriching ? 'Запуск...' : 'Запустить обогащение'}
                 </button>
               </div>
             </div>
