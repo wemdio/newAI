@@ -270,6 +270,9 @@ function Configuration() {
           <small className="form-hint">
             0 = публиковать все лиды, 100 = только самые уверенные
           </small>
+          <small className="form-hint">
+            Влияет только на публикацию в Telegram, поиск лидов не меняется
+          </small>
         </div>
 
         {/* Lead Detection Criteria */}
