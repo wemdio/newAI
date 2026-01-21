@@ -358,6 +358,23 @@ async function callOpenRouter(prompt, apiKey, options = {}) {
  * Парсинг ответа AI
  */
 function parseAIResponse(content) {
+  const stripMarkdown = (text) => {
+    let cleaned = text.trim();
+    if (cleaned.startsWith('```')) {
+      cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
+    }
+    return cleaned;
+  };
+
+  const extractArray = (text) => {
+    const start = text.indexOf('[');
+    const end = text.lastIndexOf(']');
+    if (start !== -1 && end !== -1 && end > start) {
+      return text.substring(start, end + 1);
+    }
+    return text;
+  };
+
   const sanitize = (text) => {
     if (typeof text !== 'string') return '';
     let t = text;
@@ -374,39 +391,101 @@ function parseAIResponse(content) {
     t = t.replace(/("score"\s*:\s*)(\d+)"\s*([,}])/g, '$1$2$3');
     t = t.replace(/("confidence"\s*:\s*)(\d+)"\s*([,}])/g, '$1$2$3');
 
+    // Иногда модель вставляет лишний "i" без значения (,"i", или {"i", ...)
+    t = t.replace(/,\s*"i"\s*(?!:)\s*(?=,|}|])/g, '');
+    t = t.replace(/\{\s*"i"\s*(?!:)\s*,/g, '{');
+
     return t;
   };
 
+  const safeJsonParse = (text) => {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return null;
+    }
+  };
+
+  const extractJsonObjects = (text) => {
+    const objects = [];
+    let inString = false;
+    let escape = false;
+    let depth = 0;
+    let startIndex = -1;
+
+    for (let i = 0; i < text.length; i += 1) {
+      const char = text[i];
+
+      if (escape) {
+        escape = false;
+        continue;
+      }
+
+      if (char === '\\' && inString) {
+        escape = true;
+        continue;
+      }
+
+      if (char === '"') {
+        inString = !inString;
+        continue;
+      }
+
+      if (inString) continue;
+
+      if (char === '{') {
+        if (depth === 0) startIndex = i;
+        depth += 1;
+      } else if (char === '}') {
+        depth -= 1;
+        if (depth === 0 && startIndex !== -1) {
+          objects.push(text.slice(startIndex, i + 1));
+          startIndex = -1;
+        }
+      }
+    }
+
+    return objects;
+  };
+
+  const parseFromText = (raw) => {
+    const cleaned = sanitize(extractArray(stripMarkdown(String(raw || '').trim())));
+    const parsed = safeJsonParse(cleaned);
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && typeof parsed === 'object') return [parsed];
+    return null;
+  };
+
   try {
-    // Убираем возможные markdown-обёртки
-    let cleaned = content.trim();
-    if (cleaned.startsWith('```')) {
-      cleaned = cleaned.replace(/^```(?:json)?\n?/, '').replace(/\n?```$/, '');
-    }
-
-    // Если модель добавила текст вокруг JSON — пробуем вытащить массив
-    const start = cleaned.indexOf('[');
-    const end = cleaned.lastIndexOf(']');
-    if (start !== -1 && end !== -1 && end > start) {
-      cleaned = cleaned.substring(start, end + 1);
-    }
-
-    cleaned = sanitize(cleaned);
-    return JSON.parse(cleaned);
+    const parsed = parseFromText(content);
+    if (parsed) return parsed;
+    throw new Error('Empty or invalid JSON');
   } catch (err) {
     // 2-я попытка: иногда JSON валиден, но вокруг есть мусор/скобки. Пробуем санитайз + извлечение снова.
     try {
-      let cleaned = sanitize(String(content || '').trim());
-      const start = cleaned.indexOf('[');
-      const end = cleaned.lastIndexOf(']');
-      if (start !== -1 && end !== -1 && end > start) {
-        cleaned = cleaned.substring(start, end + 1);
-      }
-      return JSON.parse(cleaned);
+      const parsed = parseFromText(String(content || '').trim());
+      if (parsed) return parsed;
+      throw new Error('Unable to parse array');
     } catch (err2) {
-      logger.error('Failed to parse AI response', { content: content.substring(0, 200), error: err2.message });
-      return null;
+      // 3-я попытка: вытащить валидные объекты из массива по скобкам
+      try {
+        const cleaned = sanitize(extractArray(stripMarkdown(String(content || '').trim())));
+        const objectStrings = extractJsonObjects(cleaned);
+        const recovered = objectStrings
+          .map((obj) => safeJsonParse(sanitize(obj)))
+          .filter((obj) => obj && typeof obj === 'object');
+
+        if (recovered.length > 0) {
+          logger.warn('Recovered partial AI response', { recovered: recovered.length });
+          return recovered;
+        }
+      } catch (err3) {
+        logger.warn('Failed to recover partial AI response', { error: err3.message });
+      }
     }
+
+    logger.error('Failed to parse AI response', { content: String(content || '').substring(0, 200), error: err2.message });
+    return null;
   }
 }
 
