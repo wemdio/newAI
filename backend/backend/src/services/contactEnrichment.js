@@ -466,26 +466,44 @@ async function enrichBatch(contacts, apiKey, options = {}) {
         return [];
       };
 
+      const companyEvidence = normalizeText(result?.company_evidence);
+      const positionEvidence = normalizeText(result?.position_evidence);
+      const lprEvidence = normalizeText(result?.lpr_evidence);
+
+      const companyName = companyEvidence ? normalizeCompanyName(result?.company) : null;
+      const positionTitle = positionEvidence ? normalizePositionTitle(result?.position) : null;
+      const lpr = result?.lpr === true && !!lprEvidence;
+
+      const typeCandidate = (positionEvidence || lprEvidence) ? result?.type : 'OTHER';
+      const positionTextForType = [
+        positionTitle,
+        positionEvidence,
+        lprEvidence
+      ].filter(Boolean).join(' ');
+
+      const normalizedType = normalizePositionType(typeCandidate, positionTextForType);
+
       const resultWithMeta = {
         ...(result || {}),
+        company: companyName,
+        company_evidence: companyEvidence,
+        position: positionTitle,
+        position_evidence: positionEvidence,
+        lpr,
+        lpr_evidence: lprEvidence,
+        type: normalizedType,
+        score,
+        confidence,
         _stage: stage,
         _model: model,
         _ts: new Date().toISOString()
       };
-
-      const positionTextForType = [
-        result?.position,
-        result?.position_evidence,
-        result?.lpr_evidence
-      ].filter(Boolean).join(' ');
-
-      const normalizedType = normalizePositionType(result?.type, positionTextForType);
       
       const updateData = {
-        company_name: normalizeCompanyName(result?.company),
-        position: normalizePositionTitle(result?.position),
+        company_name: companyName,
+        position: positionTitle,
         position_type: normalizedType,
-        is_decision_maker: result?.lpr === true || normalizedType === 'CEO' || normalizedType === 'DIRECTOR',
+        is_decision_maker: lpr || normalizedType === 'CEO' || normalizedType === 'DIRECTOR',
         industry: normalizeText(result?.industry),
         company_size: ['SOLO', 'SMALL', 'MEDIUM', 'LARGE', 'UNKNOWN'].includes(result?.size) ? result.size : 'UNKNOWN',
         interests: normalizeStringArray(result?.interests),

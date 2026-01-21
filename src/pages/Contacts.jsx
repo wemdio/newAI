@@ -51,6 +51,8 @@ function Contacts() {
   const [apiKey, setApiKey] = useState('');
   const [enrichCount, setEnrichCount] = useState(1000);
   const [twoTier, setTwoTier] = useState(true);
+  const [onlyWithBio, setOnlyWithBio] = useState(false);
+  const [enrichMinMessages, setEnrichMinMessages] = useState(3);
 
   // Load contacts
   const loadContacts = useCallback(async () => {
@@ -226,8 +228,8 @@ function Contacts() {
       const response = await contactsApi.enrich({ 
         apiKey: apiKey.trim(),
         maxContacts: toEnrich,
-        onlyWithBio: false,
-        minMessages: 1,
+        onlyWithBio,
+        minMessages: enrichMinMessages,
         twoTier
       });
       
@@ -621,6 +623,9 @@ function Contacts() {
                     <option value={10000}>10,000 контактов (~$0.80)</option>
                     <option value={0}>Все ({(stats?.notEnriched || 0).toLocaleString()}) (~${((stats?.notEnriched || 0) * 0.00008).toFixed(2)})</option>
                   </select>
+                <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
+                  Итоговое количество пересчитается с учётом фильтров качества ниже.
+                </div>
                 </div>
 
                 <div className="filter-group" style={{ marginBottom: '16px' }}>
@@ -634,6 +639,37 @@ function Contacts() {
                   </label>
                   <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
                     1-й проход: Qwen 2.5-7B для всех. 2-й проход: только для контактов с высоким score или низкой уверенностью.
+                  </div>
+                </div>
+
+                <div className="filter-group" style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <input
+                      type="checkbox"
+                      checked={onlyWithBio}
+                      onChange={(e) => setOnlyWithBio(e.target.checked)}
+                    />
+                    Только с BIO
+                  </label>
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
+                    Сильно повышает точность, но уменьшает количество обогащаемых контактов.
+                  </div>
+                </div>
+
+                <div className="filter-group" style={{ marginBottom: '16px' }}>
+                  <label>Мин. сообщений для обогащения</label>
+                  <select
+                    value={enrichMinMessages}
+                    onChange={(e) => setEnrichMinMessages(parseInt(e.target.value, 10))}
+                    style={{ width: '100%' }}
+                  >
+                    <option value={1}>1+</option>
+                    <option value={3}>3+</option>
+                    <option value={5}>5+</option>
+                    <option value={10}>10+</option>
+                  </select>
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
+                    Рекомендуем 3–5 для качественной базы.
                   </div>
                 </div>
                 
