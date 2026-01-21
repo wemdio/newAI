@@ -657,7 +657,20 @@ function Contacts() {
                 </div>
 
                 <div className="filter-group" style={{ marginBottom: '16px' }}>
-                  <label>Мин. сообщений для обогащения</label>
+                  <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    Мин. сообщений для обогащения
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        setOnlyWithBio(true);
+                        setEnrichMinMessages(5);
+                      }}
+                      style={{ padding: '4px 8px', fontSize: '11px' }}
+                    >
+                      Режим качества
+                    </button>
+                  </label>
                   <select
                     value={enrichMinMessages}
                     onChange={(e) => setEnrichMinMessages(parseInt(e.target.value, 10))}
@@ -670,6 +683,9 @@ function Contacts() {
                   </select>
                   <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
                     Рекомендуем 3–5 для качественной базы.
+                  </div>
+                  <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>
+                    Режим качества = BIO + минимум 5 сообщений.
                   </div>
                 </div>
                 
