@@ -46,7 +46,9 @@ const Navbar = () => {
   const handleLogin = () => {
     // Track Yandex Metrika goal
     if (window.ym) {
-      window.ym(105579261, 'reachGoal', 'CLICK_LOGIN');
+      [105579261, 106370874].forEach((id) => {
+        window.ym(id, 'reachGoal', 'CLICK_LOGIN');
+      });
     }
     navigate('/login');
   };

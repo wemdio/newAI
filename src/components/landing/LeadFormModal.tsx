@@ -88,7 +88,9 @@ const LeadFormModal: React.FC<LeadFormModalProps> = ({ isOpen, onClose, initialI
 
       // Track Yandex Metrika goal
       if ((window as any).ym) {
-        (window as any).ym(105579261, 'reachGoal', 'LEAD_FORM_SUBMIT');
+        [105579261, 106370874].forEach((id) => {
+          (window as any).ym(id, 'reachGoal', 'LEAD_FORM_SUBMIT');
+        });
       }
 
       setStep(2);

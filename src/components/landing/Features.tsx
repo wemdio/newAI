@@ -89,7 +89,9 @@ const Features: React.FC<{ onOpenLeadForm?: () => void }> = ({ onOpenLeadForm })
   const handleCtaClick = () => {
     // Track Yandex Metrika goal
     if ((window as any).ym) {
-      (window as any).ym(105579261, 'reachGoal', 'CLICK_FEATURES_CTA');
+      [105579261, 106370874].forEach((id) => {
+        (window as any).ym(id, 'reachGoal', 'CLICK_FEATURES_CTA');
+      });
     }
     
     if (onOpenLeadForm) {
