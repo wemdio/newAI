@@ -368,6 +368,8 @@ const processMessagesForUser = async (messages, userConfig) => {
         // Post to Telegram immediately (with duplicate check and message suggestion)
         try {
           const confidenceScore = match.analysis.aiResponse?.confidence_score || 0;
+          const telegramMinConfidence = Number.parseInt(userConfig.telegram_min_confidence ?? 0, 10);
+          const telegramMinConfidenceValue = Number.isFinite(telegramMinConfidence) ? telegramMinConfidence : 0;
           
           // Check if user has active AI campaign with confidence filter
           // If enabled, skip Telegram posting for leads below threshold (AI will handle them)
@@ -384,6 +386,17 @@ const processMessagesForUser = async (messages, userConfig) => {
             // Lead is saved but not posted - AI campaign will handle outreach
             continue;
           }
+
+          if (telegramMinConfidenceValue > 0 && confidenceScore < telegramMinConfidenceValue) {
+            logger.info('⏭️ Skipping Telegram post - below user Telegram confidence threshold', {
+              userId,
+              leadId: savedLead.id,
+              confidenceScore,
+              threshold: telegramMinConfidenceValue
+            });
+            // Lead is saved but not posted due to Telegram threshold
+            continue;
+          }
           
           logger.info('🚀 ATTEMPTING TO POST LEAD TO TELEGRAM', {
             userId,
@@ -392,6 +405,7 @@ const processMessagesForUser = async (messages, userConfig) => {
             hasMessageSuggestion: !!messageSuggestion,
             confidenceScore,
             passedConfidenceFilter: !confidenceFilter || confidenceScore >= (confidenceFilter?.max_confidence_for_ai || 0),
+            telegramMinConfidence: telegramMinConfidenceValue,
             messagePreview: match.message.message?.substring(0, 100)
           });
 

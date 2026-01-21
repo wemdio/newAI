@@ -238,6 +238,20 @@
   color: #e0e0e0;
 }
 
+.range-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.range-input {
+  flex: 1;
+}
+
+.range-number {
+  width: 90px;
+}
+
 .form-input:focus,
 .form-textarea:focus {
   outline: none;

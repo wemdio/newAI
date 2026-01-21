@@ -46,13 +46,24 @@ router.get('/', authenticateUser, asyncHandler(async (req, res) => {
  * POST /api/config
  * Create or update user configuration
  */
+const parseTelegramMinConfidence = (value) => {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return 0;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return NaN;
+  }
+  return parsed;
+};
+
 router.post('/', authenticateUser, asyncHandler(async (req, res) => {
   const {
     openrouter_api_key,
     lead_prompt,
     message_prompt,
     telegram_channel_id,
-    is_active
+    is_active,
+    telegram_min_confidence
   } = req.body;
   
   // Validate required fields
@@ -79,13 +90,28 @@ router.post('/', authenticateUser, asyncHandler(async (req, res) => {
     });
   }
   
+  const parsedTelegramMinConfidence = parseTelegramMinConfidence(telegram_min_confidence);
+  if (Number.isNaN(parsedTelegramMinConfidence)) {
+    return res.status(400).json({
+      error: 'Validation error',
+      message: 'telegram_min_confidence must be a number between 0 and 100'
+    });
+  }
+  if (parsedTelegramMinConfidence !== undefined && (parsedTelegramMinConfidence < 0 || parsedTelegramMinConfidence > 100)) {
+    return res.status(400).json({
+      error: 'Validation error',
+      message: 'telegram_min_confidence must be between 0 and 100'
+    });
+  }
+
   // Save configuration
   const config = await saveUserConfig(req.userId, {
     openrouter_api_key,
     lead_prompt,
     message_prompt: message_prompt || null,
     telegram_channel_id,
-    is_active: is_active !== undefined ? is_active : true
+    is_active: is_active !== undefined ? is_active : true,
+    ...(parsedTelegramMinConfidence !== undefined && { telegram_min_confidence: parsedTelegramMinConfidence })
   });
   
   logger.info('User configuration saved', { userId: req.userId });
@@ -140,6 +166,23 @@ router.put('/', authenticateUser, asyncHandler(async (req, res) => {
   
   if (req.body.telegram_channel_id !== undefined) {
     updates.telegram_channel_id = req.body.telegram_channel_id;
+  }
+
+  if (req.body.telegram_min_confidence !== undefined) {
+    const parsedTelegramMinConfidence = parseTelegramMinConfidence(req.body.telegram_min_confidence);
+    if (Number.isNaN(parsedTelegramMinConfidence)) {
+      return res.status(400).json({
+        error: 'Validation error',
+        message: 'telegram_min_confidence must be a number between 0 and 100'
+      });
+    }
+    if (parsedTelegramMinConfidence < 0 || parsedTelegramMinConfidence > 100) {
+      return res.status(400).json({
+        error: 'Validation error',
+        message: 'telegram_min_confidence must be between 0 and 100'
+      });
+    }
+    updates.telegram_min_confidence = parsedTelegramMinConfidence;
   }
   
   if (req.body.is_active !== undefined) {

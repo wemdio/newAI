@@ -14,6 +14,7 @@ function Configuration() {
     leadPrompt: '',
     messagePrompt: '',
     telegramChannelId: '',
+    telegramMinConfidence: 0,
     isActive: true
   });
 
@@ -48,6 +49,9 @@ function Configuration() {
           leadPrompt: response.data.config.lead_prompt || '',
           messagePrompt: response.data.config.message_prompt || '',
           telegramChannelId: response.data.config.telegram_channel_id || '',
+          telegramMinConfidence: Number.isFinite(response.data.config.telegram_min_confidence)
+            ? response.data.config.telegram_min_confidence
+            : 0,
           isActive: response.data.config.is_active !== false
         });
       }
@@ -89,6 +93,7 @@ function Configuration() {
         lead_prompt: config.leadPrompt,
         message_prompt: config.messagePrompt || null,
         telegram_channel_id: config.telegramChannelId,
+        telegram_min_confidence: config.telegramMinConfidence,
         is_active: config.isActive
       };
       
@@ -229,6 +234,41 @@ function Configuration() {
           />
           <small className="form-hint">
             Оставьте пустым, если хотите просматривать лиды только в приложении
+          </small>
+        </div>
+
+        {/* Telegram Confidence Threshold */}
+        <div className="form-section">
+          <h3>Порог публикации в Telegram</h3>
+          <p className="section-description">
+            Публиковать в Telegram только лиды с уверенностью от выбранного процента.
+            Лиды ниже порога всё равно сохраняются в базе.
+          </p>
+          <div className="range-row">
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={config.telegramMinConfidence}
+              onChange={(e) => setConfig({ ...config, telegramMinConfidence: parseInt(e.target.value, 10) || 0 })}
+              className="range-input"
+            />
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="1"
+              value={config.telegramMinConfidence}
+              onChange={(e) => {
+                const value = parseInt(e.target.value, 10);
+                setConfig({ ...config, telegramMinConfidence: Number.isFinite(value) ? value : 0 });
+              }}
+              className="form-input range-number"
+            />
+          </div>
+          <small className="form-hint">
+            0 = публиковать все лиды, 100 = только самые уверенные
           </small>
         </div>
 

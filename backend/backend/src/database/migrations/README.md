@@ -13,6 +13,7 @@ Stores user configurations for the lead detection system.
 - `openrouter_api_key` - Encrypted API key for OpenRouter
 - `lead_prompt` - User-defined lead criteria
 - `telegram_channel_id` - Target Telegram channel
+- `telegram_min_confidence` - Min confidence to post lead to Telegram (0-100)
 - `is_active` - Whether detection is active
 - `created_at` - Creation timestamp
 - `updated_at` - Last update timestamp
