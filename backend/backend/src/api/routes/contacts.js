@@ -24,6 +24,62 @@ function isAdmin(userEmail) {
   return ADMIN_EMAILS.includes(userEmail.toLowerCase());
 }
 
+const VALID_SORT_FIELDS = ['messages_count', 'lead_score', 'last_seen_at', 'created_at', 'first_name'];
+
+const applyContactFilters = (query, filters) => {
+  const {
+    is_decision_maker,
+    position_type,
+    is_enriched,
+    min_score,
+    max_score,
+    min_messages,
+    industry,
+    search
+  } = filters;
+
+  if (is_decision_maker === 'true') {
+    query = query.eq('is_decision_maker', true);
+  }
+
+  if (position_type) {
+    query = query.eq('position_type', position_type);
+  }
+
+  if (is_enriched === 'true') {
+    query = query.eq('is_enriched', true);
+  } else if (is_enriched === 'false') {
+    query = query.eq('is_enriched', false);
+  }
+
+  if (min_score) {
+    query = query.gte('lead_score', parseInt(min_score, 10));
+  }
+
+  if (max_score) {
+    query = query.lte('lead_score', parseInt(max_score, 10));
+  }
+
+  if (min_messages) {
+    query = query.gte('messages_count', parseInt(min_messages, 10));
+  }
+
+  if (industry) {
+    query = query.ilike('industry', `%${industry}%`);
+  }
+
+  if (search) {
+    query = query.or(`username.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,bio.ilike.%${search}%,company_name.ilike.%${search}%`);
+  }
+
+  return query;
+};
+
+const applyContactSorting = (query, sort_by, sort_order) => {
+  const sortField = VALID_SORT_FIELDS.includes(sort_by) ? sort_by : 'messages_count';
+  return query.order(sortField, { ascending: sort_order === 'asc' });
+};
+
 // ============= GET /api/contacts =============
 // Получить список контактов с фильтрацией и пагинацией
 router.get('/', async (req, res) => {
@@ -52,45 +108,18 @@ router.get('/', async (req, res) => {
       .from('contacts')
       .select('*', { count: 'exact' });
     
-    // Применяем фильтры
-    if (is_decision_maker === 'true') {
-      query = query.eq('is_decision_maker', true);
-    }
+    query = applyContactFilters(query, {
+      is_decision_maker,
+      position_type,
+      is_enriched,
+      min_score,
+      max_score,
+      min_messages,
+      industry,
+      search
+    });
     
-    if (position_type) {
-      query = query.eq('position_type', position_type);
-    }
-    
-    if (is_enriched === 'true') {
-      query = query.eq('is_enriched', true);
-    } else if (is_enriched === 'false') {
-      query = query.eq('is_enriched', false);
-    }
-    
-    if (min_score) {
-      query = query.gte('lead_score', parseInt(min_score));
-    }
-    
-    if (max_score) {
-      query = query.lte('lead_score', parseInt(max_score));
-    }
-    
-    if (min_messages) {
-      query = query.gte('messages_count', parseInt(min_messages));
-    }
-    
-    if (industry) {
-      query = query.ilike('industry', `%${industry}%`);
-    }
-    
-    if (search) {
-      query = query.or(`username.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,bio.ilike.%${search}%,company_name.ilike.%${search}%`);
-    }
-    
-    // Сортировка
-    const validSortFields = ['messages_count', 'lead_score', 'last_seen_at', 'created_at', 'first_name'];
-    const sortField = validSortFields.includes(sort_by) ? sort_by : 'messages_count';
-    query = query.order(sortField, { ascending: sort_order === 'asc' });
+    query = applyContactSorting(query, sort_by, sort_order);
     
     // Пагинация
     query = query.range(offset, offset + parseInt(limit) - 1);
@@ -610,36 +639,59 @@ router.get('/export/csv', async (req, res) => {
       is_decision_maker,
       position_type,
       min_score,
-      is_enriched = 'true'
+      max_score,
+      min_messages,
+      industry,
+      search,
+      is_enriched,
+      sort_by = 'messages_count',
+      sort_order = 'desc'
     } = req.query;
     
     const supabase = getSupabase();
     
-    let query = supabase
-      .from('contacts')
-      .select('username, first_name, last_name, bio, company_name, position, position_type, is_decision_maker, industry, lead_score, messages_count, source_chats, ai_summary')
-      .order('lead_score', { ascending: false })
-      .limit(10000);
+    const EXPORT_BATCH_SIZE = 1000;
+    let offset = 0;
+    const contacts = [];
+    let hasMore = true;
     
-    if (is_enriched === 'true') {
-      query = query.eq('is_enriched', true);
+    while (hasMore) {
+      let query = supabase
+        .from('contacts')
+        .select('username, first_name, last_name, bio, company_name, position, position_type, is_decision_maker, industry, lead_score, messages_count, source_chats, ai_summary');
+
+      query = applyContactFilters(query, {
+        is_decision_maker,
+        position_type,
+        is_enriched,
+        min_score,
+        max_score,
+        min_messages,
+        industry,
+        search
+      });
+      
+      query = applyContactSorting(query, sort_by, sort_order);
+      query = query.range(offset, offset + EXPORT_BATCH_SIZE - 1);
+      
+      const { data, error } = await query;
+      
+      if (error) throw error;
+      
+      if (!data || data.length === 0) {
+        hasMore = false;
+        break;
+      }
+      
+      contacts.push(...data);
+      
+      if (data.length < EXPORT_BATCH_SIZE) {
+        hasMore = false;
+        break;
+      }
+      
+      offset += EXPORT_BATCH_SIZE;
     }
-    
-    if (is_decision_maker === 'true') {
-      query = query.eq('is_decision_maker', true);
-    }
-    
-    if (position_type) {
-      query = query.eq('position_type', position_type);
-    }
-    
-    if (min_score) {
-      query = query.gte('lead_score', parseInt(min_score));
-    }
-    
-    const { data: contacts, error } = await query;
-    
-    if (error) throw error;
     
     // Формируем CSV
     const headers = [

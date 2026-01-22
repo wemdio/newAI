@@ -251,12 +251,11 @@ function Contacts() {
 
   // Export CSV
   const handleExport = () => {
-    const params = new URLSearchParams({
-      is_enriched: 'true',
-      ...(filters.is_decision_maker && { is_decision_maker: filters.is_decision_maker }),
-      ...(filters.position_type && { position_type: filters.position_type }),
-      ...(filters.min_score && { min_score: filters.min_score })
-    });
+    const params = new URLSearchParams(
+      Object.fromEntries(
+        Object.entries(filters).filter(([_, value]) => value !== '')
+      )
+    );
     window.open(`/api/contacts/export/csv?${params}`, '_blank');
   };
 
