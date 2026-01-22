@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import supabase from './supabaseClient';
 import './App.css';
 import './styles/telegram.css';
@@ -9,6 +9,26 @@ import Login from './pages/Login';
 import AIMessaging from './pages/AIMessaging';
 import { isTelegramWebApp, initTelegram, getTelegramUser, getTelegramInitData } from './utils/telegram';
 import axios from 'axios';
+
+const METRIKA_COUNTERS = [105579261, 106370874];
+
+const trackMetrikaHit = (url) => {
+  if (typeof window === 'undefined' || !window.ym) return;
+  METRIKA_COUNTERS.forEach((id) => {
+    window.ym(id, 'hit', url);
+  });
+};
+
+const MetrikaTracker = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    const url = `${location.pathname}${location.search}${location.hash}`;
+    trackMetrikaHit(url);
+  }, [location.pathname, location.search, location.hash]);
+
+  return null;
+};
 
 function App() {
   const [session, setSession] = useState(null);
@@ -193,6 +213,7 @@ function App() {
 
   return (
     <Router>
+      <MetrikaTracker />
       <div className={`app ${isTelegram ? 'telegram-mode' : 'browser-mode'}`}>
         {/* Navigation - hidden in Telegram */}
         {!isTelegram && (
