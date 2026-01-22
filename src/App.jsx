@@ -24,6 +24,26 @@ const LoadingSpinner = () => (
   </div>
 );
 
+const METRIKA_COUNTERS = [105579261, 106370874];
+
+const trackMetrikaHit = (url) => {
+  if (typeof window === 'undefined' || !window.ym) return;
+  METRIKA_COUNTERS.forEach((id) => {
+    window.ym(id, 'hit', url);
+  });
+};
+
+const MetrikaTracker = () => {
+  const location = useLocation();
+
+  useEffect(() => {
+    const url = `${location.pathname}${location.search}${location.hash}`;
+    trackMetrikaHit(url);
+  }, [location.pathname, location.search, location.hash]);
+
+  return null;
+};
+
 // Component for the authenticated application layout
 const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setActiveTab }) => {
   const userId = session?.user?.id;
@@ -340,6 +360,7 @@ function App() {
 
   return (
     <Router>
+      <MetrikaTracker />
       <Suspense fallback={<LoadingSpinner />}>
         <Routes>
           {/* Public Routes */}
