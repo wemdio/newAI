@@ -155,46 +155,43 @@
 
 .btn:hover:not(:disabled) {
   border-color: #fff;
+  color: #fff;
 }
 
 .btn-primary {
-  /* Using standard button style, maybe specific color */
   border-color: #444;
+  color: #e0e0e0;
 }
 
 .btn-secondary {
-  /* Same as default */
+  border-color: #444;
 }
 
 .btn-success {
-  border-color: #2a3e2a;
-  color: #7dd17d;
+  border-color: #444;
+  color: #e0e0e0;
 }
 
 .btn-success:hover:not(:disabled) {
   border-color: #7dd17d;
-  background: #1a2e1a;
+  background: rgba(125, 209, 125, 0.05);
   color: #7dd17d;
 }
 
 .btn-warning {
-  border-color: #3e2a2a; /* Or orange tint */
-  color: #d1d17d; /* Yellowish */
-}
-
-.btn-warning:hover:not(:disabled) {
-  border-color: #d1d17d;
-  background: #2e2e1a;
+  border-color: #444;
+  color: #e0e0e0;
 }
 
 .btn-danger {
-  border-color: #3e2a2a;
-  color: #d17d7d;
+  border-color: #444;
+  color: #e0e0e0;
 }
 
 .btn-danger:hover:not(:disabled) {
   border-color: #d17d7d;
-  background: #2e1a1a;
+  background: rgba(209, 125, 125, 0.05);
+  color: #d17d7d;
 }
 
 .btn:disabled {
