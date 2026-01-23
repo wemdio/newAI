@@ -37,6 +37,8 @@ function Contacts() {
     is_enriched: '',
     min_score: '',
     min_messages: '',
+    hide_spam: true,
+    hide_low_quality: true,
     sort_by: 'messages_count',
     sort_order: 'desc'
   });
@@ -463,6 +465,26 @@ function Contacts() {
               <option value="5">5+</option>
               <option value="10">10+</option>
             </select>
+          </div>
+
+          <div className="filter-group">
+            <label>Качество</label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+              <input
+                type="checkbox"
+                checked={!!filters.hide_spam}
+                onChange={(e) => handleFilterChange('hide_spam', e.target.checked)}
+              />
+              Скрывать спам
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px' }}>
+              <input
+                type="checkbox"
+                checked={!!filters.hide_low_quality}
+                onChange={(e) => handleFilterChange('hide_low_quality', e.target.checked)}
+              />
+              Скрывать пустые
+            </label>
           </div>
         </div>
       </div>

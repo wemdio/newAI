@@ -35,8 +35,15 @@ const applyContactFilters = (query, filters) => {
     max_score,
     min_messages,
     industry,
-    search
+    search,
+    is_spam,
+    is_low_quality,
+    hide_spam,
+    hide_low_quality
   } = filters;
+
+  const hideSpam = hide_spam !== 'false' && hide_spam !== false && hide_spam !== '0';
+  const hideLowQuality = hide_low_quality !== 'false' && hide_low_quality !== false && hide_low_quality !== '0';
 
   if (is_decision_maker === 'true') {
     query = query.eq('is_decision_maker', true);
@@ -72,12 +79,43 @@ const applyContactFilters = (query, filters) => {
     query = query.or(`username.ilike.%${search}%,first_name.ilike.%${search}%,last_name.ilike.%${search}%,bio.ilike.%${search}%,company_name.ilike.%${search}%`);
   }
 
+  if (is_spam === 'true') {
+    query = query.eq('is_spam', true);
+  } else if (is_spam === 'false') {
+    query = query.eq('is_spam', false);
+  } else if (hideSpam) {
+    query = query.eq('is_spam', false);
+  }
+
+  if (is_low_quality === 'true') {
+    query = query.eq('is_low_quality', true);
+  } else if (is_low_quality === 'false') {
+    query = query.eq('is_low_quality', false);
+  } else if (hideLowQuality) {
+    query = query.eq('is_low_quality', false);
+  }
+
   return query;
 };
 
 const applyContactSorting = (query, sort_by, sort_order) => {
   const sortField = VALID_SORT_FIELDS.includes(sort_by) ? sort_by : 'messages_count';
   return query.order(sortField, { ascending: sort_order === 'asc' });
+};
+
+const applyQualityExclusions = (query, options = {}) => {
+  const includeSpam = options.include_spam === 'true' || options.include_spam === true;
+  const includeLowQuality = options.include_low_quality === 'true' || options.include_low_quality === true;
+
+  if (!includeSpam) {
+    query = query.eq('is_spam', false);
+  }
+
+  if (!includeLowQuality) {
+    query = query.eq('is_low_quality', false);
+  }
+
+  return query;
 };
 
 // ============= GET /api/contacts =============
@@ -96,6 +134,10 @@ router.get('/', async (req, res) => {
       min_messages,
       industry,
       search,
+      is_spam,
+      is_low_quality,
+      hide_spam,
+      hide_low_quality,
       // Сортировка
       sort_by = 'messages_count',
       sort_order = 'desc'
@@ -116,7 +158,11 @@ router.get('/', async (req, res) => {
       max_score,
       min_messages,
       industry,
-      search
+      search,
+      is_spam,
+      is_low_quality,
+      hide_spam,
+      hide_low_quality
     });
     
     query = applyContactSorting(query, sort_by, sort_order);
@@ -151,33 +197,47 @@ router.get('/', async (req, res) => {
 router.get('/stats', async (req, res) => {
   try {
     const supabase = getSupabase();
+    const { include_spam, include_low_quality } = req.query;
     
     // Общая статистика
-    const { count: total } = await supabase
-      .from('contacts')
-      .select('*', { count: 'exact', head: true });
+    const { count: total } = await applyQualityExclusions(
+      supabase.from('contacts').select('*', { count: 'exact', head: true }),
+      { include_spam, include_low_quality }
+    );
     
-    const { count: enriched } = await supabase
-      .from('contacts')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_enriched', true);
+    const { count: enriched } = await applyQualityExclusions(
+      supabase
+        .from('contacts')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_enriched', true),
+      { include_spam, include_low_quality }
+    );
     
-    const { count: lprs } = await supabase
-      .from('contacts')
-      .select('*', { count: 'exact', head: true })
-      .eq('is_decision_maker', true);
+    const { count: lprs } = await applyQualityExclusions(
+      supabase
+        .from('contacts')
+        .select('*', { count: 'exact', head: true })
+        .eq('is_decision_maker', true),
+      { include_spam, include_low_quality }
+    );
     
-    const { count: withBio } = await supabase
-      .from('contacts')
-      .select('*', { count: 'exact', head: true })
-      .not('bio', 'is', null)
-      .neq('bio', '');
+    const { count: withBio } = await applyQualityExclusions(
+      supabase
+        .from('contacts')
+        .select('*', { count: 'exact', head: true })
+        .not('bio', 'is', null)
+        .neq('bio', ''),
+      { include_spam, include_low_quality }
+    );
     
     // Статистика по position_type
-    const { data: positionStats } = await supabase
-      .from('contacts')
-      .select('position_type')
-      .eq('is_enriched', true);
+    const { data: positionStats } = await applyQualityExclusions(
+      supabase
+        .from('contacts')
+        .select('position_type')
+        .eq('is_enriched', true),
+      { include_spam, include_low_quality }
+    );
     
     const positionCounts = {};
     positionStats?.forEach(c => {
@@ -186,11 +246,14 @@ router.get('/stats', async (req, res) => {
     });
     
     // Топ отраслей
-    const { data: industryStats } = await supabase
-      .from('contacts')
-      .select('industry')
-      .eq('is_enriched', true)
-      .not('industry', 'is', null);
+    const { data: industryStats } = await applyQualityExclusions(
+      supabase
+        .from('contacts')
+        .select('industry')
+        .eq('is_enriched', true)
+        .not('industry', 'is', null),
+      { include_spam, include_low_quality }
+    );
     
     const industryCounts = {};
     industryStats?.forEach(c => {
@@ -205,10 +268,23 @@ router.get('/stats', async (req, res) => {
       .map(([name, count]) => ({ name, count }));
     
     // Распределение по score
-    const { data: scoreData } = await supabase
+    const { data: scoreData } = await applyQualityExclusions(
+      supabase
+        .from('contacts')
+        .select('lead_score')
+        .eq('is_enriched', true),
+      { include_spam, include_low_quality }
+    );
+
+    const { count: spam } = await supabase
       .from('contacts')
-      .select('lead_score')
-      .eq('is_enriched', true);
+      .select('*', { count: 'exact', head: true })
+      .eq('is_spam', true);
+
+    const { count: lowQuality } = await supabase
+      .from('contacts')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_low_quality', true);
     
     const scoreRanges = { '0-20': 0, '21-40': 0, '41-60': 0, '61-80': 0, '81-100': 0 };
     scoreData?.forEach(c => {
@@ -238,6 +314,8 @@ router.get('/stats', async (req, res) => {
         notEnriched: (total || 0) - (enriched || 0),
         lprs: lprs || 0,
         withBio: withBio || 0,
+        spam: spam || 0,
+        lowQuality: lowQuality || 0,
         positionTypes: positionCounts,
         topIndustries,
         scoreDistribution: scoreRanges,
@@ -644,6 +722,10 @@ router.get('/export/csv', async (req, res) => {
       industry,
       search,
       is_enriched,
+      is_spam,
+      is_low_quality,
+      hide_spam,
+      hide_low_quality,
       sort_by = 'messages_count',
       sort_order = 'desc'
     } = req.query;
@@ -668,7 +750,11 @@ router.get('/export/csv', async (req, res) => {
         max_score,
         min_messages,
         industry,
-        search
+        search,
+        is_spam,
+        is_low_quality,
+        hide_spam,
+        hide_low_quality
       });
       
       query = applyContactSorting(query, sort_by, sort_order);

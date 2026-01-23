@@ -6,6 +6,7 @@
 import { getSupabase } from '../config/database.js';
 import logger from '../utils/logger.js';
 import { normalizeCompanyName, normalizePositionTitle, normalizePositionType } from '../utils/contactNormalization.js';
+import { analyzeContactQuality } from '../utils/contactQuality.js';
 
 // ============= КОНФИГУРАЦИЯ =============
 const CONFIG = {
@@ -111,6 +112,16 @@ async function aggregateContactData(username) {
   const latestWithName = messages.find(m => m.first_name || m.last_name);
   
   const sourceChats = [...new Set(messages.map(m => m.chat_name).filter(Boolean))];
+
+  const quality = analyzeContactQuality({
+    username,
+    first_name: latestWithName?.first_name || null,
+    last_name: latestWithName?.last_name || null,
+    bio: latestWithBio?.bio || null,
+    messages: messages.map(m => m.message).filter(Boolean),
+    last_message_preview: messages[0]?.message || null,
+    messages_count: messages.length
+  });
   
   return {
     telegram_user_id: messages[0].user_id,
@@ -124,6 +135,7 @@ async function aggregateContactData(username) {
     first_seen_at: messages[messages.length - 1].message_time,
     last_seen_at: messages[0].message_time,
     last_message_preview: messages[0].message?.substring(0, 200),
+    ...quality,
     // Сообщения для обогащения (топ-5 самых длинных)
     top_messages: messages
       .filter(m => m.message && m.message.length > 20)
@@ -254,6 +266,44 @@ export async function aggregateContacts(options = {}) {
   
   logger.info('Contact aggregation complete', { totalProcessed, totalSaved });
   
+  return { totalProcessed, totalSaved };
+}
+
+/**
+ * Агрегировать контакты по списку username
+ */
+export async function aggregateContactsForUsernames(usernames = [], options = {}) {
+  const { batchSize = CONFIG.AGGREGATION_BATCH_SIZE } = options;
+  const supabase = getSupabase();
+
+  const uniqueUsernames = Array.from(new Set(usernames))
+    .map(u => (typeof u === 'string' ? u.trim() : ''))
+    .filter(Boolean);
+
+  let totalProcessed = 0;
+  let totalSaved = 0;
+
+  for (let i = 0; i < uniqueUsernames.length; i += batchSize) {
+    const batch = uniqueUsernames.slice(i, i + batchSize);
+    for (const username of batch) {
+      try {
+        const contactData = await aggregateContactData(username);
+        if (contactData) {
+          await saveContact(contactData);
+          totalSaved++;
+        }
+        totalProcessed++;
+      } catch (err) {
+        logger.error('Error aggregating contact from import', { username, error: err.message });
+      }
+    }
+
+    // небольшая пауза между батчами
+    await new Promise(r => setTimeout(r, 50));
+  }
+
+  logger.info('Aggregation by username list completed', { totalProcessed, totalSaved });
+
   return { totalProcessed, totalSaved };
 }
 
@@ -1005,6 +1055,7 @@ export async function getContactStats() {
 
 export default {
   aggregateContacts,
+  aggregateContactsForUsernames,
   enrichContacts,
   getContactStats
 };
