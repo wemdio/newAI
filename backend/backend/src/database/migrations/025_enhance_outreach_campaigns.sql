@@ -34,10 +34,20 @@ CREATE INDEX IF NOT EXISTS idx_outreach_logs_created ON outreach_logs(created_at
 -- RLS for logs
 ALTER TABLE outreach_logs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "Users can view their own logs"
+-- Drop existing policies if they exist, then create
+DROP POLICY IF EXISTS "Users can view their own logs" ON outreach_logs;
+CREATE POLICY "Users can view their own logs"
     ON outreach_logs FOR SELECT
     USING (auth.uid() = user_id);
 
-CREATE POLICY IF NOT EXISTS "Users can insert their own logs"
+DROP POLICY IF EXISTS "Users can insert their own logs" ON outreach_logs;
+CREATE POLICY "Users can insert their own logs"
     ON outreach_logs FOR INSERT
     WITH CHECK (auth.uid() = user_id);
+
+-- Service role policy for worker (uses service key, bypasses RLS but let's be explicit)
+DROP POLICY IF EXISTS "Service role full access" ON outreach_logs;
+CREATE POLICY "Service role full access"
+    ON outreach_logs FOR ALL
+    USING (true)
+    WITH CHECK (true);

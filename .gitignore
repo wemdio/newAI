@@ -1,4 +1,4 @@
-# Dependencies
+﻿# Dependencies
 node_modules/
 
 # Build output
@@ -10,6 +10,7 @@ dist/
 # Logs
 *.log
 npm-debug.log*
+logs/
 
 # Editor/OS
 .DS_Store
@@ -17,3 +18,24 @@ Thumbs.db
 .vscode/
 .idea/
 
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.Python
+venv/
+.venv/
+
+# Telegram sessions (sensitive!)
+*.session
+data/sessions/
+
+# Temporary folders
+To add/
+imports/
+
+# Sensitive data files
+*.xlsx
+*.csv
+processed_*.txt
+proxies.txt

@@ -93,6 +93,29 @@ class OutreachSupabaseClient:
         )
         return result is not None
     
+    async def increment_campaign_sent(self, campaign_id: str) -> bool:
+        """Increment messages_sent counter atomically using RPC or direct update"""
+        # First get current value
+        data = await self._request(
+            'GET',
+            f'outreach_campaigns?id=eq.{campaign_id}&select=messages_sent'
+        )
+        if data and len(data) > 0:
+            current = data[0].get('messages_sent') or 0
+            return await self.update_campaign(campaign_id, {'messages_sent': current + 1})
+        return False
+    
+    async def increment_campaign_replied(self, campaign_id: str) -> bool:
+        """Increment messages_replied counter"""
+        data = await self._request(
+            'GET',
+            f'outreach_campaigns?id=eq.{campaign_id}&select=messages_replied'
+        )
+        if data and len(data) > 0:
+            current = data[0].get('messages_replied') or 0
+            return await self.update_campaign(campaign_id, {'messages_replied': current + 1})
+        return False
+    
     # ===== ACCOUNTS =====
     
     async def get_outreach_accounts(self, account_ids: List[str]) -> List[dict]:
@@ -160,7 +183,8 @@ class OutreachSupabaseClient:
             'campaign_id': campaign_id,
             'target_username': target_username,
             'target_name': target_name,
-            'status': 'active'
+            'status': 'active',
+            'unread_count': 0
         }
         
         result = await self._request('POST', 'outreach_chats', json=chat_data)
@@ -174,6 +198,25 @@ class OutreachSupabaseClient:
             json=updates
         )
         return result is not None
+    
+    async def increment_unread(self, chat_id: str) -> bool:
+        """Increment unread count for a chat"""
+        data = await self._request(
+            'GET',
+            f'outreach_chats?id=eq.{chat_id}&select=unread_count'
+        )
+        if data and len(data) > 0:
+            current = data[0].get('unread_count') or 0
+            return await self.update_chat(chat_id, {'unread_count': current + 1})
+        return False
+    
+    async def get_active_chats_for_campaign(self, campaign_id: str) -> List[dict]:
+        """Get all active chats for a campaign (for checking replies)"""
+        data = await self._request(
+            'GET',
+            f'outreach_chats?campaign_id=eq.{campaign_id}&status=eq.active&select=*'
+        )
+        return data or []
     
     async def get_chats_with_unread(self, user_id: str) -> List[dict]:
         """Get chats with unread messages for AI processing"""
@@ -213,6 +256,16 @@ class OutreachSupabaseClient:
         )
         return data or []
     
+    async def get_last_message_id(self, chat_id: str) -> Optional[int]:
+        """Get the ID of the last processed message"""
+        data = await self._request(
+            'GET',
+            f'outreach_messages?chat_id=eq.{chat_id}&select=id&order=created_at.desc&limit=1'
+        )
+        if data and len(data) > 0:
+            return data[0].get('id')
+        return None
+    
     # ===== LOGS =====
     
     async def log(self, user_id: str, level: str, message: str, 
@@ -222,7 +275,7 @@ class OutreachSupabaseClient:
             'user_id': user_id,
             'level': level,
             'message': message,
-            'metadata': json.dumps(metadata) if metadata else '{}'
+            'metadata': metadata or {}
         }
         if campaign_id:
             log_data['campaign_id'] = campaign_id
@@ -411,14 +464,17 @@ class TelegramHandler:
         except Exception as e:
             return False, str(e), None
     
-    async def get_unread_messages(self, client: TelegramClient, username: str) -> List[dict]:
-        """Get unread messages from a user"""
+    async def get_new_messages(self, client: TelegramClient, username: str, last_msg_count: int = 0) -> List[dict]:
+        """Get new incoming messages from a user"""
         try:
             entity = await client.get_entity(username)
             messages = []
             
-            async for msg in client.iter_messages(entity, limit=10):
+            # Get recent messages
+            async for msg in client.iter_messages(entity, limit=20):
                 if msg.out:  # Skip our messages
+                    continue
+                if not msg.text:
                     continue
                 messages.append({
                     'id': msg.id,
@@ -459,6 +515,7 @@ class OutreachWorker:
         self.running = False
         self.daily_sent: Dict[str, int] = {}  # account_id -> count
         self.last_reset = datetime.utcnow().date()
+        self.processed_messages: Dict[str, set] = {}  # chat_id -> set of processed message ids
     
     async def start(self):
         """Start the worker"""
@@ -551,9 +608,8 @@ class OutreachWorker:
             # Phase 1: Send initial messages to pending targets
             await self._send_initial_messages(campaign, accounts, user_id)
             
-            # Phase 2: Process replies if AI is enabled
-            if campaign.get('auto_reply_enabled') and openrouter_key:
-                await self._process_replies(campaign, accounts, user_id, openrouter_key)
+            # Phase 2: Check for new replies and process them
+            await self._check_for_replies(campaign, accounts, user_id, openrouter_key)
             
             # Update campaign stats
             await self.supabase.update_campaign(campaign_id, {
@@ -626,9 +682,14 @@ class OutreachWorker:
             # Send message
             logger.info(f"📤 Sending to @{identifier} via {account['phone_number']}")
             
+            # Ensure username format
+            target_handle = identifier
+            if not target_handle.startswith('@') and not target_handle.startswith('+'):
+                target_handle = f"@{target_handle}"
+            
             success, error, user_info = await self.telegram.send_message(
                 client, 
-                identifier if identifier.startswith('@') or not identifier.startswith('+') else identifier,
+                target_handle,
                 message_template
             )
             
@@ -642,11 +703,12 @@ class OutreachWorker:
                 })
                 
                 # Create chat record
+                clean_username = identifier.replace('@', '')
                 chat = await self.supabase.get_or_create_chat(
                     user_id,
                     account_id,
                     campaign_id,
-                    identifier.replace('@', ''),
+                    clean_username,
                     f"{user_info.get('first_name', '')} {user_info.get('last_name', '')}".strip() if user_info else None
                 )
                 
@@ -655,6 +717,9 @@ class OutreachWorker:
                 
                 # Update counters
                 self.daily_sent[account_id] = self.daily_sent.get(account_id, 0) + 1
+                
+                # Increment campaign messages_sent
+                await self.supabase.increment_campaign_sent(campaign_id)
                 
                 # Log success
                 await self.supabase.log(
@@ -697,36 +762,31 @@ class OutreachWorker:
             
             account_index += 1
     
-    async def _process_replies(self, campaign: dict, accounts: List[dict], 
-                               user_id: str, openrouter_key: str):
-        """Process replies and generate AI responses"""
+    async def _check_for_replies(self, campaign: dict, accounts: List[dict], 
+                                  user_id: str, openrouter_key: str):
+        """Check for new replies in all active chats and process them"""
         campaign_id = str(campaign['id'])
         ai_prompt = campaign.get('ai_prompt', '')
         ai_model = campaign.get('ai_model', 'google/gemini-2.0-flash-001')
+        auto_reply_enabled = campaign.get('auto_reply_enabled', False)
         
-        if not ai_prompt:
-            logger.debug("No AI prompt configured - skipping reply processing")
-            return
-        
-        # Create AI handler
-        ai = AIHandler(openrouter_key, ai_model)
-        
-        # Get chats with unread messages
-        chats = await self.supabase.get_chats_with_unread(user_id)
+        # Get all active chats for this campaign
+        chats = await self.supabase.get_active_chats_for_campaign(campaign_id)
         
         if not chats:
             return
         
-        logger.info(f"💬 Processing {len(chats)} chats with unread messages")
+        logger.info(f"💬 Checking {len(chats)} chats for new messages")
+        
+        # Create AI handler if enabled
+        ai = None
+        if auto_reply_enabled and openrouter_key and ai_prompt:
+            ai = AIHandler(openrouter_key, ai_model)
         
         for chat in chats:
             chat_id = str(chat['id'])
             account_id = str(chat['account_id'])
             target_username = chat['target_username']
-            
-            # Skip if not from our campaign
-            if chat.get('campaign_id') and str(chat['campaign_id']) != campaign_id:
-                continue
             
             # Skip if in manual mode
             if chat.get('status') == 'manual':
@@ -743,15 +803,32 @@ class OutreachWorker:
                 continue
             
             try:
-                # Get new messages from Telegram
-                new_messages = await self.telegram.get_unread_messages(client, target_username)
+                # Get messages from Telegram
+                messages = await self.telegram.get_new_messages(client, target_username)
                 
-                if not new_messages:
-                    # Reset unread count
-                    await self.supabase.update_chat(chat_id, {'unread_count': 0})
+                if not messages:
                     continue
                 
-                # Get conversation history
+                # Initialize processed set for this chat
+                if chat_id not in self.processed_messages:
+                    # Load existing messages from DB to know what's processed
+                    existing = await self.supabase.get_chat_messages(chat_id)
+                    self.processed_messages[chat_id] = {m.get('content', '')[:50] for m in existing if m.get('sender') == 'them'}
+                
+                # Find new messages
+                new_messages = []
+                for msg in messages:
+                    msg_key = msg['text'][:50] if msg['text'] else ''
+                    if msg_key and msg_key not in self.processed_messages[chat_id]:
+                        new_messages.append(msg)
+                        self.processed_messages[chat_id].add(msg_key)
+                
+                if not new_messages:
+                    continue
+                
+                logger.info(f"📥 {len(new_messages)} new message(s) from @{target_username}")
+                
+                # Get conversation history for AI
                 history = await self.supabase.get_chat_messages(chat_id)
                 
                 # Process each new message
@@ -763,58 +840,56 @@ class OutreachWorker:
                     # Save incoming message
                     await self.supabase.add_message(chat_id, 'them', incoming_text)
                     
-                    logger.info(f"📥 New message from @{target_username}: {incoming_text[:50]}...")
+                    # Increment unread count (for UI)
+                    await self.supabase.increment_unread(chat_id)
                     
-                    # Generate AI response
-                    response = await ai.generate_response(ai_prompt, history, incoming_text)
+                    logger.info(f"📥 Message from @{target_username}: {incoming_text[:50]}...")
                     
-                    if response:
-                        # Send response
-                        success, error, _ = await self.telegram.send_message(
-                            client, target_username, response
-                        )
+                    # Generate and send AI response if enabled
+                    if ai:
+                        response = await ai.generate_response(ai_prompt, history, incoming_text)
                         
-                        if success:
-                            await self.supabase.add_message(chat_id, 'me', response)
-                            
-                            # Update campaign stats
-                            await self.supabase.update_campaign(campaign_id, {
-                                'messages_replied': (campaign.get('messages_replied', 0) or 0) + 1
-                            })
-                            
-                            await self.supabase.log(
-                                user_id, 'SUCCESS',
-                                f"AI replied to @{target_username}",
-                                campaign_id, account_id
+                        if response:
+                            # Send response
+                            success, error, _ = await self.telegram.send_message(
+                                client, f"@{target_username}", response
                             )
                             
-                            logger.info(f"🤖 AI replied to @{target_username}")
-                            
-                            # Small delay between responses
-                            await asyncio.sleep(random.randint(5, 15))
-                        else:
-                            logger.error(f"Failed to send AI reply: {error}")
+                            if success:
+                                await self.supabase.add_message(chat_id, 'me', response)
+                                
+                                # Increment campaign replied count
+                                await self.supabase.increment_campaign_replied(campaign_id)
+                                
+                                await self.supabase.log(
+                                    user_id, 'SUCCESS',
+                                    f"AI replied to @{target_username}",
+                                    campaign_id, account_id
+                                )
+                                
+                                logger.info(f"🤖 AI replied to @{target_username}")
+                                
+                                # Add to history for context
+                                history.append({'sender': 'them', 'content': incoming_text})
+                                history.append({'sender': 'me', 'content': response})
+                                
+                                # Small delay between responses
+                                await asyncio.sleep(random.randint(5, 15))
+                            else:
+                                logger.error(f"Failed to send AI reply: {error}")
                     
-                    # Add to history for next iteration
-                    history.append({'sender': 'them', 'content': incoming_text})
-                    if response:
-                        history.append({'sender': 'me', 'content': response})
+                    # Update target as replied
+                    await self.supabase._request(
+                        'PATCH',
+                        f'outreach_targets?username=eq.{target_username}&campaign_id=eq.{campaign_id}',
+                        json={'status': 'replied'}
+                    )
                 
-                # Mark as read
+                # Mark as read in Telegram
                 await self.telegram.mark_as_read(client, target_username)
                 
-                # Update unread count
-                await self.supabase.update_chat(chat_id, {'unread_count': 0})
-                
-                # Update target as replied
-                await self.supabase._request(
-                    'PATCH',
-                    f'outreach_targets?username=eq.{target_username}&campaign_id=eq.{campaign_id}',
-                    json={'status': 'replied'}
-                )
-                
             except Exception as e:
-                logger.error(f"Error processing chat {chat_id}: {e}")
+                logger.error(f"Error checking chat {chat_id}: {e}")
     
     async def shutdown(self):
         """Graceful shutdown"""
