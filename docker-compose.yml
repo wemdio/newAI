@@ -1,4 +1,4 @@
-version: '3.8'
+﻿version: '3.8'
 
 services:
   api:
@@ -10,15 +10,15 @@ services:
     environment:
       - PORT=3000
       - NODE_ENV=production
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - FRONTEND_URL=${FRONTEND_URL}
-      - USE_BATCH_API=${USE_BATCH_API}
-      - BATCH_SIZE=${BATCH_SIZE}
+      - SUPABASE_URL=
+      - SUPABASE_ANON_KEY=
+      - SUPABASE_SERVICE_ROLE_KEY=
+      - TELEGRAM_BOT_TOKEN=
+      - FRONTEND_URL=
+      - USE_BATCH_API=
+      - BATCH_SIZE=
       # OpenRouter headers
-      - YOUR_SITE_URL=${FRONTEND_URL}
+      - YOUR_SITE_URL=
       - YOUR_SITE_NAME=Telegram Lead Scanner
       - AI_MODEL=deepseek/deepseek-v3.2
     restart: always
@@ -28,9 +28,20 @@ services:
       context: ./backend/python-service
       dockerfile: Dockerfile
     environment:
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - SUPABASE_URL=
+      - SUPABASE_ANON_KEY=
+      - SUPABASE_SERVICE_ROLE_KEY=
+      - TELEGRAM_BOT_TOKEN=
     restart: always
 
+  outreach-worker:
+    build:
+      context: ./backend/python-service
+      dockerfile: Dockerfile
+    command: ["python", "-u", "outreach_worker.py"]
+    environment:
+      - SUPABASE_URL=
+      - SUPABASE_ANON_KEY=
+      - SUPABASE_SERVICE_ROLE_KEY=
+      - TELEGRAM_BOT_TOKEN=
+    restart: always

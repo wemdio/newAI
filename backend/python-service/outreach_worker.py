@@ -1,4 +1,4 @@
-"""
+﻿"""
 Outreach Worker - Automatic cold outreach and AI response handler
 
 This worker handles:
@@ -31,7 +31,7 @@ try:
     TELETHON_AVAILABLE = True
 except ImportError:
     TELETHON_AVAILABLE = False
-    logger.warning("⚠️ Telethon not installed - outreach will not work")
+    logger.warning("âš ï¸ Telethon not installed - outreach will not work")
 
 
 class OutreachSupabaseClient:
@@ -50,7 +50,7 @@ class OutreachSupabaseClient:
     
     async def connect(self):
         self.client = httpx.AsyncClient(timeout=30.0)
-        logger.info("✅ Supabase client connected")
+        logger.info("âœ… Supabase client connected")
     
     async def close(self):
         if self.client:
@@ -404,7 +404,7 @@ class TelegramHandler:
                 return None
             
             self.clients[account_id] = client
-            logger.info(f"✅ Connected account: {account['phone_number']}")
+            logger.info(f"âœ… Connected account: {account['phone_number']}")
             return client
             
         except AuthKeyUnregisteredError:
@@ -515,16 +515,15 @@ class OutreachWorker:
         self.running = False
         self.daily_sent: Dict[str, int] = {}  # account_id -> count
         self.last_reset = datetime.utcnow().date()
-        self.processed_messages: Dict[str, set] = {}  # chat_id -> set of processed message ids
     
     async def start(self):
         """Start the worker"""
         logger.info("=" * 60)
-        logger.info("🚀 Outreach Worker Starting")
+        logger.info("ðŸš€ Outreach Worker Starting")
         logger.info("=" * 60)
         
         if not TELETHON_AVAILABLE:
-            logger.error("❌ Telethon not available - cannot start")
+            logger.error("âŒ Telethon not available - cannot start")
             return
         
         try:
@@ -538,9 +537,9 @@ class OutreachWorker:
             await self.main_loop()
             
         except KeyboardInterrupt:
-            logger.warning("⚠️ Received interrupt")
+            logger.warning("âš ï¸ Received interrupt")
         except Exception as e:
-            logger.critical(f"❌ Fatal error: {e}", exc_info=True)
+            logger.critical(f"âŒ Fatal error: {e}", exc_info=True)
         finally:
             await self.shutdown()
     
@@ -550,7 +549,7 @@ class OutreachWorker:
         
         while self.running:
             iteration += 1
-            logger.info(f"🔄 Iteration #{iteration}")
+            logger.info(f"ðŸ”„ Iteration #{iteration}")
             
             try:
                 # Reset daily counters if new day
@@ -560,15 +559,15 @@ class OutreachWorker:
                 campaigns = await self.supabase.get_active_outreach_campaigns()
                 
                 if not campaigns:
-                    logger.info("ℹ️ No active outreach campaigns")
+                    logger.info("â„¹ï¸ No active outreach campaigns")
                 else:
-                    logger.info(f"📋 Processing {len(campaigns)} active campaign(s)")
+                    logger.info(f"ðŸ“‹ Processing {len(campaigns)} active campaign(s)")
                     
                     for campaign in campaigns:
                         await self.process_campaign(campaign)
                 
             except Exception as e:
-                logger.error(f"❌ Error in main loop: {e}", exc_info=True)
+                logger.error(f"âŒ Error in main loop: {e}", exc_info=True)
             
             # Wait before next iteration
             await asyncio.sleep(30)
@@ -577,7 +576,7 @@ class OutreachWorker:
         """Reset daily counters if new day"""
         today = datetime.utcnow().date()
         if today > self.last_reset:
-            logger.info("🔄 Resetting daily counters")
+            logger.info("ðŸ”„ Resetting daily counters")
             self.daily_sent.clear()
             self.last_reset = today
     
@@ -587,7 +586,7 @@ class OutreachWorker:
         user_id = str(campaign['user_id'])
         campaign_name = campaign['name']
         
-        logger.info(f"📋 Processing campaign: {campaign_name}")
+        logger.info(f"ðŸ“‹ Processing campaign: {campaign_name}")
         
         try:
             # Get user config for API key
@@ -597,12 +596,12 @@ class OutreachWorker:
             # Get accounts for this campaign
             account_ids = campaign.get('account_ids', [])
             if not account_ids:
-                logger.warning(f"⚠️ Campaign {campaign_name} has no accounts")
+                logger.warning(f"âš ï¸ Campaign {campaign_name} has no accounts")
                 return
             
             accounts = await self.supabase.get_outreach_accounts(account_ids)
             if not accounts:
-                logger.warning(f"⚠️ No active accounts for campaign {campaign_name}")
+                logger.warning(f"âš ï¸ No active accounts for campaign {campaign_name}")
                 return
             
             # Phase 1: Send initial messages to pending targets
@@ -617,7 +616,7 @@ class OutreachWorker:
             })
             
         except Exception as e:
-            logger.error(f"❌ Error processing campaign {campaign_name}: {e}")
+            logger.error(f"âŒ Error processing campaign {campaign_name}: {e}")
             await self.supabase.log(user_id, 'ERROR', f"Campaign error: {e}", campaign_id)
     
     async def _send_initial_messages(self, campaign: dict, accounts: List[dict], user_id: str):
@@ -635,7 +634,7 @@ class OutreachWorker:
             logger.debug(f"No pending targets for campaign {campaign['name']}")
             return
         
-        logger.info(f"🎯 Found {len(targets)} pending targets")
+        logger.info(f"ðŸŽ¯ Found {len(targets)} pending targets")
         
         # Round-robin through accounts
         account_index = 0
@@ -667,7 +666,7 @@ class OutreachWorker:
                 account_index += 1
             
             if not account:
-                logger.warning("⚠️ All accounts reached daily limit")
+                logger.warning("âš ï¸ All accounts reached daily limit")
                 break
             
             account_id = str(account['id'])
@@ -680,7 +679,7 @@ class OutreachWorker:
                 continue
             
             # Send message
-            logger.info(f"📤 Sending to @{identifier} via {account['phone_number']}")
+            logger.info(f"ðŸ“¤ Sending to @{identifier} via {account['phone_number']}")
             
             # Ensure username format
             target_handle = identifier
@@ -728,11 +727,11 @@ class OutreachWorker:
                     campaign_id, account_id
                 )
                 
-                logger.info(f"✅ Sent to @{identifier}")
+                logger.info(f"âœ… Sent to @{identifier}")
                 
                 # Wait before next message
                 delay = random.randint(delay_min, delay_max)
-                logger.debug(f"⏳ Waiting {delay}s before next message")
+                logger.debug(f"â³ Waiting {delay}s before next message")
                 await asyncio.sleep(delay)
                 
             else:
@@ -750,7 +749,7 @@ class OutreachWorker:
                 # Check if account is limited
                 if 'flood' in error.lower():
                     await self.supabase.update_account_status(account_id, 'paused', error)
-                    logger.warning(f"⚠️ Account {account['phone_number']} rate limited")
+                    logger.warning(f"âš ï¸ Account {account['phone_number']} rate limited")
                 
                 await self.supabase.log(
                     user_id, 'WARNING',
@@ -758,7 +757,7 @@ class OutreachWorker:
                     campaign_id, account_id
                 )
                 
-                logger.warning(f"⚠️ Failed to send to @{identifier}: {error}")
+                logger.warning(f"âš ï¸ Failed to send to @{identifier}: {error}")
             
             account_index += 1
     
@@ -776,7 +775,7 @@ class OutreachWorker:
         if not chats:
             return
         
-        logger.info(f"💬 Checking {len(chats)} chats for new messages")
+        logger.info(f"ðŸ’¬ Checking {len(chats)} chats for new messages")
         
         # Create AI handler if enabled
         ai = None
@@ -787,6 +786,13 @@ class OutreachWorker:
             chat_id = str(chat['id'])
             account_id = str(chat['account_id'])
             target_username = chat['target_username']
+            last_seen_at = chat.get('last_message_at')
+            last_seen_dt = None
+            if last_seen_at:
+                try:
+                    last_seen_dt = datetime.fromisoformat(last_seen_at.replace('Z', '+00:00'))
+                except Exception:
+                    last_seen_dt = None
             
             # Skip if in manual mode
             if chat.get('status') == 'manual':
@@ -809,24 +815,24 @@ class OutreachWorker:
                 if not messages:
                     continue
                 
-                # Initialize processed set for this chat
-                if chat_id not in self.processed_messages:
-                    # Load existing messages from DB to know what's processed
-                    existing = await self.supabase.get_chat_messages(chat_id)
-                    self.processed_messages[chat_id] = {m.get('content', '')[:50] for m in existing if m.get('sender') == 'them'}
-                
-                # Find new messages
+                # Filter only new messages since last_message_at
                 new_messages = []
                 for msg in messages:
-                    msg_key = msg['text'][:50] if msg['text'] else ''
-                    if msg_key and msg_key not in self.processed_messages[chat_id]:
-                        new_messages.append(msg)
-                        self.processed_messages[chat_id].add(msg_key)
+                    msg_date_raw = msg.get('date')
+                    msg_date = None
+                    if msg_date_raw:
+                        try:
+                            msg_date = datetime.fromisoformat(msg_date_raw.replace('Z', '+00:00'))
+                        except Exception:
+                            msg_date = None
+                    if last_seen_dt and msg_date and msg_date <= last_seen_dt:
+                        continue
+                    new_messages.append(msg)
                 
                 if not new_messages:
                     continue
                 
-                logger.info(f"📥 {len(new_messages)} new message(s) from @{target_username}")
+                logger.info(f"ðŸ“¥ {len(new_messages)} new message(s) from @{target_username}")
                 
                 # Get conversation history for AI
                 history = await self.supabase.get_chat_messages(chat_id)
@@ -843,7 +849,7 @@ class OutreachWorker:
                     # Increment unread count (for UI)
                     await self.supabase.increment_unread(chat_id)
                     
-                    logger.info(f"📥 Message from @{target_username}: {incoming_text[:50]}...")
+                    logger.info(f"ðŸ“¥ Message from @{target_username}: {incoming_text[:50]}...")
                     
                     # Generate and send AI response if enabled
                     if ai:
@@ -867,7 +873,7 @@ class OutreachWorker:
                                     campaign_id, account_id
                                 )
                                 
-                                logger.info(f"🤖 AI replied to @{target_username}")
+                                logger.info(f"ðŸ¤– AI replied to @{target_username}")
                                 
                                 # Add to history for context
                                 history.append({'sender': 'them', 'content': incoming_text})
@@ -890,10 +896,9 @@ class OutreachWorker:
                 
             except Exception as e:
                 logger.error(f"Error checking chat {chat_id}: {e}")
-    
     async def shutdown(self):
         """Graceful shutdown"""
-        logger.info("🛑 Shutting down...")
+        logger.info("ðŸ›‘ Shutting down...")
         
         self.running = False
         
@@ -903,13 +908,13 @@ class OutreachWorker:
         if self.supabase:
             await self.supabase.close()
         
-        logger.info("✅ Shutdown complete")
+        logger.info("âœ… Shutdown complete")
 
 
 def main():
     """Entry point"""
     if sys.version_info < (3, 8):
-        print("❌ Python 3.8+ required")
+        print("âŒ Python 3.8+ required")
         sys.exit(1)
     
     worker = OutreachWorker()
@@ -917,11 +922,12 @@ def main():
     try:
         asyncio.run(worker.start())
     except KeyboardInterrupt:
-        print("\n👋 Goodbye!")
+        print("\nðŸ‘‹ Goodbye!")
     except Exception as e:
-        print(f"❌ Fatal error: {e}")
+        print(f"âŒ Fatal error: {e}")
         sys.exit(1)
 
 
 if __name__ == '__main__':
     main()
+
