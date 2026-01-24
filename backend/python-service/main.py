@@ -1,4 +1,4 @@
-"""
+﻿"""
 AI Messaging Service - Main Entry Point
 
 Automatically contacts detected leads using Telegram accounts and AI conversation.
@@ -17,7 +17,7 @@ from ai_communicator import AICommunicator
 from telethon_client import TelethonManager
 from lead_manager import LeadManager
 
-logger = setup_logger('LeadScanner')
+logger = setup_logger('AIMessagingWorker')
 
 
 class AIMessagingService:
@@ -33,12 +33,12 @@ class AIMessagingService:
     async def start(self):
         """Start the service"""
         logger.info("=" * 60)
-        logger.info("🤖 AI Messaging Service")
+        logger.info("ðŸ¤– AI Messaging Service")
         logger.info("=" * 60)
         
         try:
             # Initialize components
-            logger.info("🔧 Initializing components...")
+            logger.info("ðŸ”§ Initializing components...")
             
             # Connect to Supabase (REST API)
             self.supabase = SupabaseClient(SUPABASE_URL, SUPABASE_KEY)
@@ -48,7 +48,7 @@ class AIMessagingService:
             self.safety = SafetyManager(self.supabase)
             self.telethon = TelethonManager(self.supabase, self.safety)
             
-            logger.info("✅ All components initialized")
+            logger.info("âœ… All components initialized")
             
             # Check and reset daily counters if needed
             await self.safety.check_and_reset_daily_counters()
@@ -58,10 +58,10 @@ class AIMessagingService:
             await self.main_loop()
             
         except KeyboardInterrupt:
-            logger.warning("⚠️ Received interrupt signal")
+            logger.warning("âš ï¸ Received interrupt signal")
             await self.shutdown()
         except Exception as e:
-            logger.critical(f"❌ Fatal error: {e}", exc_info=True)
+            logger.critical(f"âŒ Fatal error: {e}", exc_info=True)
             await self.shutdown()
             sys.exit(1)
     
@@ -71,7 +71,7 @@ class AIMessagingService:
         
         while self.running:
             iteration += 1
-            logger.info(f"🔄 Iteration #{iteration}")
+            logger.info(f"ðŸ”„ Iteration #{iteration}")
             
             # Clean up finished tasks
             finished_campaigns = []
@@ -82,15 +82,15 @@ class AIMessagingService:
                     try:
                         exc = task.exception()
                         if exc:
-                            logger.error(f"❌ Campaign {campaign_id} task failed: {exc}")
+                            logger.error(f"âŒ Campaign {campaign_id} task failed: {exc}")
                     except Exception as e:
-                        logger.error(f"⚠️ Error checking task status: {e}")
+                        logger.error(f"âš ï¸ Error checking task status: {e}")
             
             for campaign_id in finished_campaigns:
                 del self.active_campaign_tasks[campaign_id]
                 
             if self.active_campaign_tasks:
-                logger.info(f"ℹ️ Currently running campaigns: {len(self.active_campaign_tasks)}")
+                logger.info(f"â„¹ï¸ Currently running campaigns: {len(self.active_campaign_tasks)}")
             
             try:
                 # Process pending manual messages from queue
@@ -103,9 +103,9 @@ class AIMessagingService:
                 campaigns = await self.supabase.get_active_campaigns()
                 
                 if not campaigns:
-                    logger.info("ℹ️ No active campaigns")
+                    logger.info("â„¹ï¸ No active campaigns")
                 else:
-                    logger.info(f"📋 Found {len(campaigns)} active campaign(s)")
+                    logger.info(f"ðŸ“‹ Found {len(campaigns)} active campaign(s)")
                     
                     # Process each campaign
                     for campaign in campaigns:
@@ -113,11 +113,11 @@ class AIMessagingService:
                         
                         # Check if already running
                         if campaign_id in self.active_campaign_tasks:
-                            logger.debug(f"🔄 Campaign {campaign['name']} is already running - skipping duplicate start")
+                            logger.debug(f"ðŸ”„ Campaign {campaign['name']} is already running - skipping duplicate start")
                             continue
                             
                         # Start background task for this campaign
-                        logger.info(f"🚀 Starting background task for: {campaign['name']}")
+                        logger.info(f"ðŸš€ Starting background task for: {campaign['name']}")
                         task = asyncio.create_task(self.process_campaign(campaign))
                         self.active_campaign_tasks[campaign_id] = task
                 
@@ -129,11 +129,11 @@ class AIMessagingService:
                 await self.safety.check_and_recover_accounts()
                 
             except Exception as e:
-                logger.error(f"❌ Error in main loop: {e}", exc_info=True)
+                logger.error(f"âŒ Error in main loop: {e}", exc_info=True)
             
             # Wait before next iteration (60 seconds)
             # The campaigns run in background during this sleep!
-            logger.debug(f"⏸️ Main loop sleeping for 60 seconds...")
+            logger.debug(f"â¸ï¸ Main loop sleeping for 60 seconds...")
             await asyncio.sleep(60)
     
     async def process_message_queue(self):
@@ -145,7 +145,7 @@ class AIMessagingService:
             if not messages:
                 return  # Nothing to process
             
-            logger.info(f"📬 Processing {len(messages)} pending manual message(s)")
+            logger.info(f"ðŸ“¬ Processing {len(messages)} pending manual message(s)")
             
             for msg in messages:
                 msg_id = msg['id']
@@ -154,7 +154,7 @@ class AIMessagingService:
                 peer_username = msg['peer_username']
                 content = msg['content']
                 
-                logger.info(f"   📤 Sending to @{peer_username}: {content[:50]}...")
+                logger.info(f"   ðŸ“¤ Sending to @{peer_username}: {content[:50]}...")
                 
                 try:
                     # Mark as processing to prevent duplicates if worker restarts mid-loop
@@ -164,7 +164,7 @@ class AIMessagingService:
                     account = await self.supabase.get_account_by_id(account_id)
                     
                     if not account:
-                        logger.error(f"   ❌ Account {account_id} not found")
+                        logger.error(f"   âŒ Account {account_id} not found")
                         await self.supabase.update_message_queue_status(msg_id, 'failed', 'Account not found')
                         continue
                     
@@ -180,7 +180,7 @@ class AIMessagingService:
                     
                     if result == "success":
                         await self.supabase.update_message_queue_status(msg_id, 'sent')
-                        logger.info(f"   ✅ Message sent to @{peer_username}")
+                        logger.info(f"   âœ… Message sent to @{peer_username}")
 
                         # Persist message to conversation history so UI shows it after reload
                         if conversation_id:
@@ -191,7 +191,7 @@ class AIMessagingService:
                             )
                             if not ok:
                                 logger.warning(
-                                    f"   ⚠️ Message {msg_id} sent but failed to append to conversation_history "
+                                    f"   âš ï¸ Message {msg_id} sent but failed to append to conversation_history "
                                     f"(conversation_id={conversation_id})"
                                 )
                                 # Keep status as sent to avoid re-sending, but store error for visibility
@@ -201,17 +201,17 @@ class AIMessagingService:
                                     'Sent, but failed to append to conversation_history'
                                 )
                         else:
-                            logger.warning(f"   ⚠️ Message {msg_id} has no conversation_id - cannot append to history")
+                            logger.warning(f"   âš ï¸ Message {msg_id} has no conversation_id - cannot append to history")
                     else:
                         await self.supabase.update_message_queue_status(msg_id, 'failed', f'Send failed: {result}')
-                        logger.error(f"   ❌ Failed to send: {result}")
+                        logger.error(f"   âŒ Failed to send: {result}")
                         
                 except Exception as e:
-                    logger.error(f"   ❌ Error sending message {msg_id}: {e}")
+                    logger.error(f"   âŒ Error sending message {msg_id}: {e}")
                     await self.supabase.update_message_queue_status(msg_id, 'failed', str(e))
                     
         except Exception as e:
-            logger.error(f"⚠️ Error processing message queue: {e}")
+            logger.error(f"âš ï¸ Error processing message queue: {e}")
     
     async def check_and_reconnect_accounts(self):
         """Check for accounts that need reconnection and reconnect them"""
@@ -221,13 +221,13 @@ class AIMessagingService:
             if not accounts:
                 return  # Nothing to reconnect
             
-            logger.info(f"🔄 Found {len(accounts)} account(s) needing reconnection")
+            logger.info(f"ðŸ”„ Found {len(accounts)} account(s) needing reconnection")
             
             for account in accounts:
                 account_id = str(account['id'])
                 account_name = account.get('account_name', f'Account {account_id}')
                 
-                logger.info(f"🔄 Reconnecting {account_name} (new proxy: {account.get('proxy_url', 'none')})")
+                logger.info(f"ðŸ”„ Reconnecting {account_name} (new proxy: {account.get('proxy_url', 'none')})")
                 
                 # Reconnect the account
                 success = await self.telethon.reconnect_account(account_id, account)
@@ -235,13 +235,13 @@ class AIMessagingService:
                 if success:
                     # Clear the reconnect flag
                     await self.supabase.clear_reconnect_flag(account_id)
-                    logger.info(f"   ✅ {account_name} reconnected successfully")
+                    logger.info(f"   âœ… {account_name} reconnected successfully")
                 else:
-                    logger.error(f"   ❌ Failed to reconnect {account_name}")
+                    logger.error(f"   âŒ Failed to reconnect {account_name}")
                     # Keep the flag so we retry next iteration
                 
         except Exception as e:
-            logger.error(f"⚠️ Error checking accounts for reconnection: {e}")
+            logger.error(f"âš ï¸ Error checking accounts for reconnection: {e}")
     
     async def process_campaign(self, campaign: dict):
         """Process a single campaign"""
@@ -252,7 +252,7 @@ class AIMessagingService:
             user_config = await self.supabase.get_user_config(user_id)
             
             if not user_config or not user_config.get('openrouter_api_key'):
-                logger.warning(f"⚠️ Campaign {campaign['id']}: User {user_id} has no OpenRouter API key configured")
+                logger.warning(f"âš ï¸ Campaign {campaign['id']}: User {user_id} has no OpenRouter API key configured")
                 return
             
             openrouter_api_key = user_config['openrouter_api_key']
@@ -276,17 +276,17 @@ class AIMessagingService:
             await lead_mgr.process_campaign(campaign)
             
         except Exception as e:
-            logger.error(f"❌ Error processing campaign {campaign['id']}: {e}", exc_info=True)
+            logger.error(f"âŒ Error processing campaign {campaign['id']}: {e}", exc_info=True)
     
     async def shutdown(self):
         """Graceful shutdown"""
-        logger.info("🛑 Shutting down...")
+        logger.info("ðŸ›‘ Shutting down...")
         
         self.running = False
         
         # Cancel active campaign tasks
         if hasattr(self, 'active_campaign_tasks') and self.active_campaign_tasks:
-            logger.info(f"⏳ Cancelling {len(self.active_campaign_tasks)} active campaign tasks...")
+            logger.info(f"â³ Cancelling {len(self.active_campaign_tasks)} active campaign tasks...")
             for task in self.active_campaign_tasks.values():
                 task.cancel()
             
@@ -294,7 +294,7 @@ class AIMessagingService:
             try:
                 await asyncio.wait(self.active_campaign_tasks.values(), timeout=5)
             except Exception as e:
-                logger.error(f"⚠️ Error waiting for tasks to cancel: {e}")
+                logger.error(f"âš ï¸ Error waiting for tasks to cancel: {e}")
         
         # Close Telethon clients
         if self.telethon:
@@ -304,14 +304,14 @@ class AIMessagingService:
         if self.supabase:
             await self.supabase.close()
         
-        logger.info("✅ Shutdown complete")
+        logger.info("âœ… Shutdown complete")
 
 
 def main():
     """Entry point"""
     # Check Python version
     if sys.version_info < (3, 8):
-        print("❌ Python 3.8+ required")
+        print("âŒ Python 3.8+ required")
         sys.exit(1)
     
     # Create and run service
@@ -320,12 +320,13 @@ def main():
     try:
         asyncio.run(service.start())
     except KeyboardInterrupt:
-        print("\n👋 Goodbye!")
+        print("\nðŸ‘‹ Goodbye!")
     except Exception as e:
-        print(f"❌ Fatal error: {e}")
+        print(f"âŒ Fatal error: {e}")
         sys.exit(1)
 
 
 if __name__ == '__main__':
     main()
+
 
