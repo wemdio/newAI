@@ -223,7 +223,7 @@ const Outreach = () => {
 
     const formData = new FormData();
     for (let i = 0; i < importFiles.length; i++) {
-      formData.append('files', importFiles[i]);
+        formData.append('files', importFiles[i]);
     }
     formData.append('default_proxy', defaultProxy);
 
@@ -302,50 +302,57 @@ const Outreach = () => {
 
   return (
     <div className="outreach-page">
-      <header className="outreach-header">
-        <div className="header-content">
-          <h1>🚀 Аутрич</h1>
-          <p className="header-subtitle">Автоматическая рассылка и AI-ответы в Telegram</p>
-        </div>
-        {stats && (
-          <div className="stats-bar">
-            <div className="stat-item">
-              <span className="stat-value">{stats.accounts?.active || 0}</span>
-              <span className="stat-label">Аккаунтов</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-value">{stats.campaigns?.active || 0}</span>
-              <span className="stat-label">Активных</span>
-            </div>
-            <div className="stat-item">
-              <span className="stat-value">{stats.campaigns?.totalSent || 0}</span>
-              <span className="stat-label">Отправлено</span>
-            </div>
-            <div className="stat-item highlight">
-              <span className="stat-value">{stats.campaigns?.totalReplied || 0}</span>
-              <span className="stat-label">Ответов</span>
+      <div className="page-header">
+        <h1>Аутрич</h1>
+        <p className="subtitle">Автоматическая рассылка и AI-ответы в Telegram</p>
+      </div>
+
+      {stats && (
+        <div className="stats-overview">
+          <div className="stat-card">
+            <div className="stat-content">
+              <div className="stat-label">Аккаунты</div>
+              <div className="stat-value">{stats.accounts?.active || 0}</div>
             </div>
           </div>
-        )}
-      </header>
-
-      <nav className="outreach-tabs">
+          <div className="stat-card">
+            <div className="stat-content">
+              <div className="stat-label">Кампании</div>
+              <div className="stat-value">{stats.campaigns?.active || 0}</div>
+            </div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-content">
+              <div className="stat-label">Отправлено</div>
+              <div className="stat-value">{stats.campaigns?.totalSent || 0}</div>
+            </div>
+          </div>
+          <div className="stat-card hot">
+            <div className="stat-content">
+              <div className="stat-label">Ответов</div>
+              <div className="stat-value">{stats.campaigns?.totalReplied || 0}</div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      <div className="outreach-tabs">
         {['campaigns', 'accounts', 'chats', 'logs'].map(tab => (
           <button
             key={tab}
             className={`tab-button ${activeTab === tab ? 'active' : ''}`}
             onClick={() => setActiveTab(tab)}
           >
-            {tab === 'campaigns' && '📋 Кампании'}
-            {tab === 'accounts' && '👤 Аккаунты'}
-            {tab === 'chats' && '💬 Чаты'}
-            {tab === 'logs' && '📜 Логи'}
+            {tab === 'campaigns' && 'Кампании'}
+            {tab === 'accounts' && 'Аккаунты'}
+            {tab === 'chats' && 'Чаты'}
+            {tab === 'logs' && 'Логи'}
             {tab === 'chats' && stats?.chats?.unread > 0 && (
               <span className="unread-badge">{stats.chats.unread}</span>
             )}
           </button>
         ))}
-      </nav>
+      </div>
 
       <main className="tab-content">
         {/* ============ CAMPAIGNS TAB ============ */}
@@ -357,15 +364,14 @@ const Outreach = () => {
                 className="btn btn-primary"
                 onClick={() => { resetCampaignForm(); setShowCampaignModal(true); }}
               >
-                + Новая кампания
-              </button>
+                Новая кампания
+                </button>
             </div>
-
+            
             {loading ? (
-              <div className="loading-spinner">Загрузка...</div>
+              <div className="loading-spinner"></div>
             ) : campaigns.length === 0 ? (
               <div className="empty-state">
-                <div className="empty-icon">📋</div>
                 <h3>Нет кампаний</h3>
                 <p>Создайте первую кампанию для начала рассылки</p>
               </div>
@@ -399,13 +405,13 @@ const Outreach = () => {
 
                     <div className="campaign-settings-preview">
                       {camp.auto_reply_enabled && (
-                        <span className="setting-tag ai">🤖 AI-ответы</span>
+                        <span className="setting-tag ai">AI-ответы</span>
                       )}
                       <span className="setting-tag">
-                        ⏱️ {camp.message_delay_min}-{camp.message_delay_max}с
+                        {camp.message_delay_min}-{camp.message_delay_max}с
                       </span>
                       <span className="setting-tag">
-                        📊 {camp.daily_limit}/день
+                        {camp.daily_limit}/день
                       </span>
                     </div>
 
@@ -415,33 +421,33 @@ const Outreach = () => {
                           className="btn btn-warning"
                           onClick={() => handleStopCampaign(camp.id)}
                         >
-                          ⏸️ Стоп
+                          Стоп
                         </button>
                       ) : (
                         <button 
                           className="btn btn-success"
                           onClick={() => handleStartCampaign(camp.id)}
                         >
-                          ▶️ Запустить
+                          Запустить
                         </button>
                       )}
                       <button 
                         className="btn btn-secondary"
                         onClick={() => handleOpenTargets(camp)}
                       >
-                        🎯 Цели
+                        Цели
                       </button>
                       <button 
                         className="btn btn-secondary"
                         onClick={() => handleEditCampaign(camp)}
                       >
-                        ✏️
+                        Изменить
                       </button>
                       <button 
                         className="btn btn-danger"
                         onClick={() => handleDeleteCampaign(camp.id)}
                       >
-                        🗑️
+                        Удалить
                       </button>
                     </div>
                   </div>
@@ -461,22 +467,21 @@ const Outreach = () => {
                   className="btn btn-secondary"
                   onClick={() => setShowImportModal(true)}
                 >
-                  📦 Импорт ZIP
+                  Импорт ZIP
                 </button>
                 <button 
                   className="btn btn-primary"
                   onClick={() => setShowAccountModal(true)}
                 >
-                  + Добавить
+                  Добавить
                 </button>
               </div>
             </div>
 
             {loading ? (
-              <div className="loading-spinner">Загрузка...</div>
+              <div className="loading-spinner"></div>
             ) : accounts.length === 0 ? (
               <div className="empty-state">
-                <div className="empty-icon">👤</div>
                 <h3>Нет аккаунтов</h3>
                 <p>Добавьте Telegram аккаунты для рассылки</p>
               </div>
@@ -489,16 +494,16 @@ const Outreach = () => {
                       {getStatusBadge(acc.status)}
                     </div>
                     <div className="account-details">
-                      {acc.proxy_url && (
+                    {acc.proxy_url && (
                         <p className="proxy-info">
-                          🌐 {acc.proxy_url.split('@')[1] || acc.proxy_url.substring(0, 30)}...
+                          {acc.proxy_url.split('@')[1] || acc.proxy_url.substring(0, 30)}...
                         </p>
                       )}
                       {acc.last_active_at && (
                         <p className="last-active">
-                          ⏰ {new Date(acc.last_active_at).toLocaleString()}
+                          {new Date(acc.last_active_at).toLocaleString()}
                         </p>
-                      )}
+                    )}
                     </div>
                     <div className="account-actions">
                       <button 
@@ -523,7 +528,7 @@ const Outreach = () => {
                 <div className="section-header">
                   <h2>Диалоги</h2>
                   <button className="btn btn-secondary btn-small" onClick={fetchData}>
-                    🔄
+                    Обновить
                   </button>
                 </div>
                 
@@ -573,7 +578,7 @@ const Outreach = () => {
                           className={`btn btn-small ${selectedChat.status === 'manual' ? 'btn-success' : 'btn-warning'}`}
                           onClick={() => handleChatModeToggle(selectedChat.id, selectedChat.status)}
                         >
-                          {selectedChat.status === 'manual' ? '🤖 Вкл. AI' : '✋ Ручной режим'}
+                          {selectedChat.status === 'manual' ? 'Вкл. AI' : 'Ручной режим'}
                         </button>
                       </div>
                     </div>
@@ -590,7 +595,6 @@ const Outreach = () => {
                   </>
                 ) : (
                   <div className="empty-state">
-                    <div className="empty-icon">💬</div>
                     <h3>Выберите диалог</h3>
                     <p>Кликните на диалог слева для просмотра сообщений</p>
                   </div>
@@ -606,7 +610,7 @@ const Outreach = () => {
             <div className="section-header">
               <h2>Логи воркера</h2>
               <button className="btn btn-secondary" onClick={fetchData}>
-                🔄 Обновить
+                Обновить
               </button>
             </div>
             <div className="logs-container">
@@ -678,11 +682,11 @@ const Outreach = () => {
 
               <div className="form-group">
                 <label className="checkbox-label">
-                  <input
-                    type="checkbox"
+                <input 
+                    type="checkbox" 
                     checked={campaignForm.auto_reply_enabled}
                     onChange={e => setCampaignForm({...campaignForm, auto_reply_enabled: e.target.checked})}
-                  />
+                />
                   <span>Включить AI авто-ответы</span>
                 </label>
               </div>
@@ -690,7 +694,7 @@ const Outreach = () => {
               {campaignForm.auto_reply_enabled && (
                 <div className="form-group">
                   <label>AI Промпт (инструкции для AI)</label>
-                  <textarea
+                      <textarea 
                     value={campaignForm.ai_prompt}
                     onChange={e => setCampaignForm({...campaignForm, ai_prompt: e.target.value})}
                     placeholder="Ты менеджер по продажам. Твоя задача - выявить интерес к продукту и назначить звонок. Будь дружелюбным и не навязчивым..."
@@ -727,8 +731,8 @@ const Outreach = () => {
                     min={1}
                     max={100}
                   />
-                </div>
-              </div>
+                    </div>
+                  </div>
 
               <div className="form-group">
                 <label>Выберите аккаунты для рассылки</label>
@@ -748,9 +752,9 @@ const Outreach = () => {
                           <small>{acc.status}</small>
                         </span>
                       </label>
-                    ))
-                  )}
-                </div>
+                ))
+              )}
+            </div>
               </div>
 
               <div className="modal-actions">
@@ -831,9 +835,9 @@ const Outreach = () => {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
+                    </div>
+            </div>
+        )}
 
       {/* ============ IMPORT MODAL ============ */}
       {showImportModal && (
@@ -849,12 +853,12 @@ const Outreach = () => {
               </p>
               <div className="form-group">
                 <label>ZIP файл(ы)</label>
-                <input
-                  type="file"
-                  accept=".zip"
+                <input 
+                  type="file" 
+                  accept=".zip" 
                   multiple
-                  onChange={e => setImportFiles(e.target.files)}
-                  required
+                  onChange={e => setImportFiles(e.target.files)} 
+                  required 
                 />
                 {importFiles.length > 0 && (
                   <small>{importFiles.length} файл(ов) выбрано</small>
@@ -862,10 +866,10 @@ const Outreach = () => {
               </div>
               <div className="form-group">
                 <label>Proxy по умолчанию (опционально)</label>
-                <input
-                  type="text"
-                  value={defaultProxy}
-                  onChange={e => setDefaultProxy(e.target.value)}
+                <input 
+                  type="text" 
+                  value={defaultProxy} 
+                  onChange={e => setDefaultProxy(e.target.value)} 
                   placeholder="socks5://user:pass@host:port"
                 />
               </div>
@@ -906,7 +910,7 @@ const Outreach = () => {
               </div>
               <div className="targets-stats">
                 <p>
-                  📊 Строк введено: <strong>{targetText.split('\n').filter(l => l.trim()).length}</strong>
+                  Строк введено: <strong>{targetText.split('\n').filter(l => l.trim()).length}</strong>
                 </p>
               </div>
               <div className="modal-actions">
