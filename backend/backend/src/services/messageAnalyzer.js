@@ -79,7 +79,7 @@ const normalizeBatchAIResult = (aiResult, expectedMessageId) => {
         const parsed = JSON.parse(s);
         normalized.matched_criteria = Array.isArray(parsed) ? parsed : (s ? [s] : []);
       } catch {
-        normalized.matched_criteria = s ? [s] : [];
+    normalized.matched_criteria = s ? [s] : [];
       }
     } else {
       normalized.matched_criteria = s ? [s] : [];

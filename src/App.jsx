@@ -16,6 +16,7 @@ const AIMessaging = React.lazy(() => import('./pages/AIMessaging'));
 const LeadAudit = React.lazy(() => import('./pages/LeadAudit'));
 const LandingPage = React.lazy(() => import('./pages/LandingPage'));
 const Contacts = React.lazy(() => import('./pages/Contacts'));
+const Outreach = React.lazy(() => import('./pages/Outreach'));
 
 const LoadingSpinner = () => (
   <div className="app loading-screen">
@@ -71,6 +72,13 @@ const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setAc
                   AI Рассылки
                 </Link>
                 <Link 
+                  to="/outreach" 
+                  className={`nav-link ${activeTab === 'outreach' ? 'active' : ''}`}
+                  onClick={() => setActiveTab('outreach')}
+                >
+                  🚀 Аутрич
+                </Link>
+                <Link 
                   to="/contacts" 
                   className={`nav-link ${activeTab === 'contacts' ? 'active' : ''}`}
                   onClick={() => setActiveTab('contacts')}
@@ -115,6 +123,13 @@ const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setAc
                 AI Рассылки
               </Link>
               <Link 
+                to="/outreach" 
+                className={`telegram-nav-item ${activeTab === 'outreach' ? 'active' : ''}`}
+                onClick={() => setActiveTab('outreach')}
+              >
+                Аутрич
+              </Link>
+              <Link 
                 to="/contacts" 
                 className={`telegram-nav-item ${activeTab === 'contacts' ? 'active' : ''}`}
                 onClick={() => setActiveTab('contacts')}
@@ -143,6 +158,7 @@ const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setAc
                 <Route path="/leads" element={<Leads />} />
                 <Route path="/config" element={<Configuration />} />
                 <Route path="/messaging" element={<AIMessaging />} />
+                <Route path="/outreach" element={<Outreach />} />
                 <Route path="/contacts" element={<Contacts />} />
                 <Route path="/audit" element={<LeadAudit />} />
                 <Route path="*" element={<Navigate to="/leads" replace />} />

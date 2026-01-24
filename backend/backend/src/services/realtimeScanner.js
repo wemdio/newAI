@@ -241,10 +241,10 @@ const processBatch = async () => {
         const messagesLimit = parseInt(process.env.MESSAGES_PER_CYCLE || '1000', 10);
         const { data: messages, error } = await runSupabaseQueryWithRetry(
           () => supabase
-            .from('messages')
-            .select('*')
-            .gt('id', userLastId)
-            .order('id', { ascending: true })
+          .from('messages')
+          .select('*')
+          .gt('id', userLastId)
+          .order('id', { ascending: true })
             .limit(messagesLimit),
           {
             userId,
