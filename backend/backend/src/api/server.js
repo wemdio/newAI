@@ -18,7 +18,8 @@ import messagingRoutes from './routes/messaging.js';
 import auditRoutes from './routes/audit.js';
 import promptRoutes from './routes/prompt.js';
 import landingRoutes from './routes/landing.js';
-import outreachRoutes from './routes/outreach.js';
+// TEMPORARILY DISABLED - debugging crash
+// import outreachRoutes from './routes/outreach.js';
 import contactsRoutes from './routes/contacts.js';
 
 /**
@@ -120,7 +121,8 @@ app.use('/api/messaging', messagingRoutes);
 app.use('/api/audit', auditRoutes);
 app.use('/api/prompt', promptRoutes);
 app.use('/api/landing', landingRoutes);
-app.use('/api/outreach', outreachRoutes);
+// TEMPORARILY DISABLED - debugging crash
+// app.use('/api/outreach', outreachRoutes);
 app.use('/api/contacts', contactsRoutes);
 
 // 404 handler

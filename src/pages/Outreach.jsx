@@ -469,13 +469,13 @@ const Outreach = () => {
                 >
                   Импорт ZIP
                 </button>
-                <button 
+                        <button 
                   className="btn btn-primary"
                   onClick={() => setShowAccountModal(true)}
-                >
+                        >
                   Добавить
-                </button>
-              </div>
+                        </button>
+                    </div>
             </div>
 
             {loading ? (
@@ -678,8 +678,8 @@ const Outreach = () => {
                   rows={4}
                   required
                 />
-              </div>
-
+            </div>
+              
               <div className="form-group">
                 <label className="checkbox-label">
                 <input 
@@ -833,7 +833,7 @@ const Outreach = () => {
                 <button type="submit" className="btn btn-primary">
                   Добавить
                 </button>
-              </div>
+            </div>
             </form>
                     </div>
             </div>
