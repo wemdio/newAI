@@ -76,7 +76,7 @@ const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setAc
                   className={`nav-link ${activeTab === 'outreach' ? 'active' : ''}`}
                   onClick={() => setActiveTab('outreach')}
                 >
-                  🚀 Аутрич
+                  Аутрич
                 </Link>
                 <Link 
                   to="/contacts" 

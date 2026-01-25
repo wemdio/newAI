@@ -38,7 +38,7 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 20px;
+  padding: 12px;
   transition: all 0.2s ease;
 }
 
@@ -54,12 +54,12 @@
 
 .stat-label {
   color: var(--text-secondary);
-  font-size: 14px;
-  margin-bottom: 8px;
+  font-size: 12px;
+  margin-bottom: 4px;
 }
 
 .stat-value {
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
   color: var(--text-main);
 }
@@ -538,6 +538,11 @@
 .form-group textarea:focus {
   outline: none;
   border-color: var(--primary);
+}
+
+.form-group select option {
+  background-color: #1a1a1a;
+  color: #fff;
 }
 
 .form-row {

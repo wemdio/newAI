@@ -286,15 +286,15 @@
 /* Accounts Grid - Compact */
 .accounts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
 }
 
 .account-card {
   background: #111;
   border: 1px solid #222;
   border-radius: 6px;
-  padding: 16px;
+  padding: 12px;
   transition: all 0.15s ease;
 }
 
@@ -306,8 +306,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
   border-bottom: 1px solid #222;
 }
 
@@ -366,7 +366,7 @@
 }
 
 .account-info {
-  margin: 12px 0;
+  margin: 8px 0;
   font-size: 12px;
 }
 
@@ -390,7 +390,7 @@
 }
 
 .account-actions {
-  margin-top: 12px;
+  margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid #1a1a1a;
   display: flex;
