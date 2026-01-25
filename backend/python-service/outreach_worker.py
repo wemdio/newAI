@@ -7,9 +7,12 @@ This worker handles:
 3. Managing conversation state and lead detection
 """
 import asyncio
+import base64
+import os
 import sys
 import random
 import json
+import tempfile
 import httpx
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
@@ -372,8 +375,31 @@ class TelegramHandler:
         # Create new client
         try:
             session_string = account.get('session_string')
-            if not session_string:
-                logger.error(f"No session string for account {account['phone_number']}")
+            session_file_data = account.get('session_file_data')
+            session = None
+
+            if session_string:
+                session = StringSession(session_string)
+            elif session_file_data:
+                try:
+                    session_bytes = base64.b64decode(session_file_data)
+                except Exception as e:
+                    logger.error(f"Invalid session_file_data for {account['phone_number']}: {e}")
+                    return None
+
+                session_path = os.path.join(
+                    tempfile.gettempdir(),
+                    f"outreach_{account_id}.session"
+                )
+                try:
+                    with open(session_path, 'wb') as f:
+                        f.write(session_bytes)
+                    session = session_path
+                except Exception as e:
+                    logger.error(f"Failed to write session file for {account['phone_number']}: {e}")
+                    return None
+            else:
+                logger.error(f"No session data for account {account['phone_number']}")
                 return None
             
             api_id = int(account.get('api_id', 0))
@@ -391,7 +417,7 @@ class TelegramHandler:
                 proxy = self._parse_proxy(proxy_url)
             
             client = TelegramClient(
-                StringSession(session_string),
+                session,
                 api_id,
                 api_hash,
                 proxy=proxy
