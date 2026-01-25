@@ -7,6 +7,7 @@ import { getSupabase } from '../config/database.js';
 import logger from '../utils/logger.js';
 import { normalizeCompanyName, normalizePositionTitle, normalizePositionType } from '../utils/contactNormalization.js';
 import { analyzeContactQuality } from '../utils/contactQuality.js';
+import { detectIndustryCategory } from '../utils/contactIndustry.js';
 
 // ============= КОНФИГУРАЦИЯ =============
 const CONFIG = {
@@ -612,6 +613,16 @@ async function enrichBatch(contacts, apiKey, options = {}) {
 
       const normalizedType = normalizePositionType(typeCandidate, positionTextForType);
 
+      const industryValue = normalizeText(result?.industry);
+      const industryCategory = detectIndustryCategory({
+        industry: industryValue,
+        position: positionTitle,
+        company_name: companyName,
+        bio: contact.bio,
+        ai_summary: normalizeText(result?.summary),
+        last_message_preview: contact.last_message_preview
+      });
+
       const resultWithMeta = {
         ...(result || {}),
         company: companyName,
@@ -623,6 +634,8 @@ async function enrichBatch(contacts, apiKey, options = {}) {
         type: normalizedType,
         score,
         confidence,
+        industry: industryValue,
+        industry_category: industryCategory,
         _stage: stage,
         _model: model,
         _ts: new Date().toISOString()
@@ -633,7 +646,8 @@ async function enrichBatch(contacts, apiKey, options = {}) {
         position: positionTitle,
         position_type: normalizedType,
         is_decision_maker: lpr || normalizedType === 'CEO' || normalizedType === 'DIRECTOR',
-        industry: normalizeText(result?.industry),
+        industry: industryValue,
+        industry_category: industryCategory,
         company_size: ['SOLO', 'SMALL', 'MEDIUM', 'LARGE', 'UNKNOWN'].includes(result?.size) ? result.size : 'UNKNOWN',
         interests: normalizeStringArray(result?.interests),
         pain_points: normalizeStringArray(result?.pains || result?.pain_points),

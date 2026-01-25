@@ -6,6 +6,7 @@
 import express from 'express';
 import { getSupabase } from '../../config/database.js';
 import { aggregateContacts, enrichContacts, getContactStats } from '../../services/contactEnrichment.js';
+import { recalculateIndustryCategories } from '../../services/contactIndustry.js';
 import logger from '../../utils/logger.js';
 import { normalizeCompanyName, normalizePositionTitle, normalizePositionType } from '../../utils/contactNormalization.js';
 
@@ -35,6 +36,7 @@ const applyContactFilters = (query, filters) => {
     max_score,
     min_messages,
     industry,
+    industry_category,
     search,
     is_spam,
     is_low_quality,
@@ -73,6 +75,16 @@ const applyContactFilters = (query, filters) => {
 
   if (industry) {
     query = query.ilike('industry', `%${industry}%`);
+  }
+
+  if (industry_category) {
+    const raw = String(industry_category);
+    const categories = raw.split(',').map(s => s.trim()).filter(Boolean);
+    if (categories.length > 1) {
+      query = query.in('industry_category', categories);
+    } else if (categories.length === 1) {
+      query = query.eq('industry_category', categories[0]);
+    }
   }
 
   if (search) {
@@ -133,6 +145,7 @@ router.get('/', async (req, res) => {
       max_score,
       min_messages,
       industry,
+      industry_category,
       search,
       is_spam,
       is_low_quality,
@@ -158,6 +171,7 @@ router.get('/', async (req, res) => {
       max_score,
       min_messages,
       industry,
+      industry_category,
       search,
       is_spam,
       is_low_quality,
@@ -613,6 +627,43 @@ router.post('/normalize', async (req, res) => {
   }
 });
 
+// ============= POST /api/contacts/recalculate-industry =============
+// Пересчитать сферы деятельности (без AI) — только для админа
+router.post('/recalculate-industry', async (req, res) => {
+  try {
+    const userEmail = req.headers['x-user-email'];
+    if (!isAdmin(userEmail)) {
+      return res.status(403).json({ success: false, error: 'Admin only' });
+    }
+
+    const {
+      batchSize = 500,
+      onlyEnriched = true,
+      overwrite = false
+    } = req.body || {};
+
+    res.json({
+      success: true,
+      message: 'Industry categorization started in background',
+      batchSize,
+      onlyEnriched,
+      overwrite
+    });
+
+    (async () => {
+      try {
+        const result = await recalculateIndustryCategories({ batchSize, onlyEnriched, overwrite });
+        logger.info('Industry categorization completed', result);
+      } catch (err) {
+        logger.error('Industry categorization failed', { error: err.message });
+      }
+    })();
+  } catch (error) {
+    logger.error('Error starting industry categorization', { error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ============= POST /api/contacts/enrich =============
 // Запустить обогащение контактов
 router.post('/enrich', async (req, res) => {
@@ -720,6 +771,7 @@ router.get('/export/csv', async (req, res) => {
       max_score,
       min_messages,
       industry,
+      industry_category,
       search,
       is_enriched,
       is_spam,
@@ -740,7 +792,7 @@ router.get('/export/csv', async (req, res) => {
     while (hasMore) {
       let query = supabase
         .from('contacts')
-        .select('username, first_name, last_name, bio, company_name, position, position_type, is_decision_maker, industry, lead_score, messages_count, source_chats, ai_summary');
+        .select('username, first_name, last_name, bio, company_name, position, position_type, is_decision_maker, industry, industry_category, lead_score, messages_count, source_chats, ai_summary');
 
       query = applyContactFilters(query, {
         is_decision_maker,
@@ -790,6 +842,7 @@ router.get('/export/csv', async (req, res) => {
       'Position Type',
       'Is LPR',
       'Industry',
+      'Industry Category',
       'Lead Score',
       'Messages Count',
       'Source Chats',
@@ -806,6 +859,7 @@ router.get('/export/csv', async (req, res) => {
       c.position_type || '',
       c.is_decision_maker ? 'Yes' : 'No',
       c.industry || '',
+      c.industry_category || '',
       c.lead_score || 0,
       c.messages_count || 0,
       c.source_chats?.join(', ') || '',

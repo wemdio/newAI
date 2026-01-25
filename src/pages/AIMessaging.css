@@ -284,13 +284,13 @@
 }
 
 /* Accounts Grid - Compact */
-.accounts-grid {
+.ai-messaging .accounts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
   gap: 10px;
 }
 
-.account-card {
+.ai-messaging .account-card {
   background: #111;
   border: 1px solid #222;
   border-radius: 6px;
@@ -298,11 +298,11 @@
   transition: all 0.15s ease;
 }
 
-.account-card:hover {
+.ai-messaging .account-card:hover {
   border-color: #333;
 }
 
-.account-header {
+.ai-messaging .account-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -311,14 +311,14 @@
   border-bottom: 1px solid #222;
 }
 
-.account-header h3 {
+.ai-messaging .account-header h3 {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
   color: #fff;
 }
 
-.status-badge {
+.ai-messaging .status-badge {
   padding: 2px 8px;
   border-radius: 3px;
   font-size: 10px;
@@ -327,69 +327,69 @@
   border: 1px solid;
 }
 
-.status-badge.active {
+.ai-messaging .status-badge.active {
   background: #121a12;
   color: #7dd17d;
   border-color: #1a3e1a;
 }
 
-.status-badge.paused {
+.ai-messaging .status-badge.paused {
   background: #1a1610;
   color: #d1b07d;
   border-color: #3e2a10;
 }
 
-.status-badge.banned,
-.status-badge.error,
-.status-badge.stopped {
+.ai-messaging .status-badge.banned,
+.ai-messaging .status-badge.error,
+.ai-messaging .status-badge.stopped {
   background: #1a1010;
   color: #d17d7d;
   border-color: #3e1a1a;
 }
 
-.status-badge.frozen {
+.ai-messaging .status-badge.frozen {
   background: #101a1a;
   color: #7dd1d1;
   border-color: #1a3e3e;
 }
 
-.status-badge.running {
+.ai-messaging .status-badge.running {
   background: #121a12;
   color: #7dd17d;
   border-color: #1a3e1a;
 }
 
-.status-badge.draft {
+.ai-messaging .status-badge.draft {
   background: #111;
   color: #666;
   border-color: #333;
 }
 
-.account-info {
+.ai-messaging .account-info {
   margin: 8px 0;
   font-size: 12px;
 }
 
-.info-row {
+.ai-messaging .info-row {
   display: flex;
   justify-content: space-between;
   padding: 4px 0;
   border-bottom: 1px solid #1a1a1a;
 }
 
-.info-row:last-child {
+.ai-messaging .info-row:last-child {
   border-bottom: none;
 }
 
-.info-row .label {
+.ai-messaging .info-row .label {
   color: #666;
 }
 
-.info-row .value {
+.ai-messaging .info-row .value {
   color: #ccc;
 }
 
-.account-actions {
+.ai-messaging .account-actions {
   margin-top: 8px;
   padding-top: 8px;
   border-top: 1px solid #1a1a1a;
@@ -398,13 +398,13 @@
 }
 
 /* Campaigns - Compact */
-.campaigns-list {
+.ai-messaging .campaigns-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.campaign-card {
+.ai-messaging .campaign-card {
   background: #111;
   border: 1px solid #222;
   border-radius: 6px;
@@ -412,15 +412,15 @@
   transition: border-color 0.15s ease;
 }
 
-.campaign-card:hover {
+.ai-messaging .campaign-card:hover {
   border-color: #333;
 }
 
-.campaign-card.running {
+.ai-messaging .campaign-card.running {
   border-left: 2px solid #2a3e2a;
 }
 
-.campaign-header {
+.ai-messaging .campaign-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
@@ -430,20 +430,20 @@
   padding-bottom: 0;
 }
 
-.campaign-header h3 {
+.ai-messaging .campaign-header h3 {
   margin: 0 0 4px 0;
   font-size: 15px;
   font-weight: 600;
   color: #fff;
 }
 
-.campaign-actions {
+.ai-messaging .campaign-actions {
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
 }
 
-.campaign-stats {
+.ai-messaging .campaign-stats {
   display: flex;
   gap: 24px;
   margin: 12px 0;
@@ -453,31 +453,31 @@
   border: 1px solid #1a1a1a;
 }
 
-.campaign-stats .stat {
+.ai-messaging .campaign-stats .stat {
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: 6px;
 }
 
-.campaign-stats .stat-label {
+.ai-messaging .campaign-stats .stat-label {
   font-size: 11px;
   color: #666;
   margin: 0;
 }
 
-.campaign-stats .stat-value {
+.ai-messaging .campaign-stats .stat-value {
   font-size: 13px;
   font-weight: 600;
   color: #e0e0e0;
   margin: 0;
 }
 
-.campaign-details {
+.ai-messaging .campaign-details {
   margin-top: 12px;
 }
 
-.campaign-details summary {
+.ai-messaging .campaign-details summary {
   cursor: pointer;
   color: #666;
   font-size: 12px;
@@ -490,26 +490,26 @@
   display: inline-block;
 }
 
-.campaign-details summary:hover {
+.ai-messaging .campaign-details summary:hover {
   border-color: #444;
   color: #ccc;
 }
 
-.prompts {
+.ai-messaging .prompts {
   margin-top: 12px;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.prompt-block {
+.ai-messaging .prompt-block {
   background: #0a0a0a;
   padding: 12px;
   border-radius: 4px;
   border: 1px solid #1a1a1a;
 }
 
-.prompt-block strong {
+.ai-messaging .prompt-block strong {
   display: block;
   margin-bottom: 6px;
   color: #888;
@@ -517,7 +517,7 @@
   text-transform: uppercase;
 }
 
-.prompt-block pre {
+.ai-messaging .prompt-block pre {
   margin: 0;
   white-space: pre-wrap;
   font-family: 'Courier New', monospace;
@@ -527,38 +527,38 @@
 }
 
 /* Scrollable List for Compact View */
-.scrollable-list {
+.ai-messaging .scrollable-list {
   max-height: 400px;
   overflow-y: auto;
   padding-right: 8px;
 }
 
-.scrollable-list::-webkit-scrollbar {
+.ai-messaging .scrollable-list::-webkit-scrollbar {
   width: 6px;
 }
 
-.scrollable-list::-webkit-scrollbar-track {
+.ai-messaging .scrollable-list::-webkit-scrollbar-track {
   background: #0a0a0a;
   border-radius: 3px;
 }
 
-.scrollable-list::-webkit-scrollbar-thumb {
+.ai-messaging .scrollable-list::-webkit-scrollbar-thumb {
   background: #333;
   border-radius: 3px;
 }
 
-.scrollable-list::-webkit-scrollbar-thumb:hover {
+.ai-messaging .scrollable-list::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
 
 /* Conversations - Compact Grid Layout */
-.conversations-list {
+.ai-messaging .conversations-list {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.conversation-card {
+.ai-messaging .conversation-card {
   background: #111;
   border: 1px solid #222;
   border-radius: 6px;
@@ -569,25 +569,25 @@
   gap: 20px;
 }
 
-.conversation-card:hover {
+.ai-messaging .conversation-card:hover {
   border-color: #333;
 }
 
 /* 1. User Column */
-.conv-header {
+.ai-messaging .conv-header {
   margin: 0;
   padding: 0;
   border: none;
   overflow: hidden;
 }
 
-.conv-user-info {
+.ai-messaging .conv-user-info {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 
-.conv-user-info strong {
+.ai-messaging .conv-user-info strong {
   font-size: 14px;
   color: #fff;
   font-weight: 500;
@@ -597,7 +597,7 @@
 }
 
 /* 2. Details Column (Grid inside Grid) */
-.conv-details {
+.ai-messaging .conv-details {
   display: grid;
   grid-template-columns: 2fr 0.8fr 1.2fr; /* Account | Msgs | Date */
   gap: 16px;
@@ -605,21 +605,21 @@
   align-items: center;
 }
 
-.conv-row {
+.ai-messaging .conv-row {
   display: flex;
   flex-direction: column;
   gap: 2px;
   overflow: hidden; /* For ellipsis to work */
 }
 
-.conv-row .label {
+.ai-messaging .conv-row .label {
   font-size: 10px;
   color: #666;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.conv-row .value {
+.ai-messaging .conv-row .value {
   margin: 0;
   color: #ccc;
   font-size: 13px;
@@ -629,13 +629,13 @@
   display: block;
 }
 
-.conv-row .value.date {
+.ai-messaging .conv-row .value.date {
   font-size: 12px;
   color: #888;
 }
 
 /* 3. Button Column */
-.conversation-card button {
+.ai-messaging .conversation-card button {
   margin: 0 !important; /* Override inline style */
   width: 100%;
   padding: 8px 0;
@@ -643,7 +643,7 @@
 
 /* Responsive */
 @media (max-width: 900px) {
-  .conversation-card {
+  .ai-messaging .conversation-card {
     grid-template-columns: 1fr 140px; /* User+Details | Button */
     grid-template-areas: 
       "user button"
@@ -651,9 +651,9 @@
     gap: 12px;
   }
 
-  .conv-header { grid-area: user; }
-  .conversation-card button { grid-area: button; }
-  .conv-details { 
+  .ai-messaging .conv-header { grid-area: user; }
+  .ai-messaging .conversation-card button { grid-area: button; }
+  .ai-messaging .conv-details { 
     grid-area: details; 
     padding-top: 8px;
     border-top: 1px solid #222;
@@ -661,20 +661,20 @@
 }
 
 @media (max-width: 600px) {
-  .conversation-card {
+  .ai-messaging .conversation-card {
     display: flex;
     flex-direction: column;
     align-items: stretch;
   }
   
-  .conv-details {
+  .ai-messaging .conv-details {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 8px;
   }
   
-  .conv-row {
+  .ai-messaging .conv-row {
     flex-direction: row;
     justify-content: space-between;
     width: 100%;
@@ -682,18 +682,18 @@
 }
 
 /* Hot Leads - Compact */
-.hot-leads-list {
+.ai-messaging .hot-leads-list {
   gap: 10px;
 }
 
-.hot-lead-card {
+.ai-messaging .hot-lead-card {
   border: 1px solid #3e2a2a;
   border-radius: 6px;
   padding: 12px 16px;
   background: #1a0f0f;
 }
 
-.hot-lead-header {
+.ai-messaging .hot-lead-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -702,14 +702,14 @@
   border: none;
 }
 
-.hot-lead-header h3 {
+.ai-messaging .hot-lead-header h3 {
   margin: 0;
   font-size: 14px;
   font-weight: 600;
   color: #fff;
 }
 
-.badge.new {
+.ai-messaging .badge.new {
   background: #3e2a2a;
   color: #d17d7d;
   padding: 2px 6px;
@@ -718,12 +718,12 @@
   margin-left: 8px;
 }
 
-.hot-lead-time {
+.ai-messaging .hot-lead-time {
   font-size: 11px;
   color: #666;
 }
 
-.hot-lead-info {
+.ai-messaging .hot-lead-info {
   display: flex;
   gap: 16px;
   margin: 4px 0 12px 0;
@@ -732,7 +732,7 @@
 }
 
 /* Modals - Compact */
-.modal-overlay {
+.ai-messaging .modal-overlay {
   position: fixed;
   top: 0;
   left: 0;
@@ -747,7 +747,7 @@
   padding: 20px;
 }
 
-.modal {
+.ai-messaging .modal {
   background: #111;
   border: 1px solid #333;
   border-radius: 8px;
@@ -766,25 +766,25 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-.modal.large {
+.ai-messaging .modal.large {
   max-width: 800px;
   width: 95%;
 }
 
-.modal-header {
+.ai-messaging .modal-header {
   padding: 16px 20px;
   border-bottom: 1px solid #222;
   flex-shrink: 0; /* Header stays fixed */
 }
 
-.modal-header h2 {
+.ai-messaging .modal-header h2 {
   font-size: 16px;
   font-weight: 600;
   color: #fff;
   margin: 0;
 }
 
-.close-btn {
+.ai-messaging .close-btn {
   width: 24px;
   height: 24px;
   font-size: 20px;
@@ -797,17 +797,17 @@
   justify-content: center;
 }
 
-.close-btn:hover {
+.ai-messaging .close-btn:hover {
   color: #fff;
 }
 
-.modal form {
+.ai-messaging .modal form {
   padding: 20px;
   overflow-y: auto; /* Scrollable content */
   flex: 1;
 }
 
-.form-group {
+.ai-messaging .form-group {
   margin-bottom: 20px;
   width: 100%;
   box-sizing: border-box;
@@ -816,7 +816,7 @@
   align-items: flex-start;
 }
 
-.form-group label {
+.ai-messaging .form-group label {
   font-size: 13px;
   margin-bottom: 8px;
   color: #ccc;
@@ -825,8 +825,8 @@
   width: 100%;
 }
 
-.form-group input,
-.form-group textarea {
+.ai-messaging .form-group input,
+.ai-messaging .form-group textarea {
   width: 100%;
   box-sizing: border-box;
   padding: 10px 12px;
@@ -840,24 +840,24 @@
   transition: border-color 0.2s;
 }
 
-.form-group input:focus,
-.form-group textarea:focus {
+.ai-messaging .form-group input:focus,
+.ai-messaging .form-group textarea:focus {
   border-color: #555;
   outline: none;
 }
 
-.form-group textarea {
+.ai-messaging .form-group textarea {
   resize: vertical;
   min-height: 100px;
 }
 
-.form-actions {
+.ai-messaging .form-actions {
   padding-top: 16px;
   margin-top: 8px;
 }
 
 /* Help Box */
-.help-box {
+.ai-messaging .help-box {
   margin-bottom: 16px;
   padding: 12px;
   font-size: 12px;
@@ -865,19 +865,19 @@
   border-left: 2px solid #335577;
 }
 
-.help-box strong {
+.ai-messaging .help-box strong {
   color: #4a8ac2;
   margin-bottom: 4px;
 }
 
 /* Conversation Details inside Modal */
-.conversation-detail {
+.ai-messaging .conversation-detail {
   padding: 20px;
   overflow-y: auto;
   flex: 1;
 }
 
-.conv-meta-grid {
+.ai-messaging .conv-meta-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 12px;
@@ -888,17 +888,17 @@
   margin-bottom: 16px;
 }
 
-.meta-item .label {
+.ai-messaging .meta-item .label {
   font-size: 10px;
   color: #666;
 }
 
-.meta-item .value {
+.ai-messaging .meta-item .value {
   font-size: 13px;
   font-weight: 500;
 }
 
-.history-messages {
+.ai-messaging .history-messages {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -911,47 +911,47 @@
 }
 
 /* Custom Scrollbar for history */
-.history-messages::-webkit-scrollbar {
+.ai-messaging .history-messages::-webkit-scrollbar {
   width: 6px;
 }
 
-.history-messages::-webkit-scrollbar-track {
+.ai-messaging .history-messages::-webkit-scrollbar-track {
   background: #0a0a0a;
   border-radius: 3px;
 }
 
-.history-messages::-webkit-scrollbar-thumb {
+.ai-messaging .history-messages::-webkit-scrollbar-thumb {
   background: #333;
   border-radius: 3px;
 }
 
-.history-messages::-webkit-scrollbar-thumb:hover {
+.ai-messaging .history-messages::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
 
-.message {
+.ai-messaging .message {
   padding: 10px 14px;
   border-radius: 8px;
   max-width: 90%;
 }
 
-.message.user {
+.ai-messaging .message.user {
   background: #161616;
   border: 1px solid #222;
 }
 
-.message.assistant {
+.ai-messaging .message.assistant {
   background: #1a2e1a;
   border: 1px solid #2a3e2a;
 }
 
-.message-header {
+.ai-messaging .message-header {
   font-size: 10px;
   margin-bottom: 4px;
   opacity: 0.6;
 }
 
-.message-content {
+.ai-messaging .message-content {
   font-size: 13px;
   line-height: 1.4;
   color: #eee;
@@ -959,42 +959,42 @@
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .conversation-card {
+  .ai-messaging .conversation-card {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
   }
   
-  .conv-details {
+  .ai-messaging .conv-details {
     flex-direction: column;
     gap: 8px;
   }
   
-  .conv-meta-grid {
+  .ai-messaging .conv-meta-grid {
     grid-template-columns: 1fr 1fr;
   }
 }
 
 /* Manual Messaging Area */
-.manual-input-area {
+.ai-messaging .manual-input-area {
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid #222;
 }
 
-.chat-form {
+.ai-messaging .chat-form {
   display: flex;
   flex-direction: column;
   gap: 10px;
   margin-bottom: 10px;
 }
 
-.chat-form .btn {
+.ai-messaging .chat-form .btn {
   align-self: flex-end;
   min-width: 120px;
 }
 
-.chat-input {
+.ai-messaging .chat-input {
   flex: 1;
   padding: 10px;
   background: #0a0a0a;
@@ -1004,12 +1004,12 @@
   font-size: 13px;
 }
 
-.chat-input:focus {
+.ai-messaging .chat-input:focus {
   border-color: #555;
   outline: none;
 }
 
-.chat-textarea {
+.ai-messaging .chat-textarea {
   resize: vertical;
   min-height: 60px;
   max-height: 200px;
@@ -1018,19 +1018,19 @@
 }
 
 
-.takeover-btn {
+.ai-messaging .takeover-btn {
   width: 100%;
   margin-top: 8px;
 }
 
-.takeover-section {
+.ai-messaging .takeover-section {
   margin-top: 12px;
   border-top: 1px solid #1a1a1a;
   padding-top: 12px;
 }
 
 /* Confidence Filter Styles */
-.confidence-filter-group {
+.ai-messaging .confidence-filter-group {
   background: rgba(255, 165, 0, 0.08) !important;
   border: 1px solid rgba(255, 165, 0, 0.4) !important;
   border-radius: 8px !important;
@@ -1039,11 +1039,11 @@
   margin-bottom: 24px !important;
 }
 
-.toggle-row {
+.ai-messaging .toggle-row {
   margin-bottom: 12px;
 }
 
-.toggle-label {
+.ai-messaging .toggle-label {
   display: flex;
   align-items: center;
   gap: 16px !important;
@@ -1052,7 +1052,7 @@
   width: fit-content;
 }
 
-.toggle-label input[type="checkbox"] {
+.ai-messaging .toggle-label input[type="checkbox"] {
   width: 22px !important;
   height: 22px !important;
   accent-color: #f59e0b;
@@ -1061,13 +1061,13 @@
   margin-right: 12px !important;
 }
 
-.toggle-text {
+.ai-messaging .toggle-text {
   font-weight: 600;
   color: #f59e0b !important;
   font-size: 16px;
 }
 
-.filter-hint {
+.ai-messaging .filter-hint {
   display: block;
   color: #999 !important;
   font-size: 13px;
@@ -1077,14 +1077,14 @@
   padding-left: 38px;
 }
 
-.confidence-threshold {
+.ai-messaging .confidence-threshold {
   margin-top: 24px;
   padding-top: 20px;
   border-top: 1px solid rgba(255, 165, 0, 0.2);
 }
 
 /* Modal Actions Spacing */
-.modal-actions {
+.ai-messaging .modal-actions {
   margin-top: 32px !important;
   padding-top: 20px;
   border-top: 1px solid #222;
@@ -1093,19 +1093,19 @@
   gap: 12px;
 }
 
-.confidence-threshold label {
+.ai-messaging .confidence-threshold label {
   display: block;
   color: #ccc;
   font-size: 13px;
   margin-bottom: 12px;
 }
 
-.confidence-threshold label strong {
+.ai-messaging .confidence-threshold label strong {
   color: #f59e0b;
   font-size: 16px;
 }
 
-.confidence-slider {
+.ai-messaging .confidence-slider {
   width: 100%;
   height: 8px;
   -webkit-appearance: none;
@@ -1116,7 +1116,7 @@
   cursor: pointer;
 }
 
-.confidence-slider::-webkit-slider-thumb {
+.ai-messaging .confidence-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 20px;
@@ -1128,7 +1128,7 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
-.confidence-slider::-moz-range-thumb {
+.ai-messaging .confidence-slider::-moz-range-thumb {
   width: 20px;
   height: 20px;
   background: #fff;
@@ -1138,7 +1138,7 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
-.confidence-labels {
+.ai-messaging .confidence-labels {
   display: flex;
   justify-content: space-between;
   margin-top: 8px;
@@ -1146,12 +1146,12 @@
   color: #666;
 }
 
-.confidence-labels span:nth-child(2) {
+.ai-messaging .confidence-labels span:nth-child(2) {
   color: #f59e0b;
   font-weight: 500;
 }
 
-.threshold-hint {
+.ai-messaging .threshold-hint {
   display: block;
   margin-top: 12px;
   padding: 10px;
@@ -1164,18 +1164,18 @@
 }
 
 /* Confidence Filter Badge in Campaign Card */
-.confidence-filter-badge {
+.ai-messaging .confidence-filter-badge {
   background: rgba(245, 158, 11, 0.1);
   border: 1px solid rgba(245, 158, 11, 0.3);
   border-radius: 4px;
   padding: 4px 8px;
 }
 
-.confidence-filter-badge .stat-label {
+.ai-messaging .confidence-filter-badge .stat-label {
   color: #f59e0b;
 }
 
-.confidence-filter-badge .stat-value {
+.ai-messaging .confidence-filter-badge .stat-value {
   color: #fbbf24;
   font-weight: 600;
 }

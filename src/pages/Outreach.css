@@ -8,11 +8,11 @@
 }
 
 /* Header */
-.page-header {
+.outreach-page .page-header {
   margin-bottom: 32px;
 }
 
-.page-header h1 {
+.outreach-page .page-header h1 {
   font-size: 32px;
   font-weight: 700;
   margin-bottom: 8px;
@@ -21,20 +21,20 @@
   -webkit-text-fill-color: transparent;
 }
 
-.subtitle {
+.outreach-page .subtitle {
   color: var(--text-secondary);
   font-size: 16px;
 }
 
 /* Stats Overview */
-.stats-overview {
+.outreach-page .stats-overview {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 16px;
   margin-bottom: 32px;
 }
 
-.stat-card {
+.outreach-page .stat-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -42,30 +42,30 @@
   transition: all 0.2s ease;
 }
 
-.stat-card:hover {
+.outreach-page .stat-card:hover {
   border-color: var(--border-hover);
   transform: translateY(-2px);
 }
 
-.stat-card.hot {
+.outreach-page .stat-card.hot {
   border-color: rgba(255, 107, 0, 0.3);
   background: rgba(255, 107, 0, 0.05);
 }
 
-.stat-label {
+.outreach-page .stat-label {
   color: var(--text-secondary);
   font-size: 12px;
   margin-bottom: 4px;
 }
 
-.stat-value {
+.outreach-page .stat-value {
   font-size: 20px;
   font-weight: 700;
   color: var(--text-main);
 }
 
 /* Tabs */
-.outreach-tabs {
+.outreach-page .outreach-tabs {
   display: flex;
   gap: 8px;
   margin-bottom: 24px;
@@ -74,7 +74,7 @@
   overflow-x: auto;
 }
 
-.tab-button {
+.outreach-page .tab-button {
   background: transparent;
   border: none;
   color: var(--text-secondary);
@@ -89,18 +89,18 @@
   gap: 8px;
 }
 
-.tab-button:hover {
+.outreach-page .tab-button:hover {
   color: var(--text-main);
   background: rgba(255, 255, 255, 0.05);
 }
 
-.tab-button.active {
+.outreach-page .tab-button.active {
   color: var(--text-main);
   background: var(--bg-card);
   border: 1px solid var(--border);
 }
 
-.unread-badge {
+.outreach-page .unread-badge {
   background: var(--primary);
   color: white;
   font-size: 10px;
@@ -111,27 +111,27 @@
 }
 
 /* Section Headers */
-.section-header {
+.outreach-page .section-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 24px;
 }
 
-.section-header h2 {
+.outreach-page .section-header h2 {
   font-size: 20px;
   font-weight: 600;
   color: var(--text-main);
 }
 
 /* Campaigns Grid */
-.campaigns-grid {
+.outreach-page .campaigns-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 20px;
 }
 
-.campaign-card {
+.outreach-page .campaign-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -142,25 +142,25 @@
   transition: all 0.2s;
 }
 
-.campaign-card:hover {
+.outreach-page .campaign-card:hover {
   border-color: var(--border-hover);
   transform: translateY(-2px);
 }
 
-.campaign-header {
+.outreach-page .campaign-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
 }
 
-.campaign-header h3 {
+.outreach-page .campaign-header h3 {
   font-size: 18px;
   font-weight: 600;
   color: var(--text-main);
   margin: 0;
 }
 
-.campaign-stats {
+.outreach-page .campaign-stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 12px;
@@ -169,26 +169,26 @@
   border-radius: var(--radius-sm);
 }
 
-.mini-stat {
+.outreach-page .mini-stat {
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
 }
 
-.mini-value {
+.outreach-page .mini-value {
   font-size: 16px;
   font-weight: 600;
   color: var(--text-main);
 }
 
-.mini-label {
+.outreach-page .mini-label {
   font-size: 11px;
   color: var(--text-secondary);
   margin-top: 4px;
 }
 
-.campaign-message p {
+.outreach-page .campaign-message p {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.5;
@@ -198,13 +198,13 @@
   overflow: hidden;
 }
 
-.campaign-settings-preview {
+.outreach-page .campaign-settings-preview {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
 }
 
-.setting-tag {
+.outreach-page .setting-tag {
   font-size: 11px;
   padding: 4px 8px;
   background: rgba(255, 255, 255, 0.05);
@@ -212,30 +212,30 @@
   color: var(--text-secondary);
 }
 
-.setting-tag.ai {
+.outreach-page .setting-tag.ai {
   background: rgba(255, 107, 0, 0.1);
   color: var(--primary);
 }
 
-.campaign-actions {
+.outreach-page .campaign-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
   margin-top: auto;
 }
 
-.campaign-actions button {
+.outreach-page .campaign-actions button {
   width: 100%;
 }
 
 /* Accounts Grid */
-.accounts-grid {
+.outreach-page .accounts-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 20px;
 }
 
-.account-card {
+.outreach-page .account-card {
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -243,26 +243,26 @@
   transition: all 0.2s;
 }
 
-.account-header {
+.outreach-page .account-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
 }
 
-.account-header h3 {
+.outreach-page .account-header h3 {
   font-size: 16px;
   font-weight: 600;
   color: var(--text-main);
 }
 
-.account-details {
+.outreach-page .account-details {
   font-size: 13px;
   color: var(--text-secondary);
   margin-bottom: 16px;
 }
 
-.account-details p {
+.outreach-page .account-details p {
   margin-bottom: 4px;
 }
 
@@ -576,7 +576,7 @@
 }
 
 /* Status Badges */
-.status-badge {
+.outreach-page .status-badge {
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 11px;

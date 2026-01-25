@@ -12,6 +12,28 @@ const POSITION_LABELS = {
   OTHER: { label: 'Другое', class: 'badge-specialist' }
 };
 
+const INDUSTRY_CATEGORIES = [
+  { value: 'marketing', label: 'Маркетинг/Реклама' },
+  { value: 'ved', label: 'ВЭД / Импорт-Экспорт' },
+  { value: 'legal', label: 'Юриспруденция' },
+  { value: 'manufacturing', label: 'Производство' },
+  { value: 'wholesale', label: 'Оптовые продажи' },
+  { value: 'logistics', label: 'Логистика/Доставка' },
+  { value: 'it', label: 'IT/Разработка' },
+  { value: 'finance', label: 'Финансы/Бухгалтерия' },
+  { value: 'real_estate', label: 'Недвижимость' },
+  { value: 'construction', label: 'Строительство/Ремонт' },
+  { value: 'education', label: 'Образование' },
+  { value: 'health', label: 'Медицина/Здоровье' },
+  { value: 'hr', label: 'HR/Рекрутинг' },
+  { value: 'ecommerce', label: 'E-commerce/Маркетплейсы' }
+];
+
+const INDUSTRY_LABELS = INDUSTRY_CATEGORIES.reduce((acc, item) => {
+  acc[item.value] = item.label;
+  return acc;
+}, {});
+
 function Contacts() {
   // State
   const [contacts, setContacts] = useState([]);
@@ -35,6 +57,7 @@ function Contacts() {
     is_decision_maker: '',
     position_type: '',
     is_enriched: '',
+    industry_category: '',
     min_score: '',
     min_messages: '',
     hide_spam: true,
@@ -48,6 +71,7 @@ function Contacts() {
   const [aggregating, setAggregating] = useState(false);
   const [updatingData, setUpdatingData] = useState(false);
   const [normalizing, setNormalizing] = useState(false);
+  const [recalculatingIndustry, setRecalculatingIndustry] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [showEnrichModal, setShowEnrichModal] = useState(false);
   const [apiKey, setApiKey] = useState('');
@@ -182,6 +206,29 @@ function Contacts() {
     }
   };
 
+  // Recalculate industry categories (no AI)
+  const handleRecalculateIndustry = async () => {
+    if (recalculatingIndustry) return;
+
+    if (!confirm('Пересчитать сферы деятельности на основе уже имеющихся данных?\nAI не используется.')) {
+      return;
+    }
+
+    try {
+      setRecalculatingIndustry(true);
+      await contactsApi.recalculateIndustry({ batchSize: 1000, onlyEnriched: true, overwrite: false });
+      alert('Сегментация сфер запущена в фоне. Обновите страницу через пару минут.');
+      setTimeout(() => {
+        loadStats();
+        loadContacts();
+      }, 10000);
+    } catch (err) {
+      alert('Ошибка: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setRecalculatingIndustry(false);
+    }
+  };
+
   // Open enrich modal
   const handleEnrichClick = () => {
     const count = stats?.notEnriched || 0;
@@ -300,6 +347,11 @@ function Contacts() {
     return <span className={`badge ${config.class}`}>{config.label}</span>;
   };
 
+  const renderIndustry = (contact) => {
+    const label = contact.industry_category ? INDUSTRY_LABELS[contact.industry_category] : null;
+    return label || contact.industry || '—';
+  };
+
   if (loading && contacts.length === 0) {
     return (
       <div className="contacts-page">
@@ -342,6 +394,14 @@ function Contacts() {
                 title="Очистка компании/должности и маппинг ролей (без AI)"
               >
                 {normalizing ? 'Нормализация...' : 'Нормализовать'}
+              </button>
+              <button 
+                className="btn btn-secondary" 
+                onClick={handleRecalculateIndustry}
+                disabled={recalculatingIndustry}
+                title="Сегментация сфер деятельности без AI"
+              >
+                {recalculatingIndustry ? 'Сегментация...' : 'Сегментировать сферы'}
               </button>
               <button 
                 className="btn btn-success" 
@@ -425,6 +485,19 @@ function Contacts() {
               <option value="MANAGER">Менеджер</option>
               <option value="SPECIALIST">Специалист</option>
               <option value="FREELANCER">Фрилансер</option>
+            </select>
+          </div>
+
+          <div className="filter-group">
+            <label>Сфера</label>
+            <select
+              value={filters.industry_category}
+              onChange={(e) => handleFilterChange('industry_category', e.target.value)}
+            >
+              <option value="">Все</option>
+              {INDUSTRY_CATEGORIES.map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
             </select>
           </div>
           
@@ -566,7 +639,7 @@ function Contacts() {
                       <span className="badge badge-lpr">✓ ЛПР</span>
                     )}
                   </td>
-                  <td>{contact.industry || '—'}</td>
+                  <td title={contact.industry || ''}>{renderIndustry(contact)}</td>
                   <td>{contact.is_enriched ? renderScore(contact.lead_score || 0) : '—'}</td>
                   <td>{contact.messages_count}</td>
                   <td>
@@ -824,7 +897,9 @@ function Contacts() {
                         </div>
                         <div className="detail-item">
                           <span className="detail-label">Отрасль</span>
-                          <span className="detail-value">{selectedContact.industry || '—'}</span>
+                          <span className="detail-value" title={selectedContact.industry || ''}>
+                            {renderIndustry(selectedContact)}
+                          </span>
                         </div>
                         <div className="detail-item">
                           <span className="detail-label">Размер компании</span>
