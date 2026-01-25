@@ -19,7 +19,7 @@ import auditRoutes from './routes/audit.js';
 import promptRoutes from './routes/prompt.js';
 import landingRoutes from './routes/landing.js';
 // TEMPORARILY DISABLED - debugging crash
-// import outreachRoutes from './routes/outreach.js';
+import outreachRoutes from './routes/outreach.js';
 import contactsRoutes from './routes/contacts.js';
 
 /**
@@ -122,7 +122,7 @@ app.use('/api/audit', auditRoutes);
 app.use('/api/prompt', promptRoutes);
 app.use('/api/landing', landingRoutes);
 // TEMPORARILY DISABLED - debugging crash
-// app.use('/api/outreach', outreachRoutes);
+app.use('/api/outreach', outreachRoutes);
 app.use('/api/contacts', contactsRoutes);
 
 // 404 handler
@@ -149,19 +149,26 @@ app.use(errorMiddleware);
  * Initialize server
  */
 export const initializeServer = async () => {
+  let dbReady = false;
   try {
     // Initialize database
     logger.info('Initializing database connection...');
     await initializeDatabase();
-    
+
     // Test database connection
-    await dbHealthCheck();
-    
-    logger.info('Server initialization complete');
+    const dbStatus = await dbHealthCheck();
+    dbReady = dbStatus?.status === 'healthy';
+    if (dbReady) {
+      logger.info('Database connection healthy');
+    } else {
+      logger.warn('Database health check failed', { status: dbStatus?.status });
+    }
   } catch (error) {
-    logger.error('Server initialization failed', { error: error.message });
-    throw error;
+    logger.error('Database initialization failed', { error: error.message });
   }
+
+  logger.info('Server initialization complete');
+  return { dbReady };
 };
 
 /**
@@ -172,7 +179,7 @@ export const startServer = async (port = null) => {
   
   try {
     // Initialize
-    await initializeServer();
+    const { dbReady } = await initializeServer();
     
     // Start listening
     const server = app.listen(PORT, () => {
@@ -180,6 +187,9 @@ export const startServer = async (port = null) => {
       logger.info(`📊 Health check: http://localhost:${PORT}/health`);
       logger.info(`🔗 API: http://localhost:${PORT}/api`);
       logger.info(`📝 Environment: ${process.env.NODE_ENV || 'development'}`);
+      if (!dbReady) {
+        logger.warn('Server started without a healthy database connection');
+      }
     });
     
     // Graceful shutdown
