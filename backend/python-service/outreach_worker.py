@@ -135,7 +135,7 @@ try:
     TELETHON_AVAILABLE = True
 except ImportError:
     TELETHON_AVAILABLE = False
-    logger.warning("âš ï¸ Telethon not installed - outreach will not work")
+    logger.warning("Telethon not installed - outreach will not work")
 
 try:
     import socks
@@ -161,7 +161,7 @@ class OutreachSupabaseClient:
     
     async def connect(self):
         self.client = httpx.AsyncClient(timeout=30.0)
-        logger.info("âœ… Supabase client connected")
+        logger.info("Supabase client connected")
     
     async def close(self):
         if self.client:
@@ -780,7 +780,7 @@ class TelegramHandler:
                 
                 setattr(client, '_outreach_proxy_url', proxy_url)
                 self.clients[account_id] = client
-                logger.info(f"âœ… Connected account: {account['phone_number']}")
+                logger.info(f"Connected account: {account['phone_number']}")
                 return client
                 
             except AuthKeyUnregisteredError:
@@ -1196,11 +1196,11 @@ class OutreachWorker:
     async def start(self):
         """Start the worker"""
         logger.info("=" * 60)
-        logger.info("ðŸš€ Outreach Worker Starting")
+        logger.info("Outreach Worker starting")
         logger.info("=" * 60)
         
         if not TELETHON_AVAILABLE:
-            logger.error("âŒ Telethon not available - cannot start")
+            logger.error("Telethon not available - cannot start")
             return
         
         try:
@@ -1214,9 +1214,9 @@ class OutreachWorker:
             await self.main_loop()
             
         except KeyboardInterrupt:
-            logger.warning("âš ï¸ Received interrupt")
+            logger.warning("Received interrupt")
         except Exception as e:
-            logger.critical(f"âŒ Fatal error: {e}", exc_info=True)
+            logger.critical(f"Fatal error: {e}", exc_info=True)
         finally:
             await self.shutdown()
     
@@ -1226,7 +1226,7 @@ class OutreachWorker:
         
         while self.running:
             iteration += 1
-            logger.info(f"ðŸ”„ Iteration #{iteration}")
+            logger.info(f"Iteration #{iteration}")
             
             try:
                 # Process pending manual messages
@@ -1240,21 +1240,21 @@ class OutreachWorker:
                 if self.supabase:
                     reactivated = await self.supabase.reactivate_expired_cooldowns()
                     if reactivated:
-                        logger.info(f"✅ Reactivated {reactivated} account(s) after cooldown")
+                    logger.info(f"Reactivated {reactivated} account(s) after cooldown")
                 
                 # Get active campaigns
                 campaigns = await self.supabase.get_active_outreach_campaigns()
                 
                 if not campaigns:
-                    logger.info("â„¹ï¸ No active outreach campaigns")
+                    logger.info("No active outreach campaigns")
                 else:
-                    logger.info(f"ðŸ“‹ Processing {len(campaigns)} active campaign(s)")
+                    logger.info(f"Processing {len(campaigns)} active campaign(s)")
                     
                     for campaign in campaigns:
                         await self.process_campaign(campaign)
                 
             except Exception as e:
-                logger.error(f"âŒ Error in main loop: {e}", exc_info=True)
+                logger.error(f"Error in main loop: {e}", exc_info=True)
             
             # Wait before next iteration
             await asyncio.sleep(30)
@@ -1263,7 +1263,7 @@ class OutreachWorker:
         """Reset daily counters if new day"""
         today = datetime.utcnow().date()
         if today > self.last_reset:
-            logger.info("ðŸ”„ Resetting daily counters")
+            logger.info("Resetting daily counters")
             self.daily_sent.clear()
             self.last_reset = today
             if self.supabase:
@@ -1278,7 +1278,7 @@ class OutreachWorker:
         if not messages:
             return
 
-        logger.info(f"ðŸ“¬ Processing {len(messages)} manual message(s)")
+        logger.info(f"Processing {len(messages)} manual message(s)")
         for msg in messages:
             msg_id = str(msg.get('id'))
             chat_id = msg.get('chat_id')
@@ -1356,7 +1356,7 @@ class OutreachWorker:
         user_id = str(campaign['user_id'])
         campaign_name = campaign['name']
         
-        logger.info(f"ðŸ“‹ Processing campaign: {campaign_name}")
+        logger.info(f"Processing campaign: {campaign_name}")
         
         try:
             # Get user config for API key
@@ -1366,12 +1366,12 @@ class OutreachWorker:
             # Get accounts for this campaign
             account_ids = campaign.get('account_ids', [])
             if not account_ids:
-                logger.warning(f"âš ï¸ Campaign {campaign_name} has no accounts")
+                logger.warning(f"Campaign {campaign_name} has no accounts")
                 return
             
             accounts = await self.supabase.get_outreach_accounts(account_ids)
             if not accounts:
-                logger.warning(f"âš ï¸ No active accounts for campaign {campaign_name}")
+                logger.warning(f"No active accounts for campaign {campaign_name}")
                 return
             
             processed_records = await self.supabase.get_processed_clients(campaign_id)
@@ -1393,7 +1393,7 @@ class OutreachWorker:
             })
             
         except Exception as e:
-            logger.error(f"âŒ Error processing campaign {campaign_name}: {e}")
+            logger.error(f"Error processing campaign {campaign_name}: {e}")
             await self.supabase.log(user_id, 'ERROR', f"Campaign error: {e}", campaign_id)
     
     async def _send_initial_messages(
@@ -1416,7 +1416,7 @@ class OutreachWorker:
         timezone_offset = safety['timezone_offset']
 
         if _is_sleep_time(sleep_periods, timezone_offset):
-            logger.info("💤 Campaign in sleep period, skipping initial messages")
+            logger.info("Campaign in sleep period, skipping initial messages")
             return
         
         # Get pending targets
@@ -1426,7 +1426,7 @@ class OutreachWorker:
             logger.debug(f"No pending targets for campaign {campaign['name']}")
             return
         
-        logger.info(f"ðŸŽ¯ Found {len(targets)} pending targets")
+        logger.info(f"Found {len(targets)} pending targets")
         
         # Round-robin through accounts
         account_index = 0
@@ -1483,7 +1483,7 @@ class OutreachWorker:
                 account_index += 1
             
             if not account:
-                logger.warning("âš ï¸ All accounts reached daily limit")
+                logger.warning("All accounts reached daily limit")
                 break
             
             account_id = str(account['id'])
@@ -1504,7 +1504,7 @@ class OutreachWorker:
                 continue
             
             # Send message
-            logger.info(f"ðŸ“¤ Sending to @{identifier} via {account['phone_number']}")
+            logger.info(f"Sending to @{identifier} via {account['phone_number']}")
             
             # Ensure username format
             target_handle = identifier
@@ -1514,7 +1514,7 @@ class OutreachWorker:
             # Delay between accounts (human-like rotation)
             if last_account_id and last_account_id != account_id:
                 rotation_delay = random.randint(account_loop_delay_min, account_loop_delay_max)
-                logger.debug(f"⏳ Waiting {rotation_delay}s before switching accounts")
+                logger.debug(f"Waiting {rotation_delay}s before switching accounts")
                 await asyncio.sleep(rotation_delay)
             
             success, error, user_info = await self.telegram.send_message(
@@ -1567,11 +1567,11 @@ class OutreachWorker:
                     campaign_id, account_id
                 )
                 
-                logger.info(f"âœ… Sent to @{identifier}")
+                logger.info(f"Sent to @{identifier}")
                 
                 # Wait before next message
                 delay = random.randint(delay_min, delay_max)
-                logger.debug(f"â³ Waiting {delay}s before next message")
+                logger.debug(f"Waiting {delay}s before next message")
                 await asyncio.sleep(delay)
                 
             else:
@@ -1600,7 +1600,7 @@ class OutreachWorker:
                         'error_message': error,
                         'cooldown_until': cooldown_until
                     })
-                    logger.warning(f"âš ï¸ Account {account['phone_number']} rate limited")
+                    logger.warning(f"Account {account['phone_number']} rate limited")
                 
                 await self.supabase.log(
                     user_id, 'WARNING',
@@ -1608,7 +1608,7 @@ class OutreachWorker:
                     campaign_id, account_id
                 )
                 
-                logger.warning(f"âš ï¸ Failed to send to @{identifier}: {error}")
+                logger.warning(f"Failed to send to @{identifier}: {error}")
             
             account_index += 1
             last_account_id = account_id
@@ -1718,7 +1718,7 @@ class OutreachWorker:
         timezone_offset = safety['timezone_offset']
 
         if _is_sleep_time(sleep_periods, timezone_offset):
-            logger.info("💤 Campaign in sleep period, skipping reply checks")
+            logger.info("Campaign in sleep period, skipping reply checks")
             return
         
         # Get all active chats for this campaign
@@ -1727,7 +1727,7 @@ class OutreachWorker:
         if not chats:
             return
         
-        logger.info(f"ðŸ’¬ Checking {len(chats)} chats for new messages")
+        logger.info(f"Checking {len(chats)} chats for new messages")
         
         # Create AI handler if enabled
         ai = None
@@ -1781,7 +1781,7 @@ class OutreachWorker:
             if safety.get('ignore_bot_usernames', True):
                 uname = (target_username or '').lower()
                 if uname.endswith('bot') or uname.startswith(BOT_USERNAME_PREFIXES):
-                    logger.info(f"🤖 Skipping bot-like username @{target_username}")
+                    logger.info(f"Skipping bot-like username @{target_username}")
                     continue
             
             # Find account
@@ -1806,7 +1806,7 @@ class OutreachWorker:
 
             if last_reply_account_id and last_reply_account_id != account_id:
                 rotation_delay = random.randint(account_loop_delay_min, account_loop_delay_max)
-                logger.debug(f"⏳ Waiting {rotation_delay}s before switching accounts")
+                logger.debug(f"Waiting {rotation_delay}s before switching accounts")
                 await asyncio.sleep(rotation_delay)
             
             try:
@@ -1853,7 +1853,7 @@ class OutreachWorker:
                     )
                     continue
                 
-                logger.info(f"ðŸ“¥ {len(new_messages)} new message(s) from @{target_username}")
+                logger.info(f"{len(new_messages)} new message(s) from @{target_username}")
 
                 pre_delay = random.randint(pre_read_delay_min, pre_read_delay_max)
                 if pre_delay > 0:
@@ -1876,7 +1876,7 @@ class OutreachWorker:
                     await self.supabase.increment_unread(chat_id)
                     history.append({'sender': 'them', 'content': incoming_text})
                     
-                    logger.info(f"ðŸ“¥ Message from @{target_username}: {incoming_text[:50]}...")
+                    logger.info(f"Message from @{target_username}: {incoming_text[:50]}...")
                     
                     # Generate and send AI response if enabled
                     if ai:
@@ -1935,7 +1935,7 @@ class OutreachWorker:
                                         campaign_id, account_id
                                     )
                                     
-                                    logger.info(f"ðŸ¤– AI replied to @{target_username}")
+                                    logger.info(f"AI replied to @{target_username}")
                                     
                                     # Add to history for context
                                     history.append({'sender': 'me', 'content': response})
@@ -1976,7 +1976,7 @@ class OutreachWorker:
                 logger.error(f"Error checking chat {chat_id}: {e}")
     async def shutdown(self):
         """Graceful shutdown"""
-        logger.info("ðŸ›‘ Shutting down...")
+        logger.info("Shutting down...")
         
         self.running = False
         
@@ -1986,13 +1986,13 @@ class OutreachWorker:
         if self.supabase:
             await self.supabase.close()
         
-        logger.info("âœ… Shutdown complete")
+        logger.info("Shutdown complete")
 
 
 def main():
     """Entry point"""
     if sys.version_info < (3, 8):
-        print("âŒ Python 3.8+ required")
+        print("Python 3.8+ required")
         sys.exit(1)
     
     worker = OutreachWorker()
@@ -2000,9 +2000,9 @@ def main():
     try:
         asyncio.run(worker.start())
     except KeyboardInterrupt:
-        print("\nðŸ‘‹ Goodbye!")
+        print("\nGoodbye!")
     except Exception as e:
-        print(f"âŒ Fatal error: {e}")
+        print(f"Fatal error: {e}")
         sys.exit(1)
 
 

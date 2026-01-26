@@ -1,9 +1,33 @@
 """Configuration for AI Messaging Service"""
 import os
 import sys
+import builtins
+import re
 from dotenv import load_dotenv
 
 load_dotenv()
+
+_EMOJI_PATTERN = re.compile(r'[\U0001F300-\U0001FAFF\u2600-\u27BF\u200D\uFE0F]')
+_MOJIBAKE_PATTERN = re.compile(r'[\u00A0-\u00FF]')
+
+
+def _sanitize_text(value):
+    if not isinstance(value, str):
+        return value
+    value = _EMOJI_PATTERN.sub('', value)
+    value = _MOJIBAKE_PATTERN.sub('', value)
+    return value
+
+
+_original_print = builtins.print
+
+
+def _print_sanitized(*args, **kwargs):
+    sanitized = tuple(_sanitize_text(arg) for arg in args)
+    return _original_print(*sanitized, **kwargs)
+
+
+builtins.print = _print_sanitized
 
 # Ensure UTF-8 output to avoid mojibake in logs
 try:
@@ -27,8 +51,8 @@ if not SUPABASE_URL or not SUPABASE_KEY:
 
 TELEGRAM_BOT_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
 
-print(f"🔧 Config: Using Supabase Key ending in ...{SUPABASE_KEY[-4:] if SUPABASE_KEY else 'None'}")
-print(f"🔧 Config: Telegram Bot Token found: {'Yes' if TELEGRAM_BOT_TOKEN else 'No'}")
+print(f"Config: Using Supabase Key ending in ...{SUPABASE_KEY[-4:] if SUPABASE_KEY else 'None'}")
+print(f"Config: Telegram Bot Token found: {'Yes' if TELEGRAM_BOT_TOKEN else 'No'}")
 
 
 # OpenRouter Configuration (AI Model)
@@ -57,17 +81,12 @@ def setup_logger(name):
     
     if not logger.handlers:
         handler = logging.StreamHandler()
-        emoji_pattern = re.compile(r'[\U0001F300-\U0001FAFF\u2600-\u27BF\u200D\uFE0F]')
-
         class EmojiStripFilter(logging.Filter):
             def filter(self, record):
                 if isinstance(record.msg, str):
-                    record.msg = emoji_pattern.sub('', record.msg)
+                    record.msg = _sanitize_text(record.msg)
                 if record.args:
-                    record.args = tuple(
-                        emoji_pattern.sub('', str(arg)) if isinstance(arg, str) else arg
-                        for arg in record.args
-                    )
+                    record.args = tuple(_sanitize_text(arg) for arg in record.args)
                 return True
 
         formatter = logging.Formatter(

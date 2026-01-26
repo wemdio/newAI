@@ -24,7 +24,7 @@ class SupabaseClient:
     async def connect(self):
         """Initialize HTTP session"""
         self.session = aiohttp.ClientSession(headers=self.headers)
-        logger.info("✅ Connected to Supabase (REST API)")
+        logger.info("Connected to Supabase (REST API)")
     
     async def close(self):
         """Close HTTP session"""
@@ -115,10 +115,10 @@ class SupabaseClient:
             # Calculate timestamp for 24 hours ago
             twenty_four_hours_ago = (datetime.utcnow() - timedelta(hours=24)).isoformat()
             
-            logger.info(f"🔍 Fetching uncontacted leads for user {user_id}")
-            logger.info(f"   ⏰ From: {twenty_four_hours_ago} (last 24 hours)")
+            logger.info(f"Fetching uncontacted leads for user {user_id}")
+            logger.info(f"   From: {twenty_four_hours_ago} (last 24 hours)")
             if max_confidence:
-                logger.info(f"   🎯 Confidence filter: < {max_confidence}%")
+                logger.info(f"   Confidence filter: < {max_confidence}%")
             
             # Get uncontacted detected_leads for this user (last 24 hours only)
             url = f"{self.url}/rest/v1/detected_leads"
@@ -136,7 +136,7 @@ class SupabaseClient:
             
             async with self.session.get(url) as resp:
                 if resp.status != 200:
-                    logger.warning(f"⚠️ Failed to get uncontacted leads: {resp.status}")
+                    logger.warning(f"Failed to get uncontacted leads: {resp.status}")
                     return []
                 
                 detected_leads = await resp.json()
@@ -174,7 +174,7 @@ class SupabaseClient:
                 return result
                 
         except Exception as e:
-            logger.error(f"❌ Error getting uncontacted leads: {e}")
+            logger.error(f"Error getting uncontacted leads: {e}")
             return []
             
     async def get_lead_details(self, lead_id: int) -> Optional[Dict]:
@@ -210,7 +210,7 @@ class SupabaseClient:
             return lead
             
         except Exception as e:
-            logger.error(f"❌ Error getting lead details: {e}")
+            logger.error(f"Error getting lead details: {e}")
             return None
     
     async def mark_lead_contacted(self, lead_id: int):
@@ -219,7 +219,7 @@ class SupabaseClient:
     
     async def skip_lead_with_reason(self, lead_id: int, reason: str):
         """Mark lead as skipped with a reason (e.g., privacy_premium_required, write_forbidden)"""
-        print(f"      📝 Marking lead {lead_id} as skipped: {reason}")
+        print(f"      Marking lead {lead_id} as skipped: {reason}")
         return await self._patch('detected_leads', {'id': lead_id}, {
             'is_contacted': True,  # Mark as processed so it won't be retried
             'skip_reason': reason
@@ -282,13 +282,13 @@ class SupabaseClient:
                     # Check availability
                     # Allow None to be treated as available (default behavior)
                     if acc.get('is_available') is False:
-                         logger.warning(f"⚠️ Account {acc.get('account_name')} skipped: is_available is False (paused/cooldown)")
+                        logger.warning(f"Account {acc.get('account_name')} skipped: is_available is False (paused/cooldown)")
                          continue
                          
                     active_accounts.append(acc)
                 
                 if all_accounts and not active_accounts:
-                    logger.warning(f"❌ Found {len(all_accounts)} accounts for user but NONE are active/available!")
+                    logger.warning(f"Found {len(all_accounts)} accounts for user but NONE are active/available!")
                     # Log reasons for the first few to help debug
                     for acc in all_accounts[:3]:
                         logger.info(f"   - {acc.get('account_name')}: status={acc.get('status')}, is_available={acc.get('is_available')}")
@@ -296,7 +296,7 @@ class SupabaseClient:
                 return active_accounts
             else:
                 error_text = await resp.text()
-                logger.error(f"❌ DEBUG: Error response: {error_text}")
+                logger.error(f"DEBUG: Error response: {error_text}")
                 return []
     
     async def update_account_usage(self, account_id: str):
@@ -319,7 +319,7 @@ class SupabaseClient:
             # If last use was on a different day, reset counter
             if last_used_dt.date() < now.date():
                 messages_today = 0
-                logger.info(f"   🔄 Reset daily counter for account {account_id} (new day)")
+                logger.info(f"   Reset daily counter for account {account_id} (new day)")
         
         # Increment counters
         messages_today = messages_today + 1
@@ -353,7 +353,7 @@ class SupabaseClient:
     
     async def mark_account_error(self, account_id: str, error_reason: str = 'Connection error'):
         """Mark account as having an error (e.g., proxy failure)"""
-        logger.warning(f"⚠️ Marking account {account_id} as error: {error_reason}")
+        logger.warning(f"Marking account {account_id} as error: {error_reason}")
         return await self._patch('telegram_accounts', {'id': account_id}, {
             'status': 'error',
             'is_available': False,
@@ -422,7 +422,7 @@ class SupabaseClient:
                     return len(data) > 0
                 return False
         except Exception as e:
-            logger.error(f"⚠️ Error checking existing conversation: {e}")
+            logger.error(f"Error checking existing conversation: {e}")
             return False  # On error, assume no conversation (safer to message)
     
     async def create_conversation(
@@ -513,7 +513,7 @@ class SupabaseClient:
                     return data[0] if data else None
                 return None
         except Exception as e:
-            logger.error(f"⚠️ Error checking existing hot_lead: {e}")
+            logger.error(f"Error checking existing hot_lead: {e}")
             return None
     
     async def create_hot_lead(

@@ -34,10 +34,10 @@ class SafetyManager:
         accounts = await self.supabase.get_accounts_for_user(user_id)
         
         if not accounts:
-            logger.warning(f"❌ No available accounts found for user {user_id} (none active)")
+            logger.warning(f"No available accounts found for user {user_id} (none active)")
             return None
         
-        logger.debug(f"🔄 Checking {len(accounts)} accounts for availability...")
+        logger.debug(f"Checking {len(accounts)} accounts for availability...")
         
         for idx, account in enumerate(accounts, 1):
             account_id = str(account['id'])
@@ -45,20 +45,20 @@ class SafetyManager:
             
             # Check daily limit (individual)
             if self._is_daily_limit_reached(account):
-                logger.debug(f"    ⏭️ Account {account_name} reached daily limit")
+                logger.debug(f"    Account {account_name} reached daily limit")
                 continue
             
             # Check cooldown period (20 min between messages from same account)
             if self._needs_cooldown(account):
                 cooldown_left = self._get_cooldown_time_left(account)
-                logger.debug(f"    ⏳ Account {account_name} in cooldown: {cooldown_left:.0f}s remaining")
+                logger.debug(f"    Account {account_name} in cooldown: {cooldown_left:.0f}s remaining")
                 continue
             
             # Found available account - automatically rotated!
-            logger.info(f"    ✅ SELECTED Account: {account_name}")
+            logger.info(f"    SELECTED Account: {account_name}")
             return account
         
-        logger.warning(f"⚠️ All {len(accounts)} accounts are currently unavailable (limit or cooldown)")
+        logger.warning(f"All {len(accounts)} accounts are currently unavailable (limit or cooldown)")
         return None
     
     def _get_next_available_time(self, accounts: list) -> float:
@@ -114,9 +114,9 @@ class SafetyManager:
         is_reached = messages_today >= limit
         
         if is_reached:
-            logger.debug(f"    📊 Account {account_id}: {messages_today}/{limit} messages (limit reached)")
+            logger.debug(f"    Account {account_id}: {messages_today}/{limit} messages (limit reached)")
         else:
-            logger.debug(f"    📊 Account {account_id}: {messages_today}/{limit} messages")
+            logger.debug(f"    Account {account_id}: {messages_today}/{limit} messages")
         
         return is_reached
     
@@ -159,7 +159,7 @@ class SafetyManager:
         Returns delay in seconds
         """
         delay = random.uniform(MESSAGE_DELAY_MIN, MESSAGE_DELAY_MAX)
-        print(f"⏱️ Waiting {delay:.1f}s before next message")
+        print(f"Waiting {delay:.1f}s before next message")
         return delay
     
     async def mark_account_used(self, account_id: str):
@@ -181,30 +181,30 @@ class SafetyManager:
         cache_entry['count'] += 1
         self.account_usage_cache[account_id] = cache_entry
         
-        print(f"📊 Account {account_id}: {cache_entry['count']} messages today (in-memory)")
+        print(f"Account {account_id}: {cache_entry['count']} messages today (in-memory)")
         
         # Then update database (async, for persistence)
         await self.supabase.update_account_usage(account_id)
-        print(f"📊 Updated usage stats for account {account_id} in DB")
+        print(f"Updated usage stats for account {account_id} in DB")
     
     async def handle_flood_wait(self, account_id: str, wait_seconds: int):
         """
         Handle FloodWait error from Telegram
         Pause account temporarily
         """
-        print(f"🚫 FloodWait detected for account {account_id}: {wait_seconds}s")
+        print(f"FloodWait detected for account {account_id}: {wait_seconds}s")
         await self.supabase.pause_account(account_id, wait_seconds)
         
         # Schedule reactivation after wait period
         # Note: In production, use a scheduler or cron job
-        print(f"⏸️ Account {account_id} paused for {wait_seconds}s")
+        print(f"Account {account_id} paused for {wait_seconds}s")
     
     async def handle_account_ban(self, account_id: str):
         """
         Handle account ban
         Mark account as banned in database
         """
-        print(f"🔒 Account {account_id} BANNED - marking as unavailable")
+        print(f"Account {account_id} BANNED - marking as unavailable")
         await self.supabase.mark_account_banned(account_id)
     
     async def check_and_recover_accounts(self):
@@ -217,7 +217,7 @@ class SafetyManager:
             if not stuck_accounts:
                 return
 
-            logger.info(f"🔄 Found {len(stuck_accounts)} unavailable accounts. Checking for recovery...")
+            logger.info(f"Found {len(stuck_accounts)} unavailable accounts. Checking for recovery...")
             
             now = datetime.now(timezone.utc)
             recover_threshold = timedelta(minutes=30) # Auto-recover after 30 mins of silence
@@ -236,13 +236,13 @@ class SafetyManager:
                 time_since_update = now - updated_at
                 
                 if time_since_update > recover_threshold:
-                    logger.info(f"    🩹 Auto-recovering stuck account {account_name} (inactive for {time_since_update.total_seconds()/60:.1f} min)")
+                    logger.info(f"    Auto-recovering stuck account {account_name} (inactive for {time_since_update.total_seconds()/60:.1f} min)")
                     await self.supabase.unpause_account(account_id)
                 else:
-                    logger.debug(f"    ⏳ Account {account_name} still in cool-down/pause ({time_since_update.total_seconds()/60:.1f} min)")
+                    logger.debug(f"    Account {account_name} still in cool-down/pause ({time_since_update.total_seconds()/60:.1f} min)")
                     
         except Exception as e:
-            logger.error(f"⚠️ Error recovering accounts: {e}")
+            logger.error(f"Error recovering accounts: {e}")
 
     async def check_and_reset_daily_counters(self):
         """
@@ -257,11 +257,11 @@ class SafetyManager:
             
             # Check if already reset today to avoid spamming logs/DB every minute
             if self.last_reset_date != today_str:
-                logger.info(f"🔄 Resetting daily message counters (New day: {today_str})")
+                logger.info(f"Resetting daily message counters (New day: {today_str})")
                 await self.supabase.reset_daily_counters()
                 self.last_reset_date = today_str
             else:
-                logger.debug("ℹ️ Daily counters already reset for today")
+                logger.debug("Daily counters already reset for today")
 
 
 
