@@ -1,8 +1,16 @@
 """Configuration for AI Messaging Service"""
 import os
+import sys
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Ensure UTF-8 output to avoid mojibake in logs
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+except Exception:
+    pass
 
 # Supabase Configuration (REST API - no database password needed!)
 SUPABASE_URL = os.getenv('SUPABASE_URL')

@@ -19,6 +19,8 @@ const logFormat = printf(({ level, message, timestamp, stack, ...metadata }) => 
   return msg;
 });
 
+const shouldColorize = Boolean(process.stdout?.isTTY) && !process.env.NO_COLOR;
+
 // Create logger instance with console output only
 // File logging is disabled to prevent permission errors in Docker containers
 const logger = winston.createLogger({
@@ -30,10 +32,9 @@ const logger = winston.createLogger({
   ),
   transports: [
     new winston.transports.Console({
-      format: combine(
-        colorize(),
-        logFormat
-      )
+      format: shouldColorize
+        ? combine(colorize(), logFormat)
+        : logFormat
     })
   ]
 });
