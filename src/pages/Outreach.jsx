@@ -5,6 +5,10 @@ import './Outreach.css';
 const DEFAULT_SLEEP_PERIODS = '00:00-15:00, 19:00-00:00';
 const DEFAULT_FOLLOW_UP_PROMPT =
   'Напиши короткое напоминание о себе. Вежливо напомни о предложении и спроси, актуально ли оно еще. Если не актуально - попроси сообщить об этом. Сообщение должно быть кратким (2-3 предложения).';
+const DEFAULT_TRIGGER_PHRASE_POSITIVE = 'Отлично, рад, что смог вас заинтересовать';
+const DEFAULT_TRIGGER_PHRASE_NEGATIVE = 'Вижу, что не смог вас заинтересовать';
+const DEFAULT_FORWARD_LIMIT = 5;
+const DEFAULT_HISTORY_LIMIT = 20;
 
 const formatSleepPeriods = (value) => {
   if (Array.isArray(value)) {
@@ -62,6 +66,14 @@ const Outreach = () => {
     auto_reply_enabled: true,
     ai_prompt: '',
     ai_model: 'google/gemini-2.0-flash-001',
+    trigger_phrase_positive: DEFAULT_TRIGGER_PHRASE_POSITIVE,
+    trigger_phrase_negative: DEFAULT_TRIGGER_PHRASE_NEGATIVE,
+    target_chat_positive: '',
+    target_chat_negative: '',
+    forward_limit: DEFAULT_FORWARD_LIMIT,
+    history_limit: DEFAULT_HISTORY_LIMIT,
+    use_fallback_on_ai_fail: false,
+    fallback_text: '',
     message_delay_min: 60,
     message_delay_max: 180,
     daily_limit: 20,
@@ -95,12 +107,41 @@ const Outreach = () => {
   const [importFiles, setImportFiles] = useState([]);
   const [defaultProxy, setDefaultProxy] = useState('');
   const [targetText, setTargetText] = useState('');
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyStatusFilter, setHistoryStatusFilter] = useState('all');
+  const [historyCampaignFilter, setHistoryCampaignFilter] = useState('all');
+
+  const [proxies, setProxies] = useState([]);
+  const [proxyUsage, setProxyUsage] = useState({});
+  const [showProxyForm, setShowProxyForm] = useState(false);
+  const [newProxyUrl, setNewProxyUrl] = useState('');
+  const [newProxyName, setNewProxyName] = useState('');
+  const [proxyBulkText, setProxyBulkText] = useState('');
+  const [proxySearchTerms, setProxySearchTerms] = useState({});
+
+  const [processedClients, setProcessedClients] = useState([]);
+  const [processedSearch, setProcessedSearch] = useState('');
+  const [processedCampaignFilter, setProcessedCampaignFilter] = useState('all');
+  const [showProcessedForm, setShowProcessedForm] = useState(false);
+  const [processedUsername, setProcessedUsername] = useState('');
+  const [processedName, setProcessedName] = useState('');
+
+  const [historySelectedChat, setHistorySelectedChat] = useState(null);
+  const [historyMessages, setHistoryMessages] = useState([]);
+  const [historyMessageDraft, setHistoryMessageDraft] = useState('');
+  const [historySending, setHistorySending] = useState(false);
+
+  const [chatDraft, setChatDraft] = useState('');
+  const [chatSending, setChatSending] = useState(false);
+
+  const [logsCampaignFilter, setLogsCampaignFilter] = useState('all');
+  const [autoRefreshLogs, setAutoRefreshLogs] = useState(false);
 
   // Fetch data based on active tab
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      if (activeTab === 'campaigns' || activeTab === 'accounts') {
+      if (activeTab === 'campaigns') {
         const [accRes, campRes, statsRes] = await Promise.all([
           api.get('/outreach/accounts'),
           api.get('/outreach/campaigns'),
@@ -109,19 +150,55 @@ const Outreach = () => {
         setAccounts(Array.isArray(accRes.data) ? accRes.data : []);
         setCampaigns(Array.isArray(campRes.data) ? campRes.data : []);
         setStats(statsRes.data);
-      } else if (activeTab === 'chats') {
-        const res = await api.get('/outreach/chats');
-        setChats(Array.isArray(res.data) ? res.data : []);
+      } else if (activeTab === 'accounts') {
+        const [accRes, proxyRes, usageRes] = await Promise.all([
+          api.get('/outreach/accounts'),
+          api.get('/outreach/proxies'),
+          api.get('/outreach/proxies/usage')
+        ]);
+        setAccounts(Array.isArray(accRes.data) ? accRes.data : []);
+        setProxies(Array.isArray(proxyRes.data) ? proxyRes.data : []);
+        const usageMap = {};
+        (usageRes.data?.usage || []).forEach(item => {
+          usageMap[item.proxy.id] = item.accounts_count;
+        });
+        setProxyUsage(usageMap);
+      } else if (activeTab === 'chats' || activeTab === 'history') {
+        const [chatsRes, campaignsRes] = await Promise.all([
+          api.get('/outreach/chats'),
+          api.get('/outreach/campaigns')
+        ]);
+        setChats(Array.isArray(chatsRes.data) ? chatsRes.data : []);
+        setCampaigns(Array.isArray(campaignsRes.data) ? campaignsRes.data : []);
+      } else if (activeTab === 'processed') {
+        const params = {};
+        if (processedCampaignFilter !== 'all') {
+          params.campaign_id = processedCampaignFilter;
+        }
+        const [processedRes, campaignsRes] = await Promise.all([
+          api.get('/outreach/processed', { params }),
+          api.get('/outreach/campaigns')
+        ]);
+        setProcessedClients(Array.isArray(processedRes.data) ? processedRes.data : []);
+        setCampaigns(Array.isArray(campaignsRes.data) ? campaignsRes.data : []);
       } else if (activeTab === 'logs') {
-        const res = await api.get('/outreach/logs?limit=200');
+        const params = { limit: 200 };
+        if (logsCampaignFilter !== 'all') {
+          params.campaign_id = logsCampaignFilter;
+        }
+        const [res, campaignsRes] = await Promise.all([
+          api.get('/outreach/logs', { params }),
+          api.get('/outreach/campaigns')
+        ]);
         setLogs(Array.isArray(res.data) ? res.data : []);
+        setCampaigns(Array.isArray(campaignsRes.data) ? campaignsRes.data : []);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
-  }, [activeTab]);
+  }, [activeTab, processedCampaignFilter, logsCampaignFilter]);
 
   useEffect(() => {
     fetchData();
@@ -134,6 +211,25 @@ const Outreach = () => {
       return () => clearInterval(interval);
     }
   }, [activeTab, fetchData]);
+
+  useEffect(() => {
+    if (activeTab === 'logs' && autoRefreshLogs) {
+      const interval = setInterval(fetchData, 5000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab, autoRefreshLogs, fetchData]);
+
+  useEffect(() => {
+    if (activeTab === 'processed') {
+      fetchData();
+    }
+  }, [activeTab, processedCampaignFilter, fetchData]);
+
+  useEffect(() => {
+    if (activeTab === 'logs') {
+      fetchData();
+    }
+  }, [activeTab, logsCampaignFilter, fetchData]);
 
   // ============ CAMPAIGN HANDLERS ============
 
@@ -173,6 +269,14 @@ const Outreach = () => {
 
       const payload = {
         ...campaignForm,
+        trigger_phrase_positive: campaignForm.trigger_phrase_positive?.trim() || null,
+        trigger_phrase_negative: campaignForm.trigger_phrase_negative?.trim() || null,
+        target_chat_positive: campaignForm.target_chat_positive?.trim() || null,
+        target_chat_negative: campaignForm.target_chat_negative?.trim() || null,
+        forward_limit: normalizeNumber(campaignForm.forward_limit, DEFAULT_FORWARD_LIMIT),
+        history_limit: normalizeNumber(campaignForm.history_limit, DEFAULT_HISTORY_LIMIT),
+        use_fallback_on_ai_fail: !!campaignForm.use_fallback_on_ai_fail,
+        fallback_text: campaignForm.fallback_text?.trim() || null,
         message_delay_min: messageDelay.min,
         message_delay_max: messageDelay.max,
         daily_limit: normalizeNumber(campaignForm.daily_limit, 20),
@@ -212,6 +316,14 @@ const Outreach = () => {
       auto_reply_enabled: campaign.auto_reply_enabled ?? true,
       ai_prompt: campaign.ai_prompt || '',
       ai_model: campaign.ai_model || 'google/gemini-2.0-flash-001',
+      trigger_phrase_positive: campaign.trigger_phrase_positive ?? '',
+      trigger_phrase_negative: campaign.trigger_phrase_negative ?? '',
+      target_chat_positive: campaign.target_chat_positive ?? '',
+      target_chat_negative: campaign.target_chat_negative ?? '',
+      forward_limit: campaign.forward_limit ?? DEFAULT_FORWARD_LIMIT,
+      history_limit: campaign.history_limit ?? DEFAULT_HISTORY_LIMIT,
+      use_fallback_on_ai_fail: campaign.use_fallback_on_ai_fail ?? false,
+      fallback_text: campaign.fallback_text ?? '',
       message_delay_min: campaign.message_delay_min || 60,
       message_delay_max: campaign.message_delay_max || 180,
       daily_limit: campaign.daily_limit || 20,
@@ -264,6 +376,26 @@ const Outreach = () => {
     }
   };
 
+  const handleRestartCampaign = async (id) => {
+    if (!window.confirm('Перезапустить кампанию?')) return;
+    try {
+      await api.post(`/outreach/campaigns/${id}/restart`);
+      fetchData();
+    } catch (error) {
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleResetCampaignStatus = async (id) => {
+    if (!window.confirm('Сбросить статус кампании на паузу?')) return;
+    try {
+      await api.post(`/outreach/campaigns/${id}/reset-status`);
+      fetchData();
+    } catch (error) {
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
   const resetCampaignForm = () => {
     setSelectedCampaign(null);
     setCampaignForm({
@@ -272,6 +404,14 @@ const Outreach = () => {
       auto_reply_enabled: true,
       ai_prompt: '',
       ai_model: 'google/gemini-2.0-flash-001',
+      trigger_phrase_positive: DEFAULT_TRIGGER_PHRASE_POSITIVE,
+      trigger_phrase_negative: DEFAULT_TRIGGER_PHRASE_NEGATIVE,
+      target_chat_positive: '',
+      target_chat_negative: '',
+      forward_limit: DEFAULT_FORWARD_LIMIT,
+      history_limit: DEFAULT_HISTORY_LIMIT,
+      use_fallback_on_ai_fail: false,
+      fallback_text: '',
       message_delay_min: 60,
       message_delay_max: 180,
       daily_limit: 20,
@@ -376,6 +516,73 @@ const Outreach = () => {
     }
   };
 
+  // ============ PROXY HANDLERS ============
+
+  const handleAddProxy = async () => {
+    if (!newProxyUrl.trim()) {
+      alert('Введите URL прокси');
+      return;
+    }
+    try {
+      await api.post('/outreach/proxies', {
+        url: newProxyUrl.trim(),
+        name: newProxyName.trim() || null
+      });
+      setNewProxyUrl('');
+      setNewProxyName('');
+      setShowProxyForm(false);
+      fetchData();
+    } catch (error) {
+      alert('Ошибка добавления прокси: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleBulkAddProxies = async () => {
+    if (!proxyBulkText.trim()) {
+      alert('Введите список прокси');
+      return;
+    }
+    try {
+      const res = await api.post('/outreach/proxies/bulk', { proxies_text: proxyBulkText });
+      alert(`Добавлено: ${res.data.added}, пропущено: ${res.data.skipped}`);
+      setProxyBulkText('');
+      fetchData();
+    } catch (error) {
+      alert('Ошибка добавления прокси: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleDeleteProxy = async (proxyId) => {
+    if (!window.confirm('Удалить этот прокси? Он будет отвязан от всех аккаунтов.')) return;
+    try {
+      await api.delete(`/outreach/proxies/${proxyId}`);
+      fetchData();
+    } catch (error) {
+      alert('Ошибка удаления прокси: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleClearProxies = async () => {
+    if (!window.confirm('Удалить все прокси? Они будут отвязаны от всех аккаунтов.')) return;
+    try {
+      await api.delete('/outreach/proxies');
+      fetchData();
+    } catch (error) {
+      alert('Ошибка очистки прокси: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleAssignProxyToAccount = async (accountId, proxyId) => {
+    try {
+      await api.patch(`/outreach/accounts/${accountId}`, {
+        proxy_id: proxyId || null
+      });
+      fetchData();
+    } catch (error) {
+      alert('Ошибка привязки прокси: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
   const toggleAccountInCampaign = (accountId) => {
     setCampaignForm(prev => {
       const ids = prev.account_ids || [];
@@ -387,10 +594,91 @@ const Outreach = () => {
     });
   };
 
+  // ============ PROCESSED HANDLERS ============
+
+  const handleAddProcessedClient = async () => {
+    const username = processedUsername.trim();
+    if (!processedCampaignFilter || processedCampaignFilter === 'all') {
+      alert('Выберите кампанию');
+      return;
+    }
+    if (!username) {
+      alert('Введите username');
+      return;
+    }
+    try {
+      await api.post('/outreach/processed', {
+        campaign_id: processedCampaignFilter,
+        target_username: username,
+        target_name: processedName.trim() || null
+      });
+      setProcessedUsername('');
+      setProcessedName('');
+      setShowProcessedForm(false);
+      fetchData();
+    } catch (error) {
+      alert('Ошибка добавления клиента: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleRemoveProcessedClient = async (clientId) => {
+    if (!window.confirm('Удалить клиента из обработанных?')) return;
+    try {
+      await api.delete(`/outreach/processed/${clientId}`);
+      fetchData();
+    } catch (error) {
+      alert('Ошибка удаления клиента: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleUploadProcessedClients = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!processedCampaignFilter || processedCampaignFilter === 'all') {
+      alert('Выберите кампанию');
+      event.target.value = '';
+      return;
+    }
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('campaign_id', processedCampaignFilter);
+      const res = await api.post('/outreach/processed/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      alert(`Добавлено клиентов: ${res.data.added_count}`);
+      fetchData();
+    } catch (error) {
+      alert('Ошибка загрузки списка: ' + (error.response?.data?.error || error.message));
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const handleAddProcessedFromChat = async (chat) => {
+    const campaignId = chat?.campaign?.id || chat?.campaign_id;
+    const username = chat?.target_username;
+    if (!campaignId || !username) {
+      alert('Не удалось определить кампанию или пользователя');
+      return;
+    }
+    try {
+      await api.post('/outreach/processed', {
+        campaign_id: campaignId,
+        target_username: username,
+        target_name: chat?.target_name || null
+      });
+      fetchData();
+    } catch (error) {
+      alert('Ошибка добавления клиента: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
   // ============ CHAT HANDLERS ============
 
   const handleSelectChat = async (chat) => {
     setSelectedChat(chat);
+    setChatDraft('');
     try {
       const res = await api.get(`/outreach/chats/${chat.id}/messages`);
       setChatMessages(Array.isArray(res.data) ? res.data : []);
@@ -406,6 +694,165 @@ const Outreach = () => {
       fetchData();
     } catch (error) {
       alert('Ошибка: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleLeadStatusUpdate = async (chatId, leadStatus) => {
+    try {
+      const updates = { lead_status: leadStatus };
+      if (leadStatus === 'lead' || leadStatus === 'not_lead') {
+        updates.status = 'manual';
+      }
+      await api.patch(`/outreach/chats/${chatId}`, updates);
+      fetchData();
+    } catch (error) {
+      alert('Ошибка: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleSendChatMessage = async () => {
+    if (!selectedChat || !chatDraft.trim()) return;
+    setChatSending(true);
+    try {
+      await api.post(`/outreach/chats/${selectedChat.id}/send`, {
+        content: chatDraft.trim()
+      });
+      setChatMessages(prev => [
+        ...prev,
+        { id: `pending-${Date.now()}`, sender: 'me', content: chatDraft.trim(), created_at: new Date().toISOString(), pending: true }
+      ]);
+      setChatDraft('');
+    } catch (error) {
+      alert('Ошибка отправки: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setChatSending(false);
+    }
+  };
+
+  const handleDeleteChat = async (chatId) => {
+    if (!window.confirm('Удалить диалог?')) return;
+    try {
+      await api.delete(`/outreach/chats/${chatId}`);
+      if (selectedChat?.id === chatId) {
+        setSelectedChat(null);
+        setChatMessages([]);
+      }
+      if (historySelectedChat?.id === chatId) {
+        setHistorySelectedChat(null);
+        setHistoryMessages([]);
+      }
+      fetchData();
+    } catch (error) {
+      alert('Ошибка удаления: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  // ============ HISTORY HANDLERS ============
+
+  const handleSelectHistoryChat = async (chat) => {
+    setHistorySelectedChat(chat);
+    setHistoryMessageDraft('');
+    try {
+      const res = await api.get(`/outreach/chats/${chat.id}/messages`);
+      setHistoryMessages(Array.isArray(res.data) ? res.data : []);
+    } catch (error) {
+      console.error('Error fetching history messages:', error);
+    }
+  };
+
+  const handleHistorySendMessage = async () => {
+    if (!historySelectedChat || !historyMessageDraft.trim()) return;
+    setHistorySending(true);
+    try {
+      await api.post(`/outreach/chats/${historySelectedChat.id}/send`, {
+        content: historyMessageDraft.trim()
+      });
+      setHistoryMessages(prev => [
+        ...prev,
+        { id: `pending-${Date.now()}`, sender: 'me', content: historyMessageDraft.trim(), created_at: new Date().toISOString(), pending: true }
+      ]);
+      setHistoryMessageDraft('');
+    } catch (error) {
+      alert('Ошибка отправки: ' + (error.response?.data?.error || error.message));
+    } finally {
+      setHistorySending(false);
+    }
+  };
+
+  const downloadBlob = (blob, filename) => {
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  };
+
+  const getFilenameFromDisposition = (disposition) => {
+    if (!disposition) return null;
+    const match = /filename="([^"]+)"/.exec(disposition);
+    return match ? match[1] : null;
+  };
+
+  const handleExportHistory = async (format) => {
+    try {
+      const params = { format };
+      if (historyCampaignFilter !== 'all') {
+        params.campaign_id = historyCampaignFilter;
+      }
+      const res = await api.get('/outreach/history/export', {
+        params,
+        responseType: 'blob'
+      });
+      const filename = getFilenameFromDisposition(res.headers['content-disposition'])
+        || `outreach_dialogs.${format === 'html' ? 'html' : 'json'}`;
+      const contentType = res.headers['content-type'] || 'application/octet-stream';
+      const blob = res.data instanceof Blob
+        ? res.data
+        : new Blob([res.data], { type: contentType });
+      downloadBlob(blob, filename);
+    } catch (error) {
+      alert('Ошибка экспорта: ' + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleImportHistory = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.endsWith('.json')) {
+      alert('Пожалуйста, загрузите JSON файл');
+      event.target.value = '';
+      return;
+    }
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      if (historyCampaignFilter !== 'all') {
+        formData.append('campaign_id', historyCampaignFilter);
+      }
+      const res = await api.post('/outreach/history/import', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      const warnings = [];
+      if (res.data.skipped_missing_campaign) {
+        warnings.push(`Нет campaign_id: ${res.data.skipped_missing_campaign}`);
+      }
+      if (res.data.skipped_missing_username) {
+        warnings.push(`Нет username: ${res.data.skipped_missing_username}`);
+      }
+      alert(
+        `Импорт завершён!\nИмпортировано: ${res.data.imported_count}\nПропущено: ${res.data.skipped_count}` +
+        (warnings.length ? `\n\nПропуски:\n- ${warnings.join('\n- ')}` : '')
+      );
+      fetchData();
+    } catch (error) {
+      alert('Ошибка импорта: ' + (error.response?.data?.error || error.message));
+    } finally {
+      event.target.value = '';
     }
   };
 
@@ -429,6 +876,88 @@ const Outreach = () => {
       </span>
     );
   };
+
+  const getLeadBadge = (leadStatus) => {
+    if (!leadStatus || leadStatus === 'none') return null;
+    const colors = {
+      lead: '#5cb85c',
+      not_lead: '#d9534f',
+      later: '#f0ad4e'
+    };
+    const labels = {
+      lead: 'Лид',
+      not_lead: 'Не лид',
+      later: 'Потом'
+    };
+    return (
+      <span className="status-badge" style={{ background: colors[leadStatus] || '#666' }}>
+        {labels[leadStatus] || leadStatus}
+      </span>
+    );
+  };
+
+  const getHistoryStatusBadge = (status) => {
+    const value = status || 'none';
+    const colors = {
+      none: '#666',
+      lead: '#22543d',
+      not_lead: '#742a2a',
+      later: '#744210'
+    };
+    const labels = {
+      none: 'Не размечен',
+      lead: 'Лид',
+      not_lead: 'Не лид',
+      later: 'Потом'
+    };
+    return (
+      <span className="status-badge" style={{ background: colors[value] || '#666' }}>
+        {labels[value] || value}
+      </span>
+    );
+  };
+
+  const formatHistoryTime = (value) => {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString();
+  };
+
+  const historyCampaignChats = historyCampaignFilter === 'all'
+    ? chats
+    : chats.filter(chat => chat.campaign?.id === historyCampaignFilter);
+
+  const historyStats = historyCampaignChats.reduce((acc, chat) => {
+    const status = chat.lead_status || 'none';
+    acc.total += 1;
+    acc[status] = (acc[status] || 0) + 1;
+    return acc;
+  }, { total: 0, lead: 0, not_lead: 0, later: 0, none: 0 });
+
+  const filteredHistoryChats = historyCampaignChats.filter(chat => {
+    const leadStatus = chat.lead_status || 'none';
+    if (historyStatusFilter !== 'all' && leadStatus !== historyStatusFilter) {
+      return false;
+    }
+    if (!historySearch) return true;
+    const term = historySearch.toLowerCase();
+    return (
+      (chat.target_username || '').toLowerCase().includes(term)
+      || (chat.target_name || '').toLowerCase().includes(term)
+      || (chat.account?.phone_number || '').toLowerCase().includes(term)
+      || (chat.campaign?.name || '').toLowerCase().includes(term)
+    );
+  });
+
+  const filteredProcessedClients = processedClients.filter(client => {
+    if (!processedSearch) return true;
+    const term = processedSearch.toLowerCase();
+    return (
+      (client.target_username || '').toLowerCase().includes(term)
+      || (client.target_name || '').toLowerCase().includes(term)
+    );
+  });
 
   // ============ RENDER ============
 
@@ -469,7 +998,7 @@ const Outreach = () => {
       )}
       
       <div className="outreach-tabs">
-        {['campaigns', 'accounts', 'chats', 'logs'].map(tab => (
+        {['campaigns', 'accounts', 'chats', 'history', 'processed', 'logs'].map(tab => (
           <button
             key={tab}
             className={`tab-button ${activeTab === tab ? 'active' : ''}`}
@@ -478,6 +1007,8 @@ const Outreach = () => {
             {tab === 'campaigns' && 'Кампании'}
             {tab === 'accounts' && 'Аккаунты'}
             {tab === 'chats' && 'Чаты'}
+            {tab === 'history' && 'История'}
+            {tab === 'processed' && 'Обработанные'}
             {tab === 'logs' && 'Логи'}
             {tab === 'chats' && stats?.chats?.unread > 0 && (
               <span className="unread-badge">{stats.chats.unread}</span>
@@ -563,6 +1094,18 @@ const Outreach = () => {
                           Запустить
                         </button>
                       )}
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => handleRestartCampaign(camp.id)}
+                      >
+                        Перезапуск
+                      </button>
+                      <button
+                        className="btn btn-secondary"
+                        onClick={() => handleResetCampaignStatus(camp.id)}
+                      >
+                        Сброс статуса
+                      </button>
                       <button 
                         className="btn btn-secondary"
                         onClick={() => handleOpenTargets(camp)}
@@ -580,7 +1123,7 @@ const Outreach = () => {
                         onClick={() => handleDeleteCampaign(camp.id)}
                       >
                         Удалить
-                      </button>
+                        </button>
                     </div>
                   </div>
                 ))}
@@ -606,48 +1149,186 @@ const Outreach = () => {
                   onClick={() => setShowAccountModal(true)}
                         >
                   Добавить
-                        </button>
+                </button>
                     </div>
             </div>
-
+            
             {loading ? (
               <div className="loading-spinner"></div>
-            ) : accounts.length === 0 ? (
-              <div className="empty-state">
-                <h3>Нет аккаунтов</h3>
-                <p>Добавьте Telegram аккаунты для рассылки</p>
-              </div>
             ) : (
-              <div className="accounts-grid">
-                {accounts.map(acc => (
-                  <div key={acc.id} className={`account-card ${acc.status}`}>
-                    <div className="account-header">
-                      <h3>{acc.phone_number}</h3>
-                      {getStatusBadge(acc.status)}
-                    </div>
-                    <div className="account-details">
-                    {acc.proxy_url && (
-                        <p className="proxy-info">
-                          {acc.proxy_url.split('@')[1] || acc.proxy_url.substring(0, 30)}...
-                        </p>
-                      )}
-                      {acc.last_active_at && (
-                        <p className="last-active">
-                          {new Date(acc.last_active_at).toLocaleString()}
-                        </p>
-                    )}
-                    </div>
-                    <div className="account-actions">
-                      <button 
-                        className="btn btn-danger btn-small"
-                        onClick={() => handleDeleteAccount(acc.id)}
-                      >
-                        Удалить
+              <>
+                <div className="proxy-section">
+                  <div className="proxy-header">
+                    <h3>Прокси ({proxies.length})</h3>
+                    <div className="proxy-actions">
+                      <button className="btn btn-primary btn-small" onClick={() => setShowProxyForm(true)}>
+                        Добавить прокси
                       </button>
+                      {proxies.length > 0 && (
+                        <button className="btn btn-danger btn-small" onClick={handleClearProxies}>
+                          Очистить все
+                        </button>
+                      )}
                     </div>
                   </div>
-                ))}
-              </div>
+
+                  {showProxyForm && (
+                    <div className="proxy-form">
+                      <div className="form-group">
+                        <label>URL прокси</label>
+                        <input
+                          type="text"
+                          value={newProxyUrl}
+                          onChange={e => setNewProxyUrl(e.target.value)}
+                          placeholder="socks5://user:pass@host:port"
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label>Название (опционально)</label>
+                        <input
+                          type="text"
+                          value={newProxyName}
+                          onChange={e => setNewProxyName(e.target.value)}
+                          placeholder="Мой прокси 1"
+                        />
+                      </div>
+                      <div className="form-actions">
+                        <button className="btn btn-primary btn-small" onClick={handleAddProxy}>Сохранить</button>
+                        <button className="btn btn-secondary btn-small" onClick={() => setShowProxyForm(false)}>Отмена</button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="proxy-bulk">
+                    <label>Добавить список прокси (по одному на строку)</label>
+                    <textarea
+                      value={proxyBulkText}
+                      onChange={e => setProxyBulkText(e.target.value)}
+                      rows={3}
+                      placeholder="socks5://user:pass@host:port"
+                    />
+                    <button className="btn btn-secondary btn-small" onClick={handleBulkAddProxies}>
+                      Загрузить список
+                    </button>
+                  </div>
+
+                  {proxies.length === 0 ? (
+                    <div className="empty-state small">
+                      <p>Прокси не добавлены</p>
+                    </div>
+                  ) : (
+                    <div className="proxy-list">
+                      {proxies.map(proxy => (
+                        <div key={proxy.id} className="proxy-item">
+                          <div>
+                            <div className="proxy-name">{proxy.name || 'Без названия'}</div>
+                            <div className="proxy-url">{proxy.url}</div>
+                            <div className="proxy-usage">Привязано аккаунтов: {proxyUsage[proxy.id] || 0}</div>
+                          </div>
+                          <button className="btn btn-danger btn-small" onClick={() => handleDeleteProxy(proxy.id)}>
+                            Удалить
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {accounts.length === 0 ? (
+                  <div className="empty-state">
+                    <h3>Нет аккаунтов</h3>
+                    <p>Добавьте Telegram аккаунты для рассылки</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="accounts-grid">
+                      {accounts.map(acc => (
+                        <div key={acc.id} className={`account-card ${acc.status}`}>
+                          <div className="account-header">
+                        <h3>{acc.phone_number}</h3>
+                            {getStatusBadge(acc.status)}
+                          </div>
+                          <div className="account-details">
+                            {acc.proxy_url && (
+                              <p className="proxy-info">
+                                {acc.proxy_url.split('@')[1] || acc.proxy_url.substring(0, 30)}...
+                              </p>
+                            )}
+                            {acc.last_active_at && (
+                              <p className="last-active">
+                                {new Date(acc.last_active_at).toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                          <div className="account-actions">
+                        <button 
+                              className="btn btn-danger btn-small"
+                            onClick={() => handleDeleteAccount(acc.id)}
+                        >
+                              Удалить
+                        </button>
+                    </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="accounts-table-wrapper">
+                      <h3>Привязка прокси к аккаунтам</h3>
+                      <table className="accounts-table">
+                        <thead>
+                          <tr>
+                            <th>Аккаунт</th>
+                            <th>Прокси</th>
+                            <th>Статус</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {accounts.map(acc => {
+                            const searchTerm = (proxySearchTerms[acc.id] || '').toLowerCase();
+                            const filtered = proxies.filter(proxy => {
+                              const label = (proxy.name || proxy.url).toLowerCase();
+                              return label.includes(searchTerm);
+                            });
+                            return (
+                              <tr key={acc.id}>
+                                <td>{acc.phone_number}</td>
+                                <td>
+                                  <input
+                                    type="text"
+                                    value={proxySearchTerms[acc.id] || ''}
+                                    onChange={e => setProxySearchTerms(prev => ({ ...prev, [acc.id]: e.target.value }))}
+                                    placeholder="Поиск прокси..."
+                                    className="proxy-search"
+                                  />
+                                  <select
+                                    value={acc.proxy_id || ''}
+                                    onChange={e => handleAssignProxyToAccount(acc.id, e.target.value || null)}
+                                  >
+                                    <option value="">Без прокси</option>
+                                    {filtered.map(proxy => {
+                                      const usage = proxyUsage[proxy.id] || 0;
+                                      const label = `${proxy.name || proxy.url} (${usage})`;
+                                      return (
+                                        <option key={proxy.id} value={proxy.id}>
+                                          {label}
+                                        </option>
+                                      );
+                                    })}
+                                  </select>
+                    {acc.proxy_url && (
+                                    <div className="proxy-preview">{acc.proxy_url}</div>
+                                  )}
+                                </td>
+                                <td>{getStatusBadge(acc.status)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                  </div>
+                  </>
+                )}
+              </>
             )}
           </section>
         )}
@@ -689,6 +1370,7 @@ const Outreach = () => {
                           <div className="chat-meta">
                             <span className="chat-account">{chat.account?.phone_number}</span>
                             {getStatusBadge(chat.status)}
+                            {getLeadBadge(chat.lead_status)}
                           </div>
                         </div>
                       </div>
@@ -704,6 +1386,7 @@ const Outreach = () => {
                       <div className="chat-title">
                         <h3>{selectedChat.target_name || `@${selectedChat.target_username}`}</h3>
                         <span className="chat-campaign">{selectedChat.campaign?.name}</span>
+                        {getLeadBadge(selectedChat.lead_status)}
                       </div>
                       <div className="chat-controls">
                         <button 
@@ -711,6 +1394,45 @@ const Outreach = () => {
                           onClick={() => handleChatModeToggle(selectedChat.id, selectedChat.status)}
                         >
                           {selectedChat.status === 'manual' ? 'Вкл. AI' : 'Ручной режим'}
+                        </button>
+                        <button
+                          className={`btn btn-small ${selectedChat.lead_status === 'lead' ? 'btn-success' : 'btn-secondary'}`}
+                          onClick={() => handleLeadStatusUpdate(
+                            selectedChat.id,
+                            selectedChat.lead_status === 'lead' ? 'none' : 'lead'
+                          )}
+                        >
+                          Лид
+                        </button>
+                        <button
+                          className={`btn btn-small ${selectedChat.lead_status === 'not_lead' ? 'btn-danger' : 'btn-secondary'}`}
+                          onClick={() => handleLeadStatusUpdate(
+                            selectedChat.id,
+                            selectedChat.lead_status === 'not_lead' ? 'none' : 'not_lead'
+                          )}
+                        >
+                          Не лид
+                        </button>
+                        <button
+                          className={`btn btn-small ${selectedChat.lead_status === 'later' ? 'btn-warning' : 'btn-secondary'}`}
+                          onClick={() => handleLeadStatusUpdate(
+                            selectedChat.id,
+                            selectedChat.lead_status === 'later' ? 'none' : 'later'
+                          )}
+                        >
+                          Потом
+                        </button>
+                        <button
+                          className="btn btn-small btn-secondary"
+                          onClick={() => handleAddProcessedFromChat(selectedChat)}
+                        >
+                          В обработанные
+                        </button>
+                        <button
+                          className="btn btn-small btn-danger"
+                          onClick={() => handleDeleteChat(selectedChat.id)}
+                        >
+                          Удалить
                         </button>
                       </div>
                     </div>
@@ -724,6 +1446,26 @@ const Outreach = () => {
                         </div>
                       ))}
                     </div>
+                    <div className="chat-reply">
+                      <textarea
+                        value={chatDraft}
+                        onChange={e => setChatDraft(e.target.value)}
+                        placeholder="Введите сообщение..."
+                        rows={2}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && e.ctrlKey) {
+                            handleSendChatMessage();
+                          }
+                        }}
+                      />
+                      <button
+                        className="btn btn-primary"
+                        disabled={chatSending || !chatDraft.trim()}
+                        onClick={handleSendChatMessage}
+                      >
+                        {chatSending ? 'Отправка...' : 'Отправить'}
+                      </button>
+                    </div>
                   </>
                 ) : (
                   <div className="empty-state">
@@ -736,14 +1478,387 @@ const Outreach = () => {
           </section>
         )}
 
+        {/* ============ HISTORY TAB ============ */}
+        {activeTab === 'history' && (
+          <section className="history-section">
+            <div className="section-header">
+              <h2>История диалогов</h2>
+              <div className="history-actions">
+                <button className="btn btn-secondary btn-small" onClick={() => handleExportHistory('json')}>
+                  Скачать JSON
+                </button>
+                <button className="btn btn-secondary btn-small" onClick={() => handleExportHistory('html')}>
+                  Скачать HTML
+                </button>
+                <label className="btn btn-secondary btn-small">
+                  Импорт JSON
+                  <input
+                    type="file"
+                    accept=".json"
+                    onChange={handleImportHistory}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="history-controls">
+              <input
+                type="text"
+                placeholder="Поиск по username, имени, кампании..."
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
+              />
+              <select
+                value={historyStatusFilter}
+                onChange={(e) => setHistoryStatusFilter(e.target.value)}
+              >
+                <option value="all">Все статусы</option>
+                <option value="none">Не размечены</option>
+                <option value="lead">Лиды</option>
+                <option value="not_lead">Не лиды</option>
+                <option value="later">Потом</option>
+              </select>
+              <select
+                value={historyCampaignFilter}
+                onChange={(e) => setHistoryCampaignFilter(e.target.value)}
+              >
+                <option value="all">Все кампании</option>
+                {campaigns.map(camp => (
+                  <option key={camp.id} value={camp.id}>{camp.name}</option>
+                ))}
+              </select>
+              <button className="btn btn-secondary btn-small" onClick={fetchData}>
+                Обновить
+              </button>
+            </div>
+
+            <div className="history-stats">
+              <div className="history-stat">
+                <div className="value">{historyStats.total}</div>
+                <div className="label">Всего</div>
+              </div>
+              <div className="history-stat">
+                <div className="value">{historyStats.lead}</div>
+                <div className="label">Лиды</div>
+              </div>
+              <div className="history-stat">
+                <div className="value">{historyStats.not_lead}</div>
+                <div className="label">Не лиды</div>
+              </div>
+              <div className="history-stat">
+                <div className="value">{historyStats.later}</div>
+                <div className="label">Потом</div>
+              </div>
+              <div className="history-stat">
+                <div className="value">{historyStats.none}</div>
+                <div className="label">Не размечено</div>
+              </div>
+            </div>
+
+            <div className="history-layout">
+              <div className="history-list">
+                {filteredHistoryChats.length === 0 ? (
+                  <div className="empty-state small">
+                    <p>Нет диалогов</p>
+                  </div>
+                ) : (
+                  <table className="history-table">
+                    <thead>
+                      <tr>
+                        <th>Статус</th>
+                        <th>Последнее</th>
+                        <th>Аккаунт</th>
+                        <th>Пользователь</th>
+                        <th>Кампания</th>
+                        <th>Обработан</th>
+                        <th>Действия</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredHistoryChats.map(chat => (
+                        <tr key={chat.id}>
+                          <td>{getHistoryStatusBadge(chat.lead_status || 'none')}</td>
+                          <td>{formatHistoryTime(chat.last_message_at)}</td>
+                          <td>{chat.account?.phone_number || '-'}</td>
+                          <td>{chat.target_name || `@${chat.target_username}`}</td>
+                          <td>{chat.campaign?.name || '-'}</td>
+                          <td>{formatHistoryTime(chat.processed_at)}</td>
+                          <td>
+                            <div className="history-row-actions">
+                              <button className="btn btn-secondary btn-small" onClick={() => handleSelectHistoryChat(chat)}>
+                                👁
+                              </button>
+                              <button
+                                className={`btn btn-small ${chat.lead_status === 'lead' ? 'btn-success' : 'btn-secondary'}`}
+                                onClick={() => handleLeadStatusUpdate(chat.id, chat.lead_status === 'lead' ? 'none' : 'lead')}
+                              >
+                                ✅
+                              </button>
+                              <button
+                                className={`btn btn-small ${chat.lead_status === 'not_lead' ? 'btn-danger' : 'btn-secondary'}`}
+                                onClick={() => handleLeadStatusUpdate(chat.id, chat.lead_status === 'not_lead' ? 'none' : 'not_lead')}
+                              >
+                                ❌
+                              </button>
+                              <button
+                                className={`btn btn-small ${chat.lead_status === 'later' ? 'btn-warning' : 'btn-secondary'}`}
+                                onClick={() => handleLeadStatusUpdate(chat.id, chat.lead_status === 'later' ? 'none' : 'later')}
+                              >
+                                ⏰
+                              </button>
+                              <button className="btn btn-secondary btn-small" onClick={() => handleAddProcessedFromChat(chat)}>
+                                🚫
+                              </button>
+                              <button className="btn btn-danger btn-small" onClick={() => handleDeleteChat(chat.id)}>
+                                🗑
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              <div className="history-view">
+                {historySelectedChat ? (
+                  <>
+                    <div className="history-chat-header">
+                      <div>
+                        <h3>{historySelectedChat.target_name || `@${historySelectedChat.target_username}`}</h3>
+                        <div className="history-meta">
+                          <span>{historySelectedChat.campaign?.name || '—'}</span>
+                          <span>{historySelectedChat.account?.phone_number || '—'}</span>
+                          {getHistoryStatusBadge(historySelectedChat.lead_status || 'none')}
+                        </div>
+                      </div>
+                      <div className="history-chat-actions">
+                        <button
+                          className={`btn btn-small ${historySelectedChat.lead_status === 'lead' ? 'btn-success' : 'btn-secondary'}`}
+                          onClick={() => handleLeadStatusUpdate(
+                            historySelectedChat.id,
+                            historySelectedChat.lead_status === 'lead' ? 'none' : 'lead'
+                          )}
+                        >
+                          Лид
+                        </button>
+                        <button
+                          className={`btn btn-small ${historySelectedChat.lead_status === 'not_lead' ? 'btn-danger' : 'btn-secondary'}`}
+                          onClick={() => handleLeadStatusUpdate(
+                            historySelectedChat.id,
+                            historySelectedChat.lead_status === 'not_lead' ? 'none' : 'not_lead'
+                          )}
+                        >
+                          Не лид
+                        </button>
+                        <button
+                          className={`btn btn-small ${historySelectedChat.lead_status === 'later' ? 'btn-warning' : 'btn-secondary'}`}
+                          onClick={() => handleLeadStatusUpdate(
+                            historySelectedChat.id,
+                            historySelectedChat.lead_status === 'later' ? 'none' : 'later'
+                          )}
+                        >
+                          Потом
+                        </button>
+                        <button className="btn btn-small btn-secondary" onClick={() => handleAddProcessedFromChat(historySelectedChat)}>
+                          В обработанные
+                        </button>
+                        <button className="btn btn-small btn-danger" onClick={() => handleDeleteChat(historySelectedChat.id)}>
+                          Удалить
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="messages-container history-messages">
+                      {historyMessages.map(msg => (
+                        <div key={msg.id} className={`message ${msg.sender}`}>
+                          <div className="message-content">{msg.content}</div>
+                          <div className="message-time">
+                            {formatHistoryTime(msg.created_at)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="chat-reply">
+                      <textarea
+                        value={historyMessageDraft}
+                        onChange={e => setHistoryMessageDraft(e.target.value)}
+                        placeholder="Введите сообщение..."
+                        rows={2}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && e.ctrlKey) {
+                            handleHistorySendMessage();
+                          }
+                        }}
+                      />
+                      <button
+                        className="btn btn-primary"
+                        disabled={historySending || !historyMessageDraft.trim()}
+                        onClick={handleHistorySendMessage}
+                      >
+                        {historySending ? 'Отправка...' : 'Отправить'}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="empty-state">
+                    <h3>Выберите диалог</h3>
+                    <p>Кликните на строку диалога для просмотра сообщений</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ============ PROCESSED TAB ============ */}
+        {activeTab === 'processed' && (
+          <section className="processed-section">
+            <div className="section-header">
+              <h2>Обработанные клиенты</h2>
+              <div className="processed-actions">
+                <button
+                  className="btn btn-secondary btn-small"
+                  onClick={() => setShowProcessedForm(!showProcessedForm)}
+                >
+                  {showProcessedForm ? 'Скрыть форму' : 'Добавить клиента'}
+                </button>
+                <label className="btn btn-secondary btn-small">
+                  Загрузить список
+                  <input
+                    type="file"
+                    accept=".txt"
+                    onChange={handleUploadProcessedClients}
+                    style={{ display: 'none' }}
+                  />
+                </label>
+              </div>
+            </div>
+
+            <div className="processed-controls">
+              <select
+                value={processedCampaignFilter}
+                onChange={(e) => setProcessedCampaignFilter(e.target.value)}
+              >
+                <option value="all">Все кампании</option>
+                {campaigns.map(camp => (
+                  <option key={camp.id} value={camp.id}>{camp.name}</option>
+                ))}
+              </select>
+              <input
+                type="text"
+                placeholder="Поиск по username/имени..."
+                value={processedSearch}
+                onChange={(e) => setProcessedSearch(e.target.value)}
+              />
+              <button className="btn btn-secondary btn-small" onClick={fetchData}>
+                Обновить
+              </button>
+            </div>
+
+            {showProcessedForm && (
+              <div className="processed-form">
+                <div className="form-group">
+                  <label>Username</label>
+                  <input
+                    type="text"
+                    value={processedUsername}
+                    onChange={(e) => setProcessedUsername(e.target.value)}
+                    placeholder="@username"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Имя (опционально)</label>
+                  <input
+                    type="text"
+                    value={processedName}
+                    onChange={(e) => setProcessedName(e.target.value)}
+                    placeholder="Имя пользователя"
+                  />
+                </div>
+                <div className="form-actions">
+                  <button className="btn btn-primary btn-small" onClick={handleAddProcessedClient}>
+                    Добавить
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="processed-hint">
+              Эти пользователи не будут получать новые сообщения. Можно удалить из списка, чтобы разрешить общение снова.
+            </div>
+
+            {filteredProcessedClients.length === 0 ? (
+              <div className="empty-state small">
+                <p>Нет обработанных клиентов</p>
+              </div>
+            ) : (
+              <table className="processed-table">
+                <thead>
+                  <tr>
+                    <th>Username</th>
+                    <th>Имя</th>
+                    <th>Кампания</th>
+                    <th>Добавлен</th>
+                    <th>Действия</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredProcessedClients.map(client => {
+                    const campaign = campaigns.find(c => c.id === client.campaign_id);
+                    return (
+                      <tr key={client.id}>
+                        <td>@{client.target_username}</td>
+                        <td>{client.target_name || '—'}</td>
+                        <td>{campaign?.name || '—'}</td>
+                        <td>{formatHistoryTime(client.created_at)}</td>
+                        <td>
+                          <button
+                            className="btn btn-danger btn-small"
+                            onClick={() => handleRemoveProcessedClient(client.id)}
+                          >
+                            Удалить
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </section>
+        )}
+
         {/* ============ LOGS TAB ============ */}
         {activeTab === 'logs' && (
           <section className="logs-section">
-            <div className="section-header">
+             <div className="section-header">
               <h2>Логи воркера</h2>
-              <button className="btn btn-secondary" onClick={fetchData}>
-                Обновить
-              </button>
+              <div className="logs-actions">
+                <select
+                  value={logsCampaignFilter}
+                  onChange={(e) => setLogsCampaignFilter(e.target.value)}
+                >
+                  <option value="all">Все кампании</option>
+                  {campaigns.map(camp => (
+                    <option key={camp.id} value={camp.id}>{camp.name}</option>
+                  ))}
+                </select>
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={autoRefreshLogs}
+                    onChange={(e) => setAutoRefreshLogs(e.target.checked)}
+                  />
+                  <span>Автообновление</span>
+                </label>
+                <button className="btn btn-secondary btn-small" onClick={fetchData}>
+                  Обновить
+                </button>
+              </div>
             </div>
             <div className="logs-container">
               {logs.length === 0 ? (
@@ -824,15 +1939,107 @@ const Outreach = () => {
               </div>
 
               {campaignForm.auto_reply_enabled && (
-                <div className="form-group">
-                  <label>AI Промпт (инструкции для AI)</label>
+                <>
+                  <div className="form-group">
+                    <label>AI Промпт (инструкции для AI)</label>
+                    <textarea 
+                      value={campaignForm.ai_prompt}
+                      onChange={e => setCampaignForm({...campaignForm, ai_prompt: e.target.value})}
+                      placeholder="Ты менеджер по продажам. Твоя задача - выявить интерес к продукту и назначить звонок. Будь дружелюбным и не навязчивым..."
+                      rows={4}
+                    />
+                    <small className="form-hint">
+                      Можно использовать {"{trigger_phrase_positive}"} и {"{trigger_phrase_negative}"} для автодетекции лидов.
+                    </small>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Триггер фраза (интерес)</label>
+                      <input
+                        type="text"
+                        value={campaignForm.trigger_phrase_positive}
+                        onChange={e => setCampaignForm({...campaignForm, trigger_phrase_positive: e.target.value})}
+                        placeholder={DEFAULT_TRIGGER_PHRASE_POSITIVE}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Чат для лидов</label>
+                      <input
+                        type="text"
+                        value={campaignForm.target_chat_positive}
+                        onChange={e => setCampaignForm({...campaignForm, target_chat_positive: e.target.value})}
+                        placeholder="@sales_team или -1001234567890"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label>Триггер фраза (неинтересно)</label>
+                      <input
+                        type="text"
+                        value={campaignForm.trigger_phrase_negative}
+                        onChange={e => setCampaignForm({...campaignForm, trigger_phrase_negative: e.target.value})}
+                        placeholder={DEFAULT_TRIGGER_PHRASE_NEGATIVE}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Чат для отказов</label>
+                      <input
+                        type="text"
+                        value={campaignForm.target_chat_negative}
+                        onChange={e => setCampaignForm({...campaignForm, target_chat_negative: e.target.value})}
+                        placeholder="@rejects или -1001234567890"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-row three-col">
+                    <div className="form-group">
+                      <label>Forward лимит</label>
+                      <input
+                        type="number"
+                        value={campaignForm.forward_limit}
+                        onChange={e => setCampaignForm({...campaignForm, forward_limit: parseInt(e.target.value)})}
+                        min={1}
+                        max={50}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>История для AI</label>
+                      <input
+                        type="number"
+                        value={campaignForm.history_limit}
+                        onChange={e => setCampaignForm({...campaignForm, history_limit: parseInt(e.target.value)})}
+                        min={5}
+                        max={100}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label className="checkbox-label">
+                        <input
+                          type="checkbox"
+                          checked={campaignForm.use_fallback_on_ai_fail}
+                          onChange={e => setCampaignForm({...campaignForm, use_fallback_on_ai_fail: e.target.checked})}
+                        />
+                        <span>Fallback при сбое AI</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  {campaignForm.use_fallback_on_ai_fail && (
+                    <div className="form-group">
+                      <label>Fallback текст</label>
                       <textarea 
-                    value={campaignForm.ai_prompt}
-                    onChange={e => setCampaignForm({...campaignForm, ai_prompt: e.target.value})}
-                    placeholder="Ты менеджер по продажам. Твоя задача - выявить интерес к продукту и назначить звонок. Будь дружелюбным и не навязчивым..."
-                    rows={4}
-                  />
-                </div>
+                        value={campaignForm.fallback_text}
+                        onChange={e => setCampaignForm({...campaignForm, fallback_text: e.target.value})}
+                        placeholder="Сообщение, которое отправится если AI не ответил"
+                        rows={3}
+                      />
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="form-row three-col">
@@ -844,7 +2051,7 @@ const Outreach = () => {
                     onChange={e => setCampaignForm({...campaignForm, message_delay_min: parseInt(e.target.value)})}
                     min={30}
                   />
-                </div>
+                    </div>
                 <div className="form-group">
                   <label>Макс. задержка (сек)</label>
                   <input
@@ -853,7 +2060,7 @@ const Outreach = () => {
                     onChange={e => setCampaignForm({...campaignForm, message_delay_max: parseInt(e.target.value)})}
                     min={60}
                   />
-                </div>
+                  </div>
                 <div className="form-group">
                   <label>Лимит в день</label>
                   <input
@@ -1063,10 +2270,10 @@ const Outreach = () => {
                 <button type="submit" className="btn btn-primary">
                   {selectedCampaign ? 'Сохранить' : 'Создать'}
                 </button>
-              </div>
+            </div>
             </form>
-          </div>
-        </div>
+                    </div>
+            </div>
       )}
 
       {/* ============ ACCOUNT MODAL ============ */}
@@ -1076,7 +2283,7 @@ const Outreach = () => {
             <div className="modal-header">
               <h2>Добавить аккаунт</h2>
               <button className="modal-close" onClick={() => setShowAccountModal(false)}>×</button>
-            </div>
+      </div>
             <form onSubmit={handleSaveAccount}>
               <div className="form-group">
                 <label>Телефон</label>

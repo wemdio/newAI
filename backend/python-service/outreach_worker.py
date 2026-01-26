@@ -1,4 +1,4 @@
-﻿"""
+"""
 Outreach Worker - Automatic cold outreach and AI response handler
 
 This worker handles:
@@ -24,6 +24,10 @@ from config import LOG_LEVEL, SUPABASE_URL, SUPABASE_KEY, setup_logger
 logger = setup_logger('OutreachWorker')
 
 BOT_USERNAME_PREFIXES = ('i7', 'i8')
+DEFAULT_TRIGGER_PHRASE_POSITIVE = "Отлично, рад, что смог вас заинтересовать"
+DEFAULT_TRIGGER_PHRASE_NEGATIVE = "Вижу, что не смог вас заинтересовать"
+DEFAULT_FORWARD_LIMIT = 5
+DEFAULT_HISTORY_LIMIT = 20
 
 
 def _parse_sleep_periods(periods: Any) -> List[str]:
@@ -113,6 +117,11 @@ def _normalize_range(min_value: Any, max_value: Any, default_min: int, default_m
         max_val = default_max
     return min(min_val, max_val), max(min_val, max_val)
 
+def _normalize_username(value: Any) -> str:
+    if not value:
+        return ''
+    return str(value).strip().lstrip('@').lower()
+
 # Telethon imports
 try:
     from telethon import TelegramClient
@@ -162,7 +171,10 @@ class OutreachSupabaseClient:
         """Make a request to Supabase REST API"""
         try:
             url = f"{self.url}/rest/v1/{endpoint}"
-            resp = await self.client.request(method, url, headers=self.headers, **kwargs)
+            headers = self.headers
+            if 'headers' in kwargs:
+                headers = {**self.headers, **kwargs.pop('headers')}
+            resp = await self.client.request(method, url, headers=headers, **kwargs)
             
             if resp.status_code >= 400:
                 logger.error(f"Supabase error: {resp.status_code} - {resp.text}")
@@ -231,6 +243,16 @@ class OutreachSupabaseClient:
             f'outreach_accounts?id=in.({ids_param})&status=eq.active&select=*'
         )
         return data or []
+
+    async def get_outreach_account_by_id(self, account_id: str) -> Optional[dict]:
+        """Get account by ID"""
+        if not account_id:
+            return None
+        data = await self._request(
+            'GET',
+            f'outreach_accounts?id=eq.{account_id}&select=*'
+        )
+        return data[0] if data else None
     
     async def update_account_status(self, account_id: str, status: str, error: str = None) -> bool:
         """Update account status"""
@@ -296,6 +318,54 @@ class OutreachSupabaseClient:
             'PATCH',
             f'outreach_targets?id=eq.{target_id}',
             json=updates
+        )
+        return result is not None
+
+    async def update_target_by_username(
+        self,
+        campaign_id: str,
+        username: str,
+        updates: dict
+    ) -> bool:
+        """Update target by campaign and username"""
+        if not username:
+            return False
+        result = await self._request(
+            'PATCH',
+            f'outreach_targets?campaign_id=eq.{campaign_id}&username=eq.{username}',
+            json=updates
+        )
+        return result is not None
+
+    async def get_processed_clients(self, campaign_id: str) -> List[dict]:
+        """Get processed clients for a campaign"""
+        data = await self._request(
+            'GET',
+            f'outreach_processed_clients?campaign_id=eq.{campaign_id}&select=target_username'
+        )
+        return data or []
+
+    async def add_processed_client(
+        self,
+        user_id: str,
+        campaign_id: str,
+        target_username: str,
+        target_name: str = None
+    ) -> bool:
+        """Add processed client (upsert)"""
+        if not target_username:
+            return False
+        payload = {
+            'user_id': user_id,
+            'campaign_id': campaign_id,
+            'target_username': target_username,
+            'target_name': target_name
+        }
+        result = await self._request(
+            'POST',
+            'outreach_processed_clients?on_conflict=campaign_id,target_username',
+            json=payload,
+            headers={'Prefer': 'resolution=merge-duplicates,return=representation'}
         )
         return result is not None
     
@@ -409,6 +479,23 @@ class OutreachSupabaseClient:
         if data and len(data) > 0:
             return data[0].get('id')
         return None
+
+    async def get_pending_manual_messages(self, limit: int = 10) -> List[dict]:
+        """Get pending manual messages"""
+        data = await self._request(
+            'GET',
+            f'outreach_manual_messages?status=eq.pending&select=*&order=created_at.asc&limit={limit}'
+        )
+        return data or []
+
+    async def update_manual_message(self, message_id: str, updates: dict) -> bool:
+        """Update manual message status"""
+        result = await self._request(
+            'PATCH',
+            f'outreach_manual_messages?id=eq.{message_id}',
+            json=updates
+        )
+        return result is not None
     
     # ===== LOGS =====
     
@@ -447,8 +534,13 @@ class AIHandler:
         self.model = model
         self.base_url = 'https://openrouter.ai/api/v1/chat/completions'
     
-    async def generate_response(self, prompt: str, conversation_history: List[dict], 
-                                 incoming_message: str) -> Optional[str]:
+    async def generate_response(
+        self,
+        prompt: str,
+        conversation_history: List[dict],
+        incoming_message: str,
+        history_limit: int = 10
+    ) -> Optional[str]:
         """Generate AI response based on conversation history"""
         if not self.api_key:
             logger.warning("No OpenRouter API key configured")
@@ -457,7 +549,7 @@ class AIHandler:
         messages = [{"role": "system", "content": prompt}]
         
         # Add conversation history
-        for msg in conversation_history[-10:]:  # Last 10 messages
+        for msg in conversation_history[-max(1, history_limit):]:
             role = 'assistant' if msg['sender'] == 'me' else 'user'
             messages.append({"role": role, "content": msg['content']})
         
@@ -599,14 +691,24 @@ class TelegramHandler:
         
         if account_id in self.clients:
             client = self.clients[account_id]
-            if client.is_connected():
-                return client
-            # Reconnect if disconnected
-            try:
-                await client.connect()
-                return client
-            except:
+            cached_proxy = getattr(client, '_outreach_proxy_url', None)
+            current_proxy = account.get('proxy_url')
+            if cached_proxy != current_proxy:
+                try:
+                    if client.is_connected():
+                        await client.disconnect()
+                except Exception:
+                    pass
                 del self.clients[account_id]
+            else:
+                if client.is_connected():
+                    return client
+                # Reconnect if disconnected
+                try:
+                    await client.connect()
+                    return client
+                except Exception:
+                    del self.clients[account_id]
         
         # Create new client
         session_string = account.get('session_string')
@@ -620,7 +722,7 @@ class TelegramHandler:
                 session_bytes = base64.b64decode(session_file_data)
             except Exception as e:
                 logger.error(f"Invalid session_file_data for {account['phone_number']}: {e}")
-                    self._set_error(account_id, "Invalid session file data")
+                self._set_error(account_id, "Invalid session file data")
                 return None
 
             session_path = os.path.join(
@@ -633,11 +735,11 @@ class TelegramHandler:
                 session = session_path
             except Exception as e:
                 logger.error(f"Failed to write session file for {account['phone_number']}: {e}")
-                    self._set_error(account_id, "Failed to write session file")
+                self._set_error(account_id, "Failed to write session file")
                 return None
         else:
             logger.error(f"No session data for account {account['phone_number']}")
-                self._set_error(account_id, "Missing session data")
+            self._set_error(account_id, "Missing session data")
             return None
         
         api_id = int(account.get('api_id', 0))
@@ -673,9 +775,10 @@ class TelegramHandler:
                 
                 if not await client.is_user_authorized():
                     logger.error(f"Account {account['phone_number']} not authorized")
-                self._set_error(account_id, "Account not authorized")
+                    self._set_error(account_id, "Account not authorized")
                     return None
                 
+                setattr(client, '_outreach_proxy_url', proxy_url)
                 self.clients[account_id] = client
                 logger.info(f"âœ… Connected account: {account['phone_number']}")
                 return client
@@ -742,6 +845,48 @@ class TelegramHandler:
             return False, "Cannot write to user", None
         except Exception as e:
             return False, str(e), None
+
+    async def send_message_any(self, client: TelegramClient, target: str, message: str) -> tuple:
+        """Send message to any entity (user/group/channel). Returns (success, error_message)."""
+        try:
+            entity = await client.get_entity(target)
+            await client.send_message(entity, message)
+            return True, None
+        except FloodWaitError as e:
+            return False, f"FloodWait: {e.seconds}s"
+        except PeerFloodError:
+            return False, "PeerFlood - account limited"
+        except ChatWriteForbiddenError:
+            return False, "Cannot write to target"
+        except Exception as e:
+            return False, str(e)
+
+    async def forward_recent_messages(
+        self,
+        client: TelegramClient,
+        source: str,
+        target: str,
+        limit: int
+    ) -> tuple:
+        """Forward last N messages from source chat to target chat."""
+        try:
+            source_entity = await client.get_entity(source)
+            target_entity = await client.get_entity(target)
+            messages = await client.get_messages(source_entity, limit=limit)
+            messages = list(reversed(messages))
+            forwarded = 0
+            last_error = None
+            for msg in messages:
+                try:
+                    await client.forward_messages(target_entity, msg)
+                    forwarded += 1
+                except Exception as e:
+                    last_error = e
+            if forwarded > 0:
+                return True, None
+            return False, str(last_error) if last_error else "No messages to forward"
+        except Exception as e:
+            return False, str(e)
     
     async def get_new_messages(self, client: TelegramClient, username: str, last_msg_count: int = 0) -> List[dict]:
         """Get new incoming messages from a user"""
@@ -850,6 +995,191 @@ class OutreachWorker:
             'reply_only_if_previously_wrote': campaign.get('reply_only_if_previously_wrote', True)
         }
 
+    def _get_lead_settings(self, campaign: dict) -> dict:
+        def _text(value: Any) -> str:
+            if value is None:
+                return ''
+            return str(value).strip()
+
+        def _positive_int(value: Any, fallback: int) -> int:
+            try:
+                parsed = int(value)
+            except Exception:
+                parsed = fallback
+            return parsed if parsed > 0 else fallback
+
+        return {
+            'trigger_phrase_positive': _text(campaign.get('trigger_phrase_positive')),
+            'trigger_phrase_negative': _text(campaign.get('trigger_phrase_negative')),
+            'target_chat_positive': _text(campaign.get('target_chat_positive')),
+            'target_chat_negative': _text(campaign.get('target_chat_negative')),
+            'forward_limit': _positive_int(campaign.get('forward_limit'), DEFAULT_FORWARD_LIMIT),
+            'history_limit': _positive_int(campaign.get('history_limit'), DEFAULT_HISTORY_LIMIT),
+            'use_fallback_on_ai_fail': bool(campaign.get('use_fallback_on_ai_fail')),
+            'fallback_text': _text(campaign.get('fallback_text'))
+        }
+
+    def _render_ai_prompt(self, prompt: str, lead_settings: dict) -> str:
+        if not prompt:
+            return prompt
+
+        text = prompt
+        pos_phrase = lead_settings.get('trigger_phrase_positive') or ''
+        neg_phrase = lead_settings.get('trigger_phrase_negative') or ''
+
+        if '{trigger_phrase_positive}' in text and not pos_phrase:
+            pos_phrase = DEFAULT_TRIGGER_PHRASE_POSITIVE
+            lead_settings['trigger_phrase_positive'] = pos_phrase
+        if '{trigger_phrase_negative}' in text and not neg_phrase:
+            neg_phrase = DEFAULT_TRIGGER_PHRASE_NEGATIVE
+            lead_settings['trigger_phrase_negative'] = neg_phrase
+
+        if pos_phrase:
+            text = text.replace('{trigger_phrase_positive}', pos_phrase)
+        if neg_phrase:
+            text = text.replace('{trigger_phrase_negative}', neg_phrase)
+
+        lower_text = text.lower()
+        instructions = []
+        if pos_phrase and pos_phrase.lower() not in lower_text:
+            instructions.append(f'Если есть интерес, заверши фразой "{pos_phrase}".')
+        if neg_phrase and neg_phrase.lower() not in lower_text:
+            instructions.append(f'Если нет интереса, заверши фразой "{neg_phrase}".')
+        if instructions:
+            text = f"{text.rstrip()}\n\n" + " ".join(instructions)
+
+        return text
+
+    def _detect_lead_status(self, response: str, lead_settings: dict) -> Optional[str]:
+        if not response:
+            return None
+        response_lower = response.lower()
+        pos_phrase = (lead_settings.get('trigger_phrase_positive') or '').lower()
+        neg_phrase = (lead_settings.get('trigger_phrase_negative') or '').lower()
+        if pos_phrase and pos_phrase in response_lower:
+            return 'lead'
+        if neg_phrase and neg_phrase in response_lower:
+            return 'not_lead'
+        return None
+
+    def _format_forward_summary(self, history: List[dict], limit: int, who: str) -> str:
+        if not history:
+            return f"Диалог с {who}: история пуста."
+        trimmed = history[-limit:] if limit > 0 else history
+        lines = [f"Диалог с {who} (последние {len(trimmed)}):"]
+        for msg in trimmed:
+            sender = msg.get('sender')
+            role = "Мы" if sender == 'me' else "Он"
+            content = (msg.get('content') or '').strip()
+            if len(content) > 800:
+                content = content[:800] + "…"
+            if content:
+                lines.append(f"{role}: {content}")
+        return "\n".join(lines)
+
+    async def _handle_lead_detection(
+        self,
+        campaign: dict,
+        chat: dict,
+        account: dict,
+        client: TelegramClient,
+        response: str,
+        history: List[dict],
+        lead_settings: dict,
+        user_id: str
+    ) -> Optional[str]:
+        lead_status = self._detect_lead_status(response, lead_settings)
+        if not lead_status:
+            return None
+
+        existing_status = (chat.get('lead_status') or '').lower()
+        if existing_status and existing_status != 'none':
+            return existing_status
+
+        campaign_name = campaign.get('name') or 'кампания'
+        target_username = chat.get('target_username') or ''
+        who = f"@{target_username}" if target_username else "пользователь"
+
+        if lead_status == 'lead':
+            target_chat = lead_settings.get('target_chat_positive')
+            note = f"✅ Пользователь {who} заинтересован в \"{campaign_name}\""
+        else:
+            target_chat = lead_settings.get('target_chat_negative')
+            note = f"❌ Пользователь {who} отказался в \"{campaign_name}\""
+
+        if target_chat:
+            success, error = await self.telegram.send_message_any(client, target_chat, note)
+            if not success:
+                await self.supabase.log(
+                    user_id,
+                    'WARNING',
+                    f"Lead notify failed to {target_chat}: {error}",
+                    str(campaign['id']),
+                    str(account['id'])
+                )
+            source_handle = target_username
+            if source_handle and not source_handle.startswith('@') and not source_handle.startswith('+'):
+                source_handle = f"@{source_handle}"
+            forward_limit = lead_settings.get('forward_limit', DEFAULT_FORWARD_LIMIT)
+            if source_handle:
+                success, error = await self.telegram.forward_recent_messages(
+                    client,
+                    source_handle,
+                    target_chat,
+                    forward_limit
+                )
+                if not success:
+                    summary = self._format_forward_summary(history, forward_limit, who)
+                    await self.telegram.send_message_any(client, target_chat, summary)
+            else:
+                await self.supabase.log(
+                    user_id,
+                    'WARNING',
+                    "Lead detected but source chat is missing",
+                    str(campaign['id']),
+                    str(account['id'])
+                )
+        else:
+            await self.supabase.log(
+                user_id,
+                'WARNING',
+                "Lead detected but target chat is not configured",
+                str(campaign['id']),
+                str(account['id'])
+            )
+
+        now_iso = datetime.utcnow().isoformat()
+        await self.supabase.update_chat(str(chat['id']), {
+            'lead_status': lead_status,
+            'processed_at': now_iso,
+            'status': 'manual'
+        })
+        if target_username:
+            await self.supabase.update_target_by_username(
+                str(campaign['id']),
+                target_username,
+                {'lead_status': lead_status}
+            )
+            await self.supabase.add_processed_client(
+                user_id,
+                str(campaign['id']),
+                _normalize_username(target_username),
+                chat.get('target_name')
+            )
+
+        await self.supabase.log(
+            user_id,
+            'SUCCESS',
+            f"Lead detected: {lead_status} for {who}",
+            str(campaign['id']),
+            str(account['id'])
+        )
+
+        chat['lead_status'] = lead_status
+        chat['processed_at'] = now_iso
+        chat['status'] = 'manual'
+        return lead_status
+
     def _is_account_in_cooldown(self, account: dict) -> bool:
         cooldown_until = _safe_iso_datetime(account.get('cooldown_until'))
         if cooldown_until and cooldown_until > datetime.utcnow().replace(tzinfo=cooldown_until.tzinfo):
@@ -899,6 +1229,10 @@ class OutreachWorker:
             logger.info(f"ðŸ”„ Iteration #{iteration}")
             
             try:
+                # Process pending manual messages
+                if self.supabase and self.telegram:
+                    await self._process_manual_messages()
+
                 # Reset daily counters if new day
                 self._check_daily_reset()
                 
@@ -937,6 +1271,84 @@ class OutreachWorker:
                     asyncio.create_task(self.supabase.reset_daily_counters(today))
                 except Exception:
                     pass
+
+    async def _process_manual_messages(self):
+        """Send pending manual messages from UI"""
+        messages = await self.supabase.get_pending_manual_messages(limit=20)
+        if not messages:
+            return
+
+        logger.info(f"ðŸ“¬ Processing {len(messages)} manual message(s)")
+        for msg in messages:
+            msg_id = str(msg.get('id'))
+            chat_id = msg.get('chat_id')
+            account_id = msg.get('account_id')
+            target_username = msg.get('target_username')
+            content = msg.get('content') or ''
+
+            await self.supabase.update_manual_message(msg_id, {
+                'status': 'processing',
+                'updated_at': datetime.utcnow().isoformat()
+            })
+
+            if not chat_id or not account_id or not target_username:
+                await self.supabase.update_manual_message(msg_id, {
+                    'status': 'failed',
+                    'error_message': 'Missing chat/account/username',
+                    'updated_at': datetime.utcnow().isoformat()
+                })
+                continue
+
+            account = await self.supabase.get_outreach_account_by_id(str(account_id))
+            if not account:
+                await self.supabase.update_manual_message(msg_id, {
+                    'status': 'failed',
+                    'error_message': 'Account not found',
+                    'updated_at': datetime.utcnow().isoformat()
+                })
+                continue
+
+            client = await self.telegram.get_client(account)
+            if not client:
+                error_message = self.telegram.last_errors.get(str(account_id), 'Connection failed')
+                await self.supabase.update_manual_message(msg_id, {
+                    'status': 'failed',
+                    'error_message': error_message,
+                    'updated_at': datetime.utcnow().isoformat()
+                })
+                continue
+
+            handle = target_username
+            if not handle.startswith('@') and not handle.startswith('+'):
+                handle = f"@{handle}"
+
+            success, error, _ = await self.telegram.send_message(client, handle, content)
+            if success:
+                await self.supabase.add_message(str(chat_id), 'me', content)
+                await self.supabase.update_chat(str(chat_id), {'status': 'manual'})
+
+                messages_today = self._get_messages_sent_today(account)
+                today_str = datetime.utcnow().date().isoformat()
+                await self.supabase.update_account_fields(str(account_id), {
+                    'messages_sent_today': messages_today + 1,
+                    'last_sent_date': today_str,
+                    'last_used_at': datetime.utcnow().isoformat()
+                })
+                account['messages_sent_today'] = messages_today + 1
+                account['last_sent_date'] = today_str
+                account['last_used_at'] = datetime.utcnow().isoformat()
+
+                await self.supabase.update_manual_message(msg_id, {
+                    'status': 'sent',
+                    'error_message': None,
+                    'updated_at': datetime.utcnow().isoformat()
+                })
+            else:
+                await self.supabase.update_manual_message(msg_id, {
+                    'status': 'failed',
+                    'error_message': error or 'Send failed',
+                    'updated_at': datetime.utcnow().isoformat()
+                })
     
     async def process_campaign(self, campaign: dict):
         """Process a single campaign"""
@@ -962,11 +1374,18 @@ class OutreachWorker:
                 logger.warning(f"âš ï¸ No active accounts for campaign {campaign_name}")
                 return
             
+            processed_records = await self.supabase.get_processed_clients(campaign_id)
+            processed_usernames = {
+                _normalize_username(item.get('target_username'))
+                for item in processed_records
+                if item.get('target_username')
+            }
+
             # Phase 1: Send initial messages to pending targets
-            await self._send_initial_messages(campaign, accounts, user_id)
+            await self._send_initial_messages(campaign, accounts, user_id, processed_usernames)
             
             # Phase 2: Check for new replies and process them
-            await self._check_for_replies(campaign, accounts, user_id, openrouter_key)
+            await self._check_for_replies(campaign, accounts, user_id, openrouter_key, processed_usernames)
             
             # Update campaign stats
             await self.supabase.update_campaign(campaign_id, {
@@ -977,7 +1396,13 @@ class OutreachWorker:
             logger.error(f"âŒ Error processing campaign {campaign_name}: {e}")
             await self.supabase.log(user_id, 'ERROR', f"Campaign error: {e}", campaign_id)
     
-    async def _send_initial_messages(self, campaign: dict, accounts: List[dict], user_id: str):
+    async def _send_initial_messages(
+        self,
+        campaign: dict,
+        accounts: List[dict],
+        user_id: str,
+        processed_usernames: set[str]
+    ):
         """Send initial messages to pending targets"""
         campaign_id = str(campaign['id'])
         message_template = campaign.get('message_template', '')
@@ -1026,6 +1451,15 @@ class OutreachWorker:
                     await self.supabase.update_target(target_id, {
                         'status': 'failed',
                         'error_message': 'Bot username'
+                    })
+                    continue
+
+            if username:
+                normalized = _normalize_username(username)
+                if normalized and normalized in processed_usernames:
+                    await self.supabase.update_target(target_id, {
+                        'status': 'failed',
+                        'error_message': 'Processed client'
                     })
                     continue
             
@@ -1186,10 +1620,16 @@ class OutreachWorker:
         client: TelegramClient,
         follow_up_ai: Optional['AIHandler'],
         safety: dict,
+        history_limit: int,
         user_id: str,
         campaign_id: str
     ):
         if not follow_up_ai or not safety.get('follow_up_enabled'):
+            return
+        lead_status = (chat.get('lead_status') or '').lower()
+        if lead_status and lead_status != 'none':
+            return
+        if chat.get('processed_at'):
             return
         if chat.get('follow_up_sent_at'):
             return
@@ -1208,7 +1648,7 @@ class OutreachWorker:
         if messages_today >= safety.get('daily_limit', 20):
             return
 
-        history = await self.supabase.get_chat_messages(str(chat['id']))
+        history = await self.supabase.get_chat_messages(str(chat['id']), limit=history_limit)
         if safety.get('reply_only_if_previously_wrote', True):
             if not any(msg.get('sender') == 'me' for msg in history):
                 return
@@ -1220,7 +1660,8 @@ class OutreachWorker:
         response = await follow_up_ai.generate_response(
             follow_up_prompt,
             history,
-            "Напиши follow-up сообщение."
+            "Напиши follow-up сообщение.",
+            history_limit
         )
         if not response:
             return
@@ -1256,14 +1697,23 @@ class OutreachWorker:
             campaign_id, str(account['id'])
         )
     
-    async def _check_for_replies(self, campaign: dict, accounts: List[dict], 
-                                  user_id: str, openrouter_key: str):
+    async def _check_for_replies(
+        self,
+        campaign: dict,
+        accounts: List[dict],
+        user_id: str,
+        openrouter_key: str,
+        processed_usernames: set[str]
+    ):
         """Check for new replies in all active chats and process them"""
         campaign_id = str(campaign['id'])
         ai_prompt = campaign.get('ai_prompt', '')
         ai_model = campaign.get('ai_model', 'google/gemini-2.0-flash-001')
         auto_reply_enabled = campaign.get('auto_reply_enabled', False)
         safety = self._get_campaign_safety(campaign)
+        lead_settings = self._get_lead_settings(campaign)
+        history_limit = lead_settings['history_limit']
+        rendered_prompt = self._render_ai_prompt(ai_prompt, lead_settings) if ai_prompt else ''
         sleep_periods = safety['sleep_periods']
         timezone_offset = safety['timezone_offset']
 
@@ -1281,7 +1731,7 @@ class OutreachWorker:
         
         # Create AI handler if enabled
         ai = None
-        if auto_reply_enabled and openrouter_key and ai_prompt:
+        if auto_reply_enabled and openrouter_key and rendered_prompt:
             ai = AIHandler(openrouter_key, ai_model)
 
         follow_up_ai = None
@@ -1316,6 +1766,15 @@ class OutreachWorker:
             
             # Skip if in manual mode
             if chat.get('status') == 'manual':
+                continue
+            lead_status = (chat.get('lead_status') or '').lower()
+            if lead_status and lead_status != 'none':
+                continue
+            if chat.get('processed_at'):
+                continue
+
+            normalized = _normalize_username(target_username)
+            if normalized and normalized in processed_usernames:
                 continue
 
             # Skip bot-like usernames if enabled
@@ -1361,6 +1820,7 @@ class OutreachWorker:
                         client,
                         follow_up_ai,
                         safety,
+                        history_limit,
                         user_id,
                         campaign_id
                     )
@@ -1387,6 +1847,7 @@ class OutreachWorker:
                         client,
                         follow_up_ai,
                         safety,
+                        history_limit,
                         user_id,
                         campaign_id
                     )
@@ -1400,7 +1861,7 @@ class OutreachWorker:
                 await self.telegram.mark_as_read(client, target_username)
                 
                 # Get conversation history for AI
-                history = await self.supabase.get_chat_messages(chat_id)
+                history = await self.supabase.get_chat_messages(chat_id, limit=history_limit)
                 
                 # Process each new message
                 for msg in new_messages:
@@ -1436,7 +1897,16 @@ class OutreachWorker:
                             if reply_delay > 0:
                                 await asyncio.sleep(reply_delay)
 
-                            response = await ai.generate_response(ai_prompt, history, incoming_text)
+                            response = await ai.generate_response(
+                                rendered_prompt,
+                                history,
+                                incoming_text,
+                                history_limit
+                            )
+                            if not response and lead_settings.get('use_fallback_on_ai_fail'):
+                                fallback_text = lead_settings.get('fallback_text')
+                                if fallback_text:
+                                    response = fallback_text
                             
                             if response:
                                 # Send response
@@ -1477,6 +1947,19 @@ class OutreachWorker:
                                     dialog_wait = random.randint(dialog_wait_window_min, dialog_wait_window_max)
                                     if dialog_wait > 0:
                                         await asyncio.sleep(dialog_wait)
+
+                                    lead_detected = await self._handle_lead_detection(
+                                        campaign,
+                                        chat,
+                                        account,
+                                        client,
+                                        response,
+                                        history,
+                                        lead_settings,
+                                        user_id
+                                    )
+                                    if lead_detected:
+                                        break
                                 else:
                                     logger.error(f"Failed to send AI reply: {error}")
                     

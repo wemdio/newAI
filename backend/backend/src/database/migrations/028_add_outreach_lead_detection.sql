@@ -1,0 +1,16 @@
+ALTER TABLE outreach_campaigns
+ADD COLUMN IF NOT EXISTS trigger_phrase_positive TEXT,
+ADD COLUMN IF NOT EXISTS trigger_phrase_negative TEXT,
+ADD COLUMN IF NOT EXISTS target_chat_positive TEXT,
+ADD COLUMN IF NOT EXISTS target_chat_negative TEXT,
+ADD COLUMN IF NOT EXISTS forward_limit INTEGER DEFAULT 5,
+ADD COLUMN IF NOT EXISTS history_limit INTEGER DEFAULT 20,
+ADD COLUMN IF NOT EXISTS use_fallback_on_ai_fail BOOLEAN DEFAULT FALSE,
+ADD COLUMN IF NOT EXISTS fallback_text TEXT;
+
+ALTER TABLE outreach_chats
+ADD COLUMN IF NOT EXISTS lead_status TEXT DEFAULT 'none',
+ADD COLUMN IF NOT EXISTS processed_at TIMESTAMPTZ;
+
+ALTER TABLE outreach_targets
+ADD COLUMN IF NOT EXISTS lead_status TEXT DEFAULT 'none';

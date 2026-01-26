@@ -372,6 +372,12 @@
   background: rgba(255, 255, 255, 0.02);
 }
 
+.chat-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .chat-title h3 {
   margin: 0;
   font-size: 16px;
@@ -521,6 +527,13 @@
   font-size: 14px;
 }
 
+.form-hint {
+  display: block;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .form-group input,
 .form-group select,
 .form-group textarea {
@@ -553,6 +566,291 @@
 
 .form-row.three-col {
   grid-template-columns: 1fr 1fr 1fr;
+}
+
+/* Proxy management */
+.outreach-page .proxy-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.outreach-page .proxy-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.outreach-page .proxy-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.outreach-page .proxy-form {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.outreach-page .proxy-bulk {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.outreach-page .proxy-bulk textarea {
+  width: 100%;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  color: var(--text-main);
+}
+
+.outreach-page .proxy-list {
+  display: grid;
+  gap: 8px;
+}
+
+.outreach-page .proxy-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.outreach-page .proxy-name {
+  font-weight: 600;
+}
+
+.outreach-page .proxy-url {
+  font-family: monospace;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.outreach-page .proxy-usage {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.outreach-page .proxy-search {
+  width: 100%;
+  margin-bottom: 6px;
+}
+
+.outreach-page .proxy-preview {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  word-break: break-all;
+}
+
+.outreach-page .accounts-table-wrapper {
+  margin-top: 20px;
+}
+
+.outreach-page .accounts-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.outreach-page .accounts-table th,
+.outreach-page .accounts-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  font-size: 13px;
+}
+
+.outreach-page .accounts-table th {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+}
+
+/* Chat reply */
+.outreach-page .chat-reply {
+  border-top: 1px solid var(--border);
+  padding: 12px;
+  display: grid;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.outreach-page .chat-reply textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 60px;
+}
+
+/* History */
+.outreach-page .history-actions,
+.outreach-page .logs-actions,
+.outreach-page .processed-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.outreach-page .history-controls,
+.outreach-page .processed-controls {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr auto;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.outreach-page .history-controls input,
+.outreach-page .history-controls select,
+.outreach-page .processed-controls input,
+.outreach-page .processed-controls select,
+.outreach-page .logs-actions select {
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-main);
+  font-size: 13px;
+}
+
+.outreach-page .history-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.outreach-page .history-stat {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  text-align: center;
+  min-width: 80px;
+}
+
+.outreach-page .history-stat .value {
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.outreach-page .history-stat .label {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.outreach-page .history-layout {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 16px;
+}
+
+.outreach-page .history-list {
+  overflow-x: auto;
+}
+
+.outreach-page .history-table,
+.outreach-page .processed-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.outreach-page .history-table th,
+.outreach-page .history-table td,
+.outreach-page .processed-table th,
+.outreach-page .processed-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  text-align: left;
+}
+
+.outreach-page .history-table th,
+.outreach-page .processed-table th {
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+}
+
+.outreach-page .history-row-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.outreach-page .history-view {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.outreach-page .history-chat-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.outreach-page .history-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--text-secondary);
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.outreach-page .history-chat-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.outreach-page .history-messages {
+  max-height: 520px;
+}
+
+/* Processed */
+.outreach-page .processed-form {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.outreach-page .processed-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+@media (max-width: 1024px) {
+  .outreach-page .history-layout {
+    grid-template-columns: 1fr;
+  }
+  .outreach-page .history-controls,
+  .outreach-page .processed-controls {
+    grid-template-columns: 1fr;
+  }
 }
 
 .checkbox-label {
