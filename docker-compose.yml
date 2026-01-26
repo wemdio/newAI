@@ -10,6 +10,7 @@ services:
     environment:
       - PORT=3000
       - NODE_ENV=production
+      - NO_COLOR=1
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
@@ -28,6 +29,10 @@ services:
       context: ./backend/python-service
       dockerfile: Dockerfile
     environment:
+      - PYTHONUTF8=1
+      - PYTHONIOENCODING=utf-8
+      - LANG=C.UTF-8
+      - LC_ALL=C.UTF-8
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
@@ -40,6 +45,10 @@ services:
       dockerfile: Dockerfile
     command: ["python", "-u", "outreach_worker.py"]
     environment:
+      - PYTHONUTF8=1
+      - PYTHONIOENCODING=utf-8
+      - LANG=C.UTF-8
+      - LC_ALL=C.UTF-8
       - SUPABASE_URL=${SUPABASE_URL}
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
       - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
