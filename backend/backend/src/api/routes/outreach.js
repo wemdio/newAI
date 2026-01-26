@@ -11,6 +11,125 @@ const upload = multer({ storage: multer.memoryStorage() });
 // Helper to get user ID from request
 const getUserId = (req) => req.headers['x-user-id'];
 
+const normalizeSleepPeriods = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value.map(item => String(item).trim()).filter(Boolean);
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map(item => item.trim())
+      .filter(Boolean);
+  }
+  return [];
+};
+
+const normalizeInt = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const normalizeCampaignSafety = (body) => {
+  const messageDelayMin = normalizeInt(body.message_delay_min, 60);
+  const messageDelayMax = normalizeInt(body.message_delay_max, 180);
+  const preReadDelayMin = normalizeInt(body.pre_read_delay_min, 5);
+  const preReadDelayMax = normalizeInt(body.pre_read_delay_max, 10);
+  const readReplyDelayMin = normalizeInt(body.read_reply_delay_min, 5);
+  const readReplyDelayMax = normalizeInt(body.read_reply_delay_max, 10);
+  const accountLoopDelayMin = normalizeInt(body.account_loop_delay_min, 300);
+  const accountLoopDelayMax = normalizeInt(body.account_loop_delay_max, 600);
+  const dialogWaitWindowMin = normalizeInt(body.dialog_wait_window_min, 40);
+  const dialogWaitWindowMax = normalizeInt(body.dialog_wait_window_max, 60);
+
+  return {
+    message_delay_min: Math.min(messageDelayMin, messageDelayMax),
+    message_delay_max: Math.max(messageDelayMin, messageDelayMax),
+    pre_read_delay_min: Math.min(preReadDelayMin, preReadDelayMax),
+    pre_read_delay_max: Math.max(preReadDelayMin, preReadDelayMax),
+    read_reply_delay_min: Math.min(readReplyDelayMin, readReplyDelayMax),
+    read_reply_delay_max: Math.max(readReplyDelayMin, readReplyDelayMax),
+    account_loop_delay_min: Math.min(accountLoopDelayMin, accountLoopDelayMax),
+    account_loop_delay_max: Math.max(accountLoopDelayMin, accountLoopDelayMax),
+    dialog_wait_window_min: Math.min(dialogWaitWindowMin, dialogWaitWindowMax),
+    dialog_wait_window_max: Math.max(dialogWaitWindowMin, dialogWaitWindowMax),
+    daily_limit: normalizeInt(body.daily_limit, 20),
+    timezone_offset: normalizeInt(body.timezone_offset, 3),
+    sleep_periods: normalizeSleepPeriods(body.sleep_periods),
+    ignore_bot_usernames: body.ignore_bot_usernames ?? true,
+    account_cooldown_hours: normalizeInt(body.account_cooldown_hours, 5),
+    follow_up_enabled: !!body.follow_up_enabled,
+    follow_up_delay_hours: normalizeInt(body.follow_up_delay_hours, 24),
+    follow_up_prompt: body.follow_up_prompt || null,
+    reply_only_if_previously_wrote: body.reply_only_if_previously_wrote ?? true
+  };
+};
+
+const parseIntValue = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const applyRangeUpdate = (body, updates, minKey, maxKey) => {
+  const hasMin = body[minKey] !== undefined;
+  const hasMax = body[maxKey] !== undefined;
+  const min = parseIntValue(body[minKey]);
+  const max = parseIntValue(body[maxKey]);
+
+  if (hasMin && min !== null) updates[minKey] = min;
+  if (hasMax && max !== null) updates[maxKey] = max;
+
+  if (hasMin && hasMax && min !== null && max !== null) {
+    updates[minKey] = Math.min(min, max);
+    updates[maxKey] = Math.max(min, max);
+  }
+};
+
+const normalizeCampaignSafetyUpdates = (body) => {
+  const updates = {};
+
+  applyRangeUpdate(body, updates, 'message_delay_min', 'message_delay_max');
+  applyRangeUpdate(body, updates, 'pre_read_delay_min', 'pre_read_delay_max');
+  applyRangeUpdate(body, updates, 'read_reply_delay_min', 'read_reply_delay_max');
+  applyRangeUpdate(body, updates, 'account_loop_delay_min', 'account_loop_delay_max');
+  applyRangeUpdate(body, updates, 'dialog_wait_window_min', 'dialog_wait_window_max');
+
+  if (body.daily_limit !== undefined) {
+    const value = parseIntValue(body.daily_limit);
+    if (value !== null) updates.daily_limit = value;
+  }
+  if (body.timezone_offset !== undefined) {
+    const value = parseIntValue(body.timezone_offset);
+    if (value !== null) updates.timezone_offset = value;
+  }
+  if (body.account_cooldown_hours !== undefined) {
+    const value = parseIntValue(body.account_cooldown_hours);
+    if (value !== null) updates.account_cooldown_hours = value;
+  }
+  if (body.follow_up_delay_hours !== undefined) {
+    const value = parseIntValue(body.follow_up_delay_hours);
+    if (value !== null) updates.follow_up_delay_hours = value;
+  }
+
+  if (body.sleep_periods !== undefined) {
+    updates.sleep_periods = normalizeSleepPeriods(body.sleep_periods);
+  }
+  if (body.ignore_bot_usernames !== undefined) {
+    updates.ignore_bot_usernames = !!body.ignore_bot_usernames;
+  }
+  if (body.follow_up_enabled !== undefined) {
+    updates.follow_up_enabled = !!body.follow_up_enabled;
+  }
+  if (body.follow_up_prompt !== undefined) {
+    updates.follow_up_prompt = body.follow_up_prompt || null;
+  }
+  if (body.reply_only_if_previously_wrote !== undefined) {
+    updates.reply_only_if_previously_wrote = !!body.reply_only_if_previously_wrote;
+  }
+
+  return updates;
+};
+
 // ================= ACCOUNTS =================
 
 // GET /api/outreach/accounts
@@ -302,17 +421,15 @@ router.post('/campaigns', async (req, res) => {
   const userId = getUserId(req);
   if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { 
-    name, 
-    message_template, 
-    account_ids, 
+  const {
+    name,
+    message_template,
+    account_ids,
     auto_reply_enabled,
     ai_prompt,
-    ai_model,
-    message_delay_min,
-    message_delay_max,
-    daily_limit
+    ai_model
   } = req.body;
+  const safetySettings = normalizeCampaignSafety(req.body);
 
   try {
     const { data, error } = await supabase
@@ -325,10 +442,8 @@ router.post('/campaigns', async (req, res) => {
         auto_reply_enabled: !!auto_reply_enabled,
         ai_prompt: ai_prompt || null,
         ai_model: ai_model || 'google/gemini-2.0-flash-001',
-        message_delay_min: message_delay_min || 60,
-        message_delay_max: message_delay_max || 180,
-        daily_limit: daily_limit || 20,
-        status: 'draft'
+        status: 'draft',
+        ...safetySettings
       }])
       .select();
 
@@ -348,11 +463,12 @@ router.patch('/campaigns/:id', async (req, res) => {
 
   const allowedFields = [
     'name', 'message_template', 'account_ids', 'auto_reply_enabled',
-    'ai_prompt', 'ai_model', 'message_delay_min', 'message_delay_max',
-    'daily_limit', 'status'
+    'ai_prompt', 'ai_model', 'status'
   ];
   
-  const updates = {};
+  const updates = {
+    ...normalizeCampaignSafetyUpdates(req.body)
+  };
   for (const field of allowedFields) {
     if (req.body[field] !== undefined) {
       updates[field] = req.body[field];

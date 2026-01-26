@@ -2,6 +2,39 @@ import React, { useState, useEffect, useCallback } from 'react';
 import api from '../services/api';
 import './Outreach.css';
 
+const DEFAULT_SLEEP_PERIODS = '00:00-15:00, 19:00-00:00';
+const DEFAULT_FOLLOW_UP_PROMPT =
+  'Напиши короткое напоминание о себе. Вежливо напомни о предложении и спроси, актуально ли оно еще. Если не актуально - попроси сообщить об этом. Сообщение должно быть кратким (2-3 предложения).';
+
+const formatSleepPeriods = (value) => {
+  if (Array.isArray(value)) {
+    return value.join(', ');
+  }
+  return value || '';
+};
+
+const parseSleepPeriods = (value) => {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean);
+};
+
+const normalizeNumber = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const normalizeRange = (minValue, maxValue, fallbackMin, fallbackMax) => {
+  const min = normalizeNumber(minValue, fallbackMin);
+  const max = normalizeNumber(maxValue, fallbackMax);
+  return {
+    min: Math.min(min, max),
+    max: Math.max(min, max)
+  };
+};
+
 const Outreach = () => {
   const [activeTab, setActiveTab] = useState('campaigns');
   const [accounts, setAccounts] = useState([]);
@@ -32,6 +65,22 @@ const Outreach = () => {
     message_delay_min: 60,
     message_delay_max: 180,
     daily_limit: 20,
+    sleep_periods: DEFAULT_SLEEP_PERIODS,
+    timezone_offset: 3,
+    pre_read_delay_min: 5,
+    pre_read_delay_max: 10,
+    read_reply_delay_min: 5,
+    read_reply_delay_max: 10,
+    account_loop_delay_min: 300,
+    account_loop_delay_max: 600,
+    dialog_wait_window_min: 40,
+    dialog_wait_window_max: 60,
+    ignore_bot_usernames: true,
+    account_cooldown_hours: 5,
+    follow_up_enabled: false,
+    follow_up_delay_hours: 24,
+    follow_up_prompt: DEFAULT_FOLLOW_UP_PROMPT,
+    reply_only_if_previously_wrote: true,
     account_ids: []
   });
 
@@ -91,10 +140,61 @@ const Outreach = () => {
   const handleSaveCampaign = async (e) => {
     e.preventDefault();
     try {
+      const messageDelay = normalizeRange(
+        campaignForm.message_delay_min,
+        campaignForm.message_delay_max,
+        60,
+        180
+      );
+      const preReadDelay = normalizeRange(
+        campaignForm.pre_read_delay_min,
+        campaignForm.pre_read_delay_max,
+        5,
+        10
+      );
+      const readReplyDelay = normalizeRange(
+        campaignForm.read_reply_delay_min,
+        campaignForm.read_reply_delay_max,
+        5,
+        10
+      );
+      const accountLoopDelay = normalizeRange(
+        campaignForm.account_loop_delay_min,
+        campaignForm.account_loop_delay_max,
+        300,
+        600
+      );
+      const dialogWaitWindow = normalizeRange(
+        campaignForm.dialog_wait_window_min,
+        campaignForm.dialog_wait_window_max,
+        40,
+        60
+      );
+
+      const payload = {
+        ...campaignForm,
+        message_delay_min: messageDelay.min,
+        message_delay_max: messageDelay.max,
+        daily_limit: normalizeNumber(campaignForm.daily_limit, 20),
+        sleep_periods: parseSleepPeriods(campaignForm.sleep_periods),
+        timezone_offset: normalizeNumber(campaignForm.timezone_offset, 3),
+        pre_read_delay_min: preReadDelay.min,
+        pre_read_delay_max: preReadDelay.max,
+        read_reply_delay_min: readReplyDelay.min,
+        read_reply_delay_max: readReplyDelay.max,
+        account_loop_delay_min: accountLoopDelay.min,
+        account_loop_delay_max: accountLoopDelay.max,
+        dialog_wait_window_min: dialogWaitWindow.min,
+        dialog_wait_window_max: dialogWaitWindow.max,
+        account_cooldown_hours: normalizeNumber(campaignForm.account_cooldown_hours, 5),
+        follow_up_delay_hours: normalizeNumber(campaignForm.follow_up_delay_hours, 24),
+        follow_up_prompt: campaignForm.follow_up_prompt?.trim() || DEFAULT_FOLLOW_UP_PROMPT
+      };
+
       if (selectedCampaign) {
-        await api.patch(`/outreach/campaigns/${selectedCampaign.id}`, campaignForm);
+        await api.patch(`/outreach/campaigns/${selectedCampaign.id}`, payload);
       } else {
-        await api.post('/outreach/campaigns', campaignForm);
+        await api.post('/outreach/campaigns', payload);
       }
       setShowCampaignModal(false);
       resetCampaignForm();
@@ -115,6 +215,22 @@ const Outreach = () => {
       message_delay_min: campaign.message_delay_min || 60,
       message_delay_max: campaign.message_delay_max || 180,
       daily_limit: campaign.daily_limit || 20,
+      sleep_periods: formatSleepPeriods(campaign.sleep_periods) || DEFAULT_SLEEP_PERIODS,
+      timezone_offset: campaign.timezone_offset ?? 3,
+      pre_read_delay_min: campaign.pre_read_delay_min ?? 5,
+      pre_read_delay_max: campaign.pre_read_delay_max ?? 10,
+      read_reply_delay_min: campaign.read_reply_delay_min ?? 5,
+      read_reply_delay_max: campaign.read_reply_delay_max ?? 10,
+      account_loop_delay_min: campaign.account_loop_delay_min ?? 300,
+      account_loop_delay_max: campaign.account_loop_delay_max ?? 600,
+      dialog_wait_window_min: campaign.dialog_wait_window_min ?? 40,
+      dialog_wait_window_max: campaign.dialog_wait_window_max ?? 60,
+      ignore_bot_usernames: campaign.ignore_bot_usernames ?? true,
+      account_cooldown_hours: campaign.account_cooldown_hours ?? 5,
+      follow_up_enabled: campaign.follow_up_enabled ?? false,
+      follow_up_delay_hours: campaign.follow_up_delay_hours ?? 24,
+      follow_up_prompt: campaign.follow_up_prompt || DEFAULT_FOLLOW_UP_PROMPT,
+      reply_only_if_previously_wrote: campaign.reply_only_if_previously_wrote ?? true,
       account_ids: campaign.account_ids || []
     });
     setShowCampaignModal(true);
@@ -159,6 +275,22 @@ const Outreach = () => {
       message_delay_min: 60,
       message_delay_max: 180,
       daily_limit: 20,
+      sleep_periods: DEFAULT_SLEEP_PERIODS,
+      timezone_offset: 3,
+      pre_read_delay_min: 5,
+      pre_read_delay_max: 10,
+      read_reply_delay_min: 5,
+      read_reply_delay_max: 10,
+      account_loop_delay_min: 300,
+      account_loop_delay_max: 600,
+      dialog_wait_window_min: 40,
+      dialog_wait_window_max: 60,
+      ignore_bot_usernames: true,
+      account_cooldown_hours: 5,
+      follow_up_enabled: false,
+      follow_up_delay_hours: 24,
+      follow_up_prompt: DEFAULT_FOLLOW_UP_PROMPT,
+      reply_only_if_previously_wrote: true,
       account_ids: []
     });
   };
@@ -733,6 +865,173 @@ const Outreach = () => {
                   />
                     </div>
                   </div>
+
+              <div className="form-row three-col">
+                <div className="form-group">
+                  <label>Перед чтением (сек, мин)</label>
+                  <input
+                    type="number"
+                    value={campaignForm.pre_read_delay_min}
+                    onChange={e => setCampaignForm({...campaignForm, pre_read_delay_min: parseInt(e.target.value)})}
+                    min={0}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Перед чтением (сек, макс)</label>
+                  <input
+                    type="number"
+                    value={campaignForm.pre_read_delay_max}
+                    onChange={e => setCampaignForm({...campaignForm, pre_read_delay_max: parseInt(e.target.value)})}
+                    min={0}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Часовой пояс (UTC)</label>
+                  <input
+                    type="number"
+                    value={campaignForm.timezone_offset}
+                    onChange={e => setCampaignForm({...campaignForm, timezone_offset: parseInt(e.target.value)})}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row three-col">
+                <div className="form-group">
+                  <label>После чтения (сек, мин)</label>
+                  <input
+                    type="number"
+                    value={campaignForm.read_reply_delay_min}
+                    onChange={e => setCampaignForm({...campaignForm, read_reply_delay_min: parseInt(e.target.value)})}
+                    min={0}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>После чтения (сек, макс)</label>
+                  <input
+                    type="number"
+                    value={campaignForm.read_reply_delay_max}
+                    onChange={e => setCampaignForm({...campaignForm, read_reply_delay_max: parseInt(e.target.value)})}
+                    min={0}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Отлежка аккаунта (ч)</label>
+                  <input
+                    type="number"
+                    value={campaignForm.account_cooldown_hours}
+                    onChange={e => setCampaignForm({...campaignForm, account_cooldown_hours: parseInt(e.target.value)})}
+                    min={1}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row three-col">
+                <div className="form-group">
+                  <label>Пауза между аккаунтами (сек, мин)</label>
+                  <input
+                    type="number"
+                    value={campaignForm.account_loop_delay_min}
+                    onChange={e => setCampaignForm({...campaignForm, account_loop_delay_min: parseInt(e.target.value)})}
+                    min={0}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Пауза между аккаунтами (сек, макс)</label>
+                  <input
+                    type="number"
+                    value={campaignForm.account_loop_delay_max}
+                    onChange={e => setCampaignForm({...campaignForm, account_loop_delay_max: parseInt(e.target.value)})}
+                    min={0}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Окно диалога (сек, мин)</label>
+                  <input
+                    type="number"
+                    value={campaignForm.dialog_wait_window_min}
+                    onChange={e => setCampaignForm({...campaignForm, dialog_wait_window_min: parseInt(e.target.value)})}
+                    min={0}
+                  />
+                </div>
+              </div>
+
+              <div className="form-row three-col">
+                <div className="form-group">
+                  <label>Окно диалога (сек, макс)</label>
+                  <input
+                    type="number"
+                    value={campaignForm.dialog_wait_window_max}
+                    onChange={e => setCampaignForm({...campaignForm, dialog_wait_window_max: parseInt(e.target.value)})}
+                    min={0}
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Периоды сна (через запятую)</label>
+                  <input
+                    type="text"
+                    value={campaignForm.sleep_periods}
+                    onChange={e => setCampaignForm({...campaignForm, sleep_periods: e.target.value})}
+                    placeholder="00:00-15:00, 19:00-00:00"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>Ответ только если писали</label>
+                  <label className="checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={campaignForm.reply_only_if_previously_wrote}
+                      onChange={e => setCampaignForm({...campaignForm, reply_only_if_previously_wrote: e.target.checked})}
+                    />
+                    <span>Включено</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="form-row">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={campaignForm.ignore_bot_usernames}
+                    onChange={e => setCampaignForm({...campaignForm, ignore_bot_usernames: e.target.checked})}
+                  />
+                  <span>Не отвечать ботам</span>
+                </label>
+              </div>
+
+              <div className="form-group">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={campaignForm.follow_up_enabled}
+                    onChange={e => setCampaignForm({...campaignForm, follow_up_enabled: e.target.checked})}
+                  />
+                  <span>Включить follow-up сообщения</span>
+                </label>
+              </div>
+
+              {campaignForm.follow_up_enabled && (
+                <>
+                  <div className="form-row three-col">
+                    <div className="form-group">
+                      <label>Через сколько часов</label>
+                      <input
+                        type="number"
+                        value={campaignForm.follow_up_delay_hours}
+                        onChange={e => setCampaignForm({...campaignForm, follow_up_delay_hours: parseInt(e.target.value)})}
+                        min={1}
+                      />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label>Промпт для follow-up</label>
+                    <textarea
+                      value={campaignForm.follow_up_prompt}
+                      onChange={e => setCampaignForm({...campaignForm, follow_up_prompt: e.target.value})}
+                      rows={3}
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="form-group">
                 <label>Выберите аккаунты для рассылки</label>

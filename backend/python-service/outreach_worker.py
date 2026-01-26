@@ -13,6 +13,8 @@ import sys
 import random
 import json
 import tempfile
+import socket
+from urllib.parse import urlparse
 import httpx
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
@@ -20,6 +22,96 @@ from typing import List, Dict, Optional, Any
 from config import LOG_LEVEL, SUPABASE_URL, SUPABASE_KEY, setup_logger
 
 logger = setup_logger('OutreachWorker')
+
+BOT_USERNAME_PREFIXES = ('i7', 'i8')
+
+
+def _parse_sleep_periods(periods: Any) -> List[str]:
+    if not periods:
+        return []
+    if isinstance(periods, str):
+        raw_parts = periods.split(',')
+    elif isinstance(periods, list):
+        raw_parts = []
+        for item in periods:
+            if item is None:
+                continue
+            item_str = str(item)
+            if ',' in item_str:
+                raw_parts.extend(item_str.split(','))
+            else:
+                raw_parts.append(item_str)
+    else:
+        return []
+    return [part.strip() for part in raw_parts if part.strip()]
+
+
+def _get_local_time(timezone_offset: int) -> datetime:
+    return datetime.utcnow() + timedelta(hours=timezone_offset)
+
+
+def _parse_sleep_period(period_str: str):
+    try:
+        start_str, end_str = period_str.strip().split('-')
+        start_hour, start_min = map(int, start_str.strip().split(':'))
+        end_hour, end_min = map(int, end_str.strip().split(':'))
+        return (start_hour, start_min), (end_hour, end_min)
+    except Exception:
+        return None
+
+
+def _is_sleep_time(periods: List[str], timezone_offset: int) -> bool:
+    if not periods:
+        return False
+    now = _get_local_time(timezone_offset).time()
+    for period in periods:
+        parsed = _parse_sleep_period(period)
+        if not parsed:
+            continue
+        (start_hour, start_min), (end_hour, end_min) = parsed
+        start = datetime.strptime(f"{start_hour:02d}:{start_min:02d}", "%H:%M").time()
+        end = datetime.strptime(f"{end_hour:02d}:{end_min:02d}", "%H:%M").time()
+        if start > end:
+            if now >= start or now <= end:
+                return True
+        else:
+            if start <= now <= end:
+                return True
+    return False
+
+
+def _safe_iso_date(value: Any) -> Optional[datetime.date]:
+    if not value:
+        return None
+    try:
+        if isinstance(value, datetime):
+            return value.date()
+        return datetime.fromisoformat(str(value)).date()
+    except Exception:
+        return None
+
+
+def _safe_iso_datetime(value: Any) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        if isinstance(value, datetime):
+            return value
+        return datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    except Exception:
+        return None
+
+
+def _normalize_range(min_value: Any, max_value: Any, default_min: int, default_max: int) -> tuple[int, int]:
+    try:
+        min_val = int(min_value)
+    except Exception:
+        min_val = default_min
+    try:
+        max_val = int(max_value)
+    except Exception:
+        max_val = default_max
+    return min(min_val, max_val), max(min_val, max_val)
 
 # Telethon imports
 try:
@@ -35,6 +127,13 @@ try:
 except ImportError:
     TELETHON_AVAILABLE = False
     logger.warning("âš ï¸ Telethon not installed - outreach will not work")
+
+try:
+    import socks
+    SOCKS_LIB_AVAILABLE = True
+except ImportError:
+    SOCKS_LIB_AVAILABLE = False
+    socks = None
 
 
 class OutreachSupabaseClient:
@@ -145,6 +244,41 @@ class OutreachSupabaseClient:
             json=updates
         )
         return result is not None
+
+    async def update_account_fields(self, account_id: str, updates: dict) -> bool:
+        """Update arbitrary account fields"""
+        if not updates:
+            return True
+        result = await self._request(
+            'PATCH',
+            f'outreach_accounts?id=eq.{account_id}',
+            json=updates
+        )
+        return result is not None
+
+    async def reactivate_expired_cooldowns(self) -> int:
+        """Reactivate accounts whose cooldown has expired"""
+        now_iso = datetime.utcnow().isoformat()
+        data = await self._request(
+            'PATCH',
+            f'outreach_accounts?status=eq.paused&cooldown_until=lte.{now_iso}',
+            json={'status': 'active', 'error_message': None}
+        )
+        if isinstance(data, list):
+            return len(data)
+        return 0
+
+    async def reset_daily_counters(self, today: datetime.date) -> int:
+        """Reset daily counters for accounts from previous days"""
+        today_str = today.isoformat()
+        data = await self._request(
+            'PATCH',
+            f'outreach_accounts?last_sent_date=lt.{today_str}',
+            json={'messages_sent_today': 0}
+        )
+        if isinstance(data, list):
+            return len(data)
+        return 0
     
     # ===== TARGETS =====
     
@@ -201,6 +335,10 @@ class OutreachSupabaseClient:
             json=updates
         )
         return result is not None
+
+    async def mark_follow_up_sent(self, chat_id: str) -> bool:
+        """Mark follow-up as sent for a chat"""
+        return await self.update_chat(chat_id, {'follow_up_sent_at': datetime.utcnow().isoformat()})
     
     async def increment_unread(self, chat_id: str) -> bool:
         """Increment unread count for a chat"""
@@ -246,7 +384,10 @@ class OutreachSupabaseClient:
             await self._request(
                 'PATCH',
                 f'outreach_chats?id=eq.{chat_id}',
-                json={'last_message_at': datetime.utcnow().isoformat()}
+                json={
+                    'last_message_at': datetime.utcnow().isoformat(),
+                    'last_message_sender': sender
+                }
             )
         
         return result is not None
@@ -356,10 +497,105 @@ class TelegramHandler:
     
     def __init__(self):
         self.clients: Dict[str, TelegramClient] = {}
+        self.proxy_health_cache: Dict[str, Dict[str, Any]] = {}
+        self.last_errors: Dict[str, str] = {}
+
+    def _set_error(self, account_id: str, message: str):
+        self.last_errors[account_id] = message
+
+    def _deep_check_proxy_sync(self, proxy_url: str) -> tuple[bool, str]:
+        """Attempt a real connection through proxy to Telegram."""
+        parsed = urlparse(proxy_url)
+        host = parsed.hostname
+        port = parsed.port
+        scheme = (parsed.scheme or '').lower()
+        user = parsed.username
+        password = parsed.password
+
+        if not host or not port:
+            return False, "Invalid proxy URL"
+
+        if not SOCKS_LIB_AVAILABLE:
+            return False, "Proxy library not available"
+
+        if scheme in ('socks5', 'socks5h'):
+            proxy_type = socks.SOCKS5
+        elif scheme == 'socks4':
+            proxy_type = socks.SOCKS4
+        elif scheme in ('http', 'https'):
+            proxy_type = socks.HTTP
+        else:
+            return False, f"Unsupported proxy scheme: {scheme}"
+
+        last_error = None
+        for attempt in range(2):
+            sock = socks.socksocket()
+            sock.settimeout(8)
+            try:
+                sock.set_proxy(proxy_type, host, port, True, user, password)
+                sock.connect(("api.telegram.org", 443))
+                sock.close()
+                return True, ""
+            except Exception as e:
+                last_error = e
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+                if attempt == 0:
+                    continue
+        return False, f"Proxy connect failed: {last_error}"
+
+    async def _check_proxy(self, proxy_url: str, account_id: str) -> bool:
+        """Deep proxy check (real connection through proxy)."""
+        cache = self.proxy_health_cache.get(proxy_url)
+        if cache:
+            checked_at = cache.get('checked_at')
+            if checked_at and (datetime.utcnow() - checked_at).total_seconds() < 600:
+                ok = cache.get('ok', False)
+                if not ok:
+                    self._set_error(account_id, cache.get('error', 'Proxy check failed'))
+                return ok
+
+        ok = False
+        error_message = "Proxy check failed"
+
+        if SOCKS_LIB_AVAILABLE:
+            ok, error_message = await asyncio.to_thread(self._deep_check_proxy_sync, proxy_url)
+        else:
+            parsed = urlparse(proxy_url)
+            host = parsed.hostname
+            port = parsed.port
+            if host and port:
+                try:
+                    reader, writer = await asyncio.wait_for(
+                        asyncio.open_connection(host, port),
+                        timeout=5
+                    )
+                    writer.close()
+                    if hasattr(writer, 'wait_closed'):
+                        await writer.wait_closed()
+                    ok = True
+                except Exception as e:
+                    error_message = f"Proxy check failed: {e}"
+            else:
+                error_message = "Invalid proxy URL"
+
+        self.proxy_health_cache[proxy_url] = {
+            'ok': ok,
+            'checked_at': datetime.utcnow(),
+            'error': error_message
+        }
+        if not ok:
+            logger.warning(f"Proxy check failed for {proxy_url}: {error_message}")
+            self._set_error(account_id, error_message)
+        return ok
     
     async def get_client(self, account: dict) -> Optional[TelegramClient]:
         """Get or create Telegram client for account"""
         account_id = str(account['id'])
+
+        self.last_errors.pop(account_id, None)
         
         if account_id in self.clients:
             client = self.clients[account_id]
@@ -373,72 +609,89 @@ class TelegramHandler:
                 del self.clients[account_id]
         
         # Create new client
-        try:
-            session_string = account.get('session_string')
-            session_file_data = account.get('session_file_data')
-            session = None
+        session_string = account.get('session_string')
+        session_file_data = account.get('session_file_data')
+        session = None
 
-            if session_string:
-                session = StringSession(session_string)
-            elif session_file_data:
-                try:
-                    session_bytes = base64.b64decode(session_file_data)
-                except Exception as e:
-                    logger.error(f"Invalid session_file_data for {account['phone_number']}: {e}")
-                    return None
-
-                session_path = os.path.join(
-                    tempfile.gettempdir(),
-                    f"outreach_{account_id}.session"
-                )
-                try:
-                    with open(session_path, 'wb') as f:
-                        f.write(session_bytes)
-                    session = session_path
-                except Exception as e:
-                    logger.error(f"Failed to write session file for {account['phone_number']}: {e}")
-                    return None
-            else:
-                logger.error(f"No session data for account {account['phone_number']}")
+        if session_string:
+            session = StringSession(session_string)
+        elif session_file_data:
+            try:
+                session_bytes = base64.b64decode(session_file_data)
+            except Exception as e:
+                logger.error(f"Invalid session_file_data for {account['phone_number']}: {e}")
+                    self._set_error(account_id, "Invalid session file data")
                 return None
-            
-            api_id = int(account.get('api_id', 0))
-            api_hash = account.get('api_hash', '')
-            
-            if not api_id or not api_hash:
-                # Use default Telegram API credentials (public)
-                api_id = 2040
-                api_hash = 'b18441a1ff607e10a989891a5462e627'
-            
-            # Parse proxy if provided
-            proxy = None
-            proxy_url = account.get('proxy_url')
-            if proxy_url:
-                proxy = self._parse_proxy(proxy_url)
-            
-            client = TelegramClient(
-                session,
-                api_id,
-                api_hash,
-                proxy=proxy
+
+            session_path = os.path.join(
+                tempfile.gettempdir(),
+                f"outreach_{account_id}.session"
             )
-            
-            await client.connect()
-            
-            if not await client.is_user_authorized():
-                logger.error(f"Account {account['phone_number']} not authorized")
+            try:
+                with open(session_path, 'wb') as f:
+                    f.write(session_bytes)
+                session = session_path
+            except Exception as e:
+                logger.error(f"Failed to write session file for {account['phone_number']}: {e}")
+                    self._set_error(account_id, "Failed to write session file")
                 return None
-            
-            self.clients[account_id] = client
-            logger.info(f"âœ… Connected account: {account['phone_number']}")
-            return client
-            
-        except AuthKeyUnregisteredError:
-            logger.error(f"Session expired for {account['phone_number']}")
+        else:
+            logger.error(f"No session data for account {account['phone_number']}")
+                self._set_error(account_id, "Missing session data")
             return None
-        except Exception as e:
-            logger.error(f"Error connecting account {account['phone_number']}: {e}")
-            return None
+        
+        api_id = int(account.get('api_id', 0))
+        api_hash = account.get('api_hash', '')
+        
+        if not api_id or not api_hash:
+            # Use default Telegram API credentials (public)
+            api_id = 2040
+            api_hash = 'b18441a1ff607e10a989891a5462e627'
+        
+        # Parse proxy if provided
+        proxy = None
+        proxy_url = account.get('proxy_url')
+        if proxy_url:
+            if not await self._check_proxy(proxy_url, account_id):
+                self._set_error(account_id, "Proxy check failed")
+                return None
+            proxy = self._parse_proxy(proxy_url)
+            if proxy is None:
+                self._set_error(account_id, "Invalid proxy configuration")
+                return None
+
+        for attempt in range(2):
+            try:
+                client = TelegramClient(
+                    session,
+                    api_id,
+                    api_hash,
+                    proxy=proxy
+                )
+                
+                await client.connect()
+                
+                if not await client.is_user_authorized():
+                    logger.error(f"Account {account['phone_number']} not authorized")
+                self._set_error(account_id, "Account not authorized")
+                    return None
+                
+                self.clients[account_id] = client
+                logger.info(f"âœ… Connected account: {account['phone_number']}")
+                return client
+                
+            except AuthKeyUnregisteredError:
+                logger.error(f"Session expired for {account['phone_number']}")
+                self._set_error(account_id, "Session expired")
+                return None
+            except Exception as e:
+                if attempt == 0:
+                    logger.warning(f"Connect failed for {account['phone_number']}, retrying: {e}")
+                    await asyncio.sleep(2)
+                    continue
+                logger.error(f"Error connecting account {account['phone_number']}: {e}")
+                self._set_error(account_id, f"Connection failed: {e}")
+                return None
     
     def _parse_proxy(self, proxy_url: str) -> tuple:
         """Parse proxy URL to Telethon format"""
@@ -541,6 +794,74 @@ class OutreachWorker:
         self.running = False
         self.daily_sent: Dict[str, int] = {}  # account_id -> count
         self.last_reset = datetime.utcnow().date()
+        self.last_account_id: Optional[str] = None
+
+    def _get_campaign_safety(self, campaign: dict) -> dict:
+        message_delay_min, message_delay_max = _normalize_range(
+            campaign.get('message_delay_min', 60),
+            campaign.get('message_delay_max', 180),
+            60,
+            180
+        )
+        pre_read_delay_min, pre_read_delay_max = _normalize_range(
+            campaign.get('pre_read_delay_min', 5),
+            campaign.get('pre_read_delay_max', 10),
+            5,
+            10
+        )
+        read_reply_delay_min, read_reply_delay_max = _normalize_range(
+            campaign.get('read_reply_delay_min', 5),
+            campaign.get('read_reply_delay_max', 10),
+            5,
+            10
+        )
+        account_loop_delay_min, account_loop_delay_max = _normalize_range(
+            campaign.get('account_loop_delay_min', 300),
+            campaign.get('account_loop_delay_max', 600),
+            300,
+            600
+        )
+        dialog_wait_window_min, dialog_wait_window_max = _normalize_range(
+            campaign.get('dialog_wait_window_min', 40),
+            campaign.get('dialog_wait_window_max', 60),
+            40,
+            60
+        )
+
+        return {
+            'daily_limit': int(campaign.get('daily_limit', 20) or 20),
+            'message_delay_min': message_delay_min,
+            'message_delay_max': message_delay_max,
+            'pre_read_delay_min': pre_read_delay_min,
+            'pre_read_delay_max': pre_read_delay_max,
+            'read_reply_delay_min': read_reply_delay_min,
+            'read_reply_delay_max': read_reply_delay_max,
+            'account_loop_delay_min': account_loop_delay_min,
+            'account_loop_delay_max': account_loop_delay_max,
+            'dialog_wait_window_min': dialog_wait_window_min,
+            'dialog_wait_window_max': dialog_wait_window_max,
+            'sleep_periods': _parse_sleep_periods(campaign.get('sleep_periods')),
+            'timezone_offset': int(campaign.get('timezone_offset', 3) or 3),
+            'ignore_bot_usernames': campaign.get('ignore_bot_usernames', True),
+            'account_cooldown_hours': int(campaign.get('account_cooldown_hours', 5) or 5),
+            'follow_up_enabled': campaign.get('follow_up_enabled', False),
+            'follow_up_delay_hours': int(campaign.get('follow_up_delay_hours', 24) or 24),
+            'follow_up_prompt': campaign.get('follow_up_prompt'),
+            'reply_only_if_previously_wrote': campaign.get('reply_only_if_previously_wrote', True)
+        }
+
+    def _is_account_in_cooldown(self, account: dict) -> bool:
+        cooldown_until = _safe_iso_datetime(account.get('cooldown_until'))
+        if cooldown_until and cooldown_until > datetime.utcnow().replace(tzinfo=cooldown_until.tzinfo):
+            return True
+        return False
+
+    def _get_messages_sent_today(self, account: dict) -> int:
+        today = datetime.utcnow().date()
+        last_sent_date = _safe_iso_date(account.get('last_sent_date'))
+        if last_sent_date and last_sent_date != today:
+            return 0
+        return int(account.get('messages_sent_today') or 0)
     
     async def start(self):
         """Start the worker"""
@@ -581,6 +902,12 @@ class OutreachWorker:
                 # Reset daily counters if new day
                 self._check_daily_reset()
                 
+                # Reactivate accounts whose cooldown expired
+                if self.supabase:
+                    reactivated = await self.supabase.reactivate_expired_cooldowns()
+                    if reactivated:
+                        logger.info(f"✅ Reactivated {reactivated} account(s) after cooldown")
+                
                 # Get active campaigns
                 campaigns = await self.supabase.get_active_outreach_campaigns()
                 
@@ -605,6 +932,11 @@ class OutreachWorker:
             logger.info("ðŸ”„ Resetting daily counters")
             self.daily_sent.clear()
             self.last_reset = today
+            if self.supabase:
+                try:
+                    asyncio.create_task(self.supabase.reset_daily_counters(today))
+                except Exception:
+                    pass
     
     async def process_campaign(self, campaign: dict):
         """Process a single campaign"""
@@ -649,9 +981,18 @@ class OutreachWorker:
         """Send initial messages to pending targets"""
         campaign_id = str(campaign['id'])
         message_template = campaign.get('message_template', '')
-        daily_limit = campaign.get('daily_limit', 20)
-        delay_min = campaign.get('message_delay_min', 60)
-        delay_max = campaign.get('message_delay_max', 180)
+        safety = self._get_campaign_safety(campaign)
+        daily_limit = safety['daily_limit']
+        delay_min = safety['message_delay_min']
+        delay_max = safety['message_delay_max']
+        account_loop_delay_min = safety['account_loop_delay_min']
+        account_loop_delay_max = safety['account_loop_delay_max']
+        sleep_periods = safety['sleep_periods']
+        timezone_offset = safety['timezone_offset']
+
+        if _is_sleep_time(sleep_periods, timezone_offset):
+            logger.info("💤 Campaign in sleep period, skipping initial messages")
+            return
         
         # Get pending targets
         targets = await self.supabase.get_pending_targets(campaign_id, limit=20)
@@ -664,6 +1005,7 @@ class OutreachWorker:
         
         # Round-robin through accounts
         account_index = 0
+        last_account_id = None
         
         for target in targets:
             target_id = str(target['id'])
@@ -677,15 +1019,30 @@ class OutreachWorker:
                     'error_message': 'No username or phone'
                 })
                 continue
+
+            if username and safety.get('ignore_bot_usernames', True):
+                uname = username.lower().lstrip('@')
+                if uname.endswith('bot') or uname.startswith(BOT_USERNAME_PREFIXES):
+                    await self.supabase.update_target(target_id, {
+                        'status': 'failed',
+                        'error_message': 'Bot username'
+                    })
+                    continue
             
             # Find available account
             account = None
             for _ in range(len(accounts)):
                 acc = accounts[account_index % len(accounts)]
                 acc_id = str(acc['id'])
-                
+
+                # Check cooldown
+                if self._is_account_in_cooldown(acc):
+                    account_index += 1
+                    continue
+
                 # Check daily limit
-                if self.daily_sent.get(acc_id, 0) < daily_limit:
+                messages_today = self._get_messages_sent_today(acc)
+                if messages_today < daily_limit:
                     account = acc
                     break
                 
@@ -696,11 +1053,19 @@ class OutreachWorker:
                 break
             
             account_id = str(account['id'])
+            messages_today = self._get_messages_sent_today(account)
             
             # Get Telegram client
             client = await self.telegram.get_client(account)
             if not client:
-                await self.supabase.update_account_status(account_id, 'error', 'Connection failed')
+                error_message = self.telegram.last_errors.get(account_id, 'Connection failed')
+                cooldown_seconds = safety['account_cooldown_hours'] * 3600
+                cooldown_until = (datetime.utcnow() + timedelta(seconds=cooldown_seconds)).isoformat()
+                await self.supabase.update_account_fields(account_id, {
+                    'status': 'paused',
+                    'error_message': error_message,
+                    'cooldown_until': cooldown_until
+                })
                 account_index += 1
                 continue
             
@@ -711,6 +1076,12 @@ class OutreachWorker:
             target_handle = identifier
             if not target_handle.startswith('@') and not target_handle.startswith('+'):
                 target_handle = f"@{target_handle}"
+
+            # Delay between accounts (human-like rotation)
+            if last_account_id and last_account_id != account_id:
+                rotation_delay = random.randint(account_loop_delay_min, account_loop_delay_max)
+                logger.debug(f"⏳ Waiting {rotation_delay}s before switching accounts")
+                await asyncio.sleep(rotation_delay)
             
             success, error, user_info = await self.telegram.send_message(
                 client, 
@@ -742,6 +1113,15 @@ class OutreachWorker:
                 
                 # Update counters
                 self.daily_sent[account_id] = self.daily_sent.get(account_id, 0) + 1
+                today_str = datetime.utcnow().date().isoformat()
+                await self.supabase.update_account_fields(account_id, {
+                    'messages_sent_today': messages_today + 1,
+                    'last_sent_date': today_str,
+                    'last_used_at': datetime.utcnow().isoformat()
+                })
+                account['messages_sent_today'] = messages_today + 1
+                account['last_sent_date'] = today_str
+                account['last_used_at'] = datetime.utcnow().isoformat()
                 
                 # Increment campaign messages_sent
                 await self.supabase.increment_campaign_sent(campaign_id)
@@ -774,7 +1154,18 @@ class OutreachWorker:
                 
                 # Check if account is limited
                 if 'flood' in error.lower():
-                    await self.supabase.update_account_status(account_id, 'paused', error)
+                    cooldown_seconds = safety['account_cooldown_hours'] * 3600
+                    if 'floodwait' in error.lower():
+                        try:
+                            cooldown_seconds = int(error.split(':')[-1].strip().replace('s', ''))
+                        except Exception:
+                            cooldown_seconds = safety['account_cooldown_hours'] * 3600
+                    cooldown_until = (datetime.utcnow() + timedelta(seconds=cooldown_seconds)).isoformat()
+                    await self.supabase.update_account_fields(account_id, {
+                        'status': 'paused',
+                        'error_message': error,
+                        'cooldown_until': cooldown_until
+                    })
                     logger.warning(f"âš ï¸ Account {account['phone_number']} rate limited")
                 
                 await self.supabase.log(
@@ -786,6 +1177,84 @@ class OutreachWorker:
                 logger.warning(f"âš ï¸ Failed to send to @{identifier}: {error}")
             
             account_index += 1
+            last_account_id = account_id
+
+    async def _maybe_send_follow_up(
+        self,
+        chat: dict,
+        account: dict,
+        client: TelegramClient,
+        follow_up_ai: Optional['AIHandler'],
+        safety: dict,
+        user_id: str,
+        campaign_id: str
+    ):
+        if not follow_up_ai or not safety.get('follow_up_enabled'):
+            return
+        if chat.get('follow_up_sent_at'):
+            return
+        if chat.get('last_message_sender') != 'me':
+            return
+
+        last_message_at = _safe_iso_datetime(chat.get('last_message_at'))
+        if not last_message_at:
+            return
+
+        delay_hours = safety.get('follow_up_delay_hours', 24)
+        if datetime.utcnow() - last_message_at < timedelta(hours=delay_hours):
+            return
+
+        messages_today = self._get_messages_sent_today(account)
+        if messages_today >= safety.get('daily_limit', 20):
+            return
+
+        history = await self.supabase.get_chat_messages(str(chat['id']))
+        if safety.get('reply_only_if_previously_wrote', True):
+            if not any(msg.get('sender') == 'me' for msg in history):
+                return
+
+        follow_up_prompt = safety.get('follow_up_prompt') or (
+            "Напиши короткое напоминание о себе. Вежливо напомни о предложении и спроси, актуально ли оно еще. "
+            "Если не актуально - попроси сообщить об этом. Сообщение должно быть кратким (2-3 предложения)."
+        )
+        response = await follow_up_ai.generate_response(
+            follow_up_prompt,
+            history,
+            "Напиши follow-up сообщение."
+        )
+        if not response:
+            return
+
+        target_username = chat.get('target_username')
+        if not target_username:
+            return
+
+        success, error, _ = await self.telegram.send_message(
+            client, f"@{target_username}", response
+        )
+        if not success:
+            logger.error(f"Failed to send follow-up to @{target_username}: {error}")
+            return
+
+        await self.supabase.add_message(str(chat['id']), 'me', response)
+        await self.supabase.mark_follow_up_sent(str(chat['id']))
+        await self.supabase.increment_campaign_sent(campaign_id)
+
+        today_str = datetime.utcnow().date().isoformat()
+        await self.supabase.update_account_fields(str(account['id']), {
+            'messages_sent_today': messages_today + 1,
+            'last_sent_date': today_str,
+            'last_used_at': datetime.utcnow().isoformat()
+        })
+        account['messages_sent_today'] = messages_today + 1
+        account['last_sent_date'] = today_str
+        account['last_used_at'] = datetime.utcnow().isoformat()
+
+        await self.supabase.log(
+            user_id, 'SUCCESS',
+            f"Follow-up sent to @{target_username}",
+            campaign_id, str(account['id'])
+        )
     
     async def _check_for_replies(self, campaign: dict, accounts: List[dict], 
                                   user_id: str, openrouter_key: str):
@@ -794,6 +1263,13 @@ class OutreachWorker:
         ai_prompt = campaign.get('ai_prompt', '')
         ai_model = campaign.get('ai_model', 'google/gemini-2.0-flash-001')
         auto_reply_enabled = campaign.get('auto_reply_enabled', False)
+        safety = self._get_campaign_safety(campaign)
+        sleep_periods = safety['sleep_periods']
+        timezone_offset = safety['timezone_offset']
+
+        if _is_sleep_time(sleep_periods, timezone_offset):
+            logger.info("💤 Campaign in sleep period, skipping reply checks")
+            return
         
         # Get all active chats for this campaign
         chats = await self.supabase.get_active_chats_for_campaign(campaign_id)
@@ -807,6 +1283,24 @@ class OutreachWorker:
         ai = None
         if auto_reply_enabled and openrouter_key and ai_prompt:
             ai = AIHandler(openrouter_key, ai_model)
+
+        follow_up_ai = None
+        follow_up_prompt = safety['follow_up_prompt'] or (
+            "Напиши короткое напоминание о себе. Вежливо напомни о предложении и спроси, актуально ли оно еще. "
+            "Если не актуально - попроси сообщить об этом. Сообщение должно быть кратким (2-3 предложения)."
+        )
+        if safety['follow_up_enabled'] and openrouter_key and follow_up_prompt:
+            follow_up_ai = AIHandler(openrouter_key, ai_model)
+        
+        account_loop_delay_min = safety['account_loop_delay_min']
+        account_loop_delay_max = safety['account_loop_delay_max']
+        pre_read_delay_min = safety['pre_read_delay_min']
+        pre_read_delay_max = safety['pre_read_delay_max']
+        read_reply_delay_min = safety['read_reply_delay_min']
+        read_reply_delay_max = safety['read_reply_delay_max']
+        dialog_wait_window_min = safety['dialog_wait_window_min']
+        dialog_wait_window_max = safety['dialog_wait_window_max']
+        last_reply_account_id = None
         
         for chat in chats:
             chat_id = str(chat['id'])
@@ -823,22 +1317,53 @@ class OutreachWorker:
             # Skip if in manual mode
             if chat.get('status') == 'manual':
                 continue
+
+            # Skip bot-like usernames if enabled
+            if safety.get('ignore_bot_usernames', True):
+                uname = (target_username or '').lower()
+                if uname.endswith('bot') or uname.startswith(BOT_USERNAME_PREFIXES):
+                    logger.info(f"🤖 Skipping bot-like username @{target_username}")
+                    continue
             
             # Find account
             account = next((a for a in accounts if str(a['id']) == account_id), None)
             if not account:
                 continue
+            if self._is_account_in_cooldown(account):
+                continue
             
             # Get client
             client = await self.telegram.get_client(account)
             if not client:
+                error_message = self.telegram.last_errors.get(account_id, 'Connection failed')
+                cooldown_seconds = safety['account_cooldown_hours'] * 3600
+                cooldown_until = (datetime.utcnow() + timedelta(seconds=cooldown_seconds)).isoformat()
+                await self.supabase.update_account_fields(account_id, {
+                    'status': 'paused',
+                    'error_message': error_message,
+                    'cooldown_until': cooldown_until
+                })
                 continue
+
+            if last_reply_account_id and last_reply_account_id != account_id:
+                rotation_delay = random.randint(account_loop_delay_min, account_loop_delay_max)
+                logger.debug(f"⏳ Waiting {rotation_delay}s before switching accounts")
+                await asyncio.sleep(rotation_delay)
             
             try:
                 # Get messages from Telegram
                 messages = await self.telegram.get_new_messages(client, target_username)
                 
                 if not messages:
+                    await self._maybe_send_follow_up(
+                        chat,
+                        account,
+                        client,
+                        follow_up_ai,
+                        safety,
+                        user_id,
+                        campaign_id
+                    )
                     continue
                 
                 # Filter only new messages since last_message_at
@@ -856,9 +1381,23 @@ class OutreachWorker:
                     new_messages.append(msg)
                 
                 if not new_messages:
+                    await self._maybe_send_follow_up(
+                        chat,
+                        account,
+                        client,
+                        follow_up_ai,
+                        safety,
+                        user_id,
+                        campaign_id
+                    )
                     continue
                 
                 logger.info(f"ðŸ“¥ {len(new_messages)} new message(s) from @{target_username}")
+
+                pre_delay = random.randint(pre_read_delay_min, pre_read_delay_max)
+                if pre_delay > 0:
+                    await asyncio.sleep(pre_delay)
+                await self.telegram.mark_as_read(client, target_username)
                 
                 # Get conversation history for AI
                 history = await self.supabase.get_chat_messages(chat_id)
@@ -874,41 +1413,72 @@ class OutreachWorker:
                     
                     # Increment unread count (for UI)
                     await self.supabase.increment_unread(chat_id)
+                    history.append({'sender': 'them', 'content': incoming_text})
                     
                     logger.info(f"ðŸ“¥ Message from @{target_username}: {incoming_text[:50]}...")
                     
                     # Generate and send AI response if enabled
                     if ai:
-                        response = await ai.generate_response(ai_prompt, history, incoming_text)
-                        
-                        if response:
-                            # Send response
-                            success, error, _ = await self.telegram.send_message(
-                                client, f"@{target_username}", response
-                            )
+                        should_reply = True
+                        if safety.get('reply_only_if_previously_wrote', True):
+                            if not any(msg.get('sender') == 'me' for msg in history):
+                                logger.info(f"Skipping AI reply for @{target_username}: no previous messages from us")
+                                should_reply = False
+
+                        if should_reply:
+                            messages_today = self._get_messages_sent_today(account)
+                            if messages_today >= safety.get('daily_limit', 20):
+                                logger.info(f"Daily limit reached for account {account_id}, skipping AI reply")
+                                should_reply = False
+
+                        if should_reply:
+                            reply_delay = random.randint(read_reply_delay_min, read_reply_delay_max)
+                            if reply_delay > 0:
+                                await asyncio.sleep(reply_delay)
+
+                            response = await ai.generate_response(ai_prompt, history, incoming_text)
                             
-                            if success:
-                                await self.supabase.add_message(chat_id, 'me', response)
-                                
-                                # Increment campaign replied count
-                                await self.supabase.increment_campaign_replied(campaign_id)
-                                
-                                await self.supabase.log(
-                                    user_id, 'SUCCESS',
-                                    f"AI replied to @{target_username}",
-                                    campaign_id, account_id
+                            if response:
+                                # Send response
+                                success, error, _ = await self.telegram.send_message(
+                                    client, f"@{target_username}", response
                                 )
                                 
-                                logger.info(f"ðŸ¤– AI replied to @{target_username}")
-                                
-                                # Add to history for context
-                                history.append({'sender': 'them', 'content': incoming_text})
-                                history.append({'sender': 'me', 'content': response})
-                                
-                                # Small delay between responses
-                                await asyncio.sleep(random.randint(5, 15))
-                            else:
-                                logger.error(f"Failed to send AI reply: {error}")
+                                if success:
+                                    await self.supabase.add_message(chat_id, 'me', response)
+                                    today_str = datetime.utcnow().date().isoformat()
+                                    await self.supabase.update_account_fields(account_id, {
+                                        'messages_sent_today': messages_today + 1,
+                                        'last_sent_date': today_str,
+                                        'last_used_at': datetime.utcnow().isoformat()
+                                    })
+                                    account['messages_sent_today'] = messages_today + 1
+                                    account['last_sent_date'] = today_str
+                                    account['last_used_at'] = datetime.utcnow().isoformat()
+                                    
+                                    # Increment campaign replied count
+                                    await self.supabase.increment_campaign_replied(campaign_id)
+                                    
+                                    await self.supabase.log(
+                                        user_id, 'SUCCESS',
+                                        f"AI replied to @{target_username}",
+                                        campaign_id, account_id
+                                    )
+                                    
+                                    logger.info(f"ðŸ¤– AI replied to @{target_username}")
+                                    
+                                    # Add to history for context
+                                    history.append({'sender': 'me', 'content': response})
+                                    
+                                    # Small delay between responses
+                                    await asyncio.sleep(random.randint(5, 15))
+                                    
+                                    # Stay in chat window
+                                    dialog_wait = random.randint(dialog_wait_window_min, dialog_wait_window_max)
+                                    if dialog_wait > 0:
+                                        await asyncio.sleep(dialog_wait)
+                                else:
+                                    logger.error(f"Failed to send AI reply: {error}")
                     
                     # Update target as replied
                     await self.supabase._request(
@@ -917,8 +1487,7 @@ class OutreachWorker:
                         json={'status': 'replied'}
                     )
                 
-                # Mark as read in Telegram
-                await self.telegram.mark_as_read(client, target_username)
+                last_reply_account_id = account_id
                 
             except Exception as e:
                 logger.error(f"Error checking chat {chat_id}: {e}")
