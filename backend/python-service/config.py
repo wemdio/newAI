@@ -49,6 +49,7 @@ DAILY_RESET_HOUR = 0
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 
 import logging
+import re
 
 def setup_logger(name):
     """Configure logger with standard format"""
@@ -56,11 +57,25 @@ def setup_logger(name):
     
     if not logger.handlers:
         handler = logging.StreamHandler()
+        emoji_pattern = re.compile(r'[\U0001F300-\U0001FAFF\u2600-\u27BF\u200D\uFE0F]')
+
+        class EmojiStripFilter(logging.Filter):
+            def filter(self, record):
+                if isinstance(record.msg, str):
+                    record.msg = emoji_pattern.sub('', record.msg)
+                if record.args:
+                    record.args = tuple(
+                        emoji_pattern.sub('', str(arg)) if isinstance(arg, str) else arg
+                        for arg in record.args
+                    )
+                return True
+
         formatter = logging.Formatter(
             '%(asctime)s [%(levelname)s] %(name)s: %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
         handler.setFormatter(formatter)
+        handler.addFilter(EmojiStripFilter())
         logger.addHandler(handler)
         logger.setLevel(LOG_LEVEL)
         
