@@ -283,7 +283,7 @@ class SupabaseClient:
                     # Allow None to be treated as available (default behavior)
                     if acc.get('is_available') is False:
                         logger.warning(f"Account {acc.get('account_name')} skipped: is_available is False (paused/cooldown)")
-                         continue
+                        continue
                          
                     active_accounts.append(acc)
                 

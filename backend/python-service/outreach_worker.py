@@ -1240,7 +1240,7 @@ class OutreachWorker:
                 if self.supabase:
                     reactivated = await self.supabase.reactivate_expired_cooldowns()
                     if reactivated:
-                    logger.info(f"Reactivated {reactivated} account(s) after cooldown")
+                        logger.info(f"Reactivated {reactivated} account(s) after cooldown")
                 
                 # Get active campaigns
                 campaigns = await self.supabase.get_active_outreach_campaigns()
