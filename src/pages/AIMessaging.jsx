@@ -3,8 +3,8 @@ import axios from 'axios';
 import supabase from '../supabaseClient';
 import './AIMessaging.css';
 
-// Daily message limit constant
-const DAILY_MESSAGE_LIMIT = 5;
+// Default per-account daily message limit (matches backend default)
+const DEFAULT_DAILY_MESSAGE_LIMIT = 3;
 
 const AIMessaging = () => {
   // UI Version 2.3 - With refresh and proxy validation
@@ -198,7 +198,15 @@ const AIMessaging = () => {
       });
       alert('Аккаунт добавлен!');
       setShowAddAccount(false);
-      setNewAccount({ account_name: '', session_file: '', api_id: '', api_hash: '', proxy_url: '', phone_number: '' });
+      setNewAccount({
+        account_name: '',
+        session_file: '',
+        api_id: '',
+        api_hash: '',
+        proxy_url: '',
+        phone_number: '',
+        daily_limit: DEFAULT_DAILY_MESSAGE_LIMIT
+      });
       loadData();
     } catch (error) {
       alert('Ошибка: ' + (error.response?.data?.error || error.message));
@@ -373,7 +381,7 @@ const AIMessaging = () => {
       setSelectedConversation({
         ...selectedConversation,
         conversation_history: [...(selectedConversation.conversation_history || []), newMessage],
-        status: 'manual' // Sending a message automatically switches to manual
+        status: 'stopped' // Sending a message stops AI replies
       });
       
       setMessageInput('');
@@ -398,7 +406,7 @@ const AIMessaging = () => {
       
       setSelectedConversation({
         ...selectedConversation,
-        status: 'manual'
+        status: 'stopped'
       });
       
       // Also refresh main list
@@ -565,9 +573,11 @@ const AIMessaging = () => {
                   </div>
                   <div className="info-row">
                     <span className="label">Сообщений сегодня:</span>
-                    <span className={`value ${(account.messages_sent_today || 0) >= DAILY_MESSAGE_LIMIT ? 'limit-reached' : ''}`}>
-                        {account.messages_sent_today || 0} / {DAILY_MESSAGE_LIMIT}
-                      </span>
+                    <span
+                      className={`value ${(account.messages_sent_today || 0) >= (account.daily_limit ?? DEFAULT_DAILY_MESSAGE_LIMIT) ? 'limit-reached' : ''}`}
+                    >
+                      {account.messages_sent_today || 0} / {account.daily_limit ?? DEFAULT_DAILY_MESSAGE_LIMIT}
+                    </span>
                   </div>
                   <div className="info-row">
                     <span className="label">Использован:</span>
@@ -901,7 +911,8 @@ const AIMessaging = () => {
                       api_id: '',
                       api_hash: '',
                       proxy_url: '',
-                      phone_number: ''
+                      phone_number: '',
+                      daily_limit: DEFAULT_DAILY_MESSAGE_LIMIT
                     });
                     loadData();
                   }
@@ -1271,7 +1282,8 @@ const AIMessaging = () => {
                   <span className={`status-badge ${selectedConversation.status}`}>
                       {selectedConversation.status === 'active' ? 'Активен' :
                        selectedConversation.status === 'hot_lead' ? 'Горячий' :
-                       selectedConversation.status === 'waiting' ? 'Ожидание' : 'Остановлен'}
+                       selectedConversation.status === 'waiting' ? 'Ожидание' :
+                       selectedConversation.status === 'completed' ? 'Завершен' : 'Остановлен'}
                   </span>
                 </div>
                 <div className="meta-item">
@@ -1329,7 +1341,7 @@ const AIMessaging = () => {
                   </button>
                 </form>
                 
-                {selectedConversation.status !== 'manual' && (
+                {!['stopped', 'completed'].includes(selectedConversation.status) && (
                   <div className="takeover-section">
                     <button 
                       type="button" 

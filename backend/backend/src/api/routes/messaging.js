@@ -54,7 +54,8 @@ router.post('/accounts', async (req, res) => {
       api_id, 
       api_hash, 
       proxy_url,
-      phone_number 
+      phone_number,
+      daily_limit
     } = req.body;
 
     if (!userId || !account_name || !session_file || !api_id || !api_hash) {
@@ -65,19 +66,25 @@ router.post('/accounts', async (req, res) => {
     }
 
     const supabase = getSupabase();
+    const parsedDailyLimit = Number.parseInt(daily_limit, 10);
+    const insertPayload = {
+      user_id: userId,
+      account_name,
+      session_file,
+      api_id: parseInt(api_id, 10),
+      api_hash,
+      proxy_url,
+      phone_number,
+      status: 'active',
+      is_available: true
+    };
+    if (Number.isFinite(parsedDailyLimit)) {
+      insertPayload.daily_limit = parsedDailyLimit;
+    }
+
     const { data, error } = await supabase
       .from('telegram_accounts')
-      .insert({
-        user_id: userId,
-        account_name,
-        session_file,
-        api_id: parseInt(api_id),
-        api_hash,
-        proxy_url,
-        phone_number,
-        status: 'active',
-        is_available: true
-      })
+      .insert(insertPayload)
       .select()
       .single();
 
@@ -99,7 +106,7 @@ router.post('/accounts', async (req, res) => {
 router.post('/accounts/import-session', async (req, res) => {
   try {
     const userId = req.headers['x-user-id'];
-    const { account_name, session_string, api_id, api_hash, proxy_url } = req.body;
+    const { account_name, session_string, api_id, api_hash, proxy_url, daily_limit } = req.body;
     
     if (!userId) {
       return res.status(400).json({ 
@@ -183,20 +190,26 @@ router.post('/accounts/import-session', async (req, res) => {
     
     // Save to database (including session_string for Python Worker)
     const supabase = getSupabase();
+    const parsedDailyLimit = Number.parseInt(daily_limit, 10);
+    const insertPayload = {
+      user_id: userId,
+      account_name: account_name || 'Imported Account',
+      session_file: sessionName,
+      session_string: cleanSessionString, // Store cleaned hex string for worker
+      api_id: parseInt(finalApiId, 10),
+      api_hash: finalApiHash,
+      proxy_url: proxy_url, // MANDATORY proxy
+      phone_number: null, // Will be filled when session is used
+      status: 'active',
+      is_available: true // Make account available for Python Worker
+    };
+    if (Number.isFinite(parsedDailyLimit)) {
+      insertPayload.daily_limit = parsedDailyLimit;
+    }
+
     const { data: account, error: dbError } = await supabase
       .from('telegram_accounts')
-      .insert({
-        user_id: userId,
-        account_name: account_name || 'Imported Account',
-        session_file: sessionName,
-        session_string: cleanSessionString, // Store cleaned hex string for worker
-        api_id: parseInt(finalApiId),
-        api_hash: finalApiHash,
-        proxy_url: proxy_url, // MANDATORY proxy
-        phone_number: null, // Will be filled when session is used
-        status: 'active',
-        is_available: true // Make account available for Python Worker
-      })
+      .insert(insertPayload)
       .select()
       .single();
     
@@ -231,6 +244,15 @@ router.put('/accounts/:id', async (req, res) => {
     const userId = req.headers['x-user-id'];
     const { id } = req.params;
     const updates = req.body;
+
+    if (Object.prototype.hasOwnProperty.call(updates, 'daily_limit')) {
+      const parsedDailyLimit = Number.parseInt(updates.daily_limit, 10);
+      if (Number.isFinite(parsedDailyLimit)) {
+        updates.daily_limit = parsedDailyLimit;
+      } else {
+        delete updates.daily_limit;
+      }
+    }
 
     // Force reset status to active/available on manual update
     // This allows users to fix "Error" status by just clicking Save
@@ -325,7 +347,9 @@ router.post('/campaigns', async (req, res) => {
       name, 
       communication_prompt, 
       hot_lead_criteria, 
-      target_channel_id 
+      target_channel_id,
+      filter_by_confidence,
+      max_confidence_for_ai
     } = req.body;
 
     if (!name || !communication_prompt || !hot_lead_criteria) {
@@ -336,6 +360,7 @@ router.post('/campaigns', async (req, res) => {
     }
 
     const supabase = getSupabase();
+    const parsedMaxConfidence = Number.parseInt(max_confidence_for_ai, 10);
     const { data, error } = await supabase
       .from('messaging_campaigns')
       .insert({
@@ -344,7 +369,9 @@ router.post('/campaigns', async (req, res) => {
         communication_prompt,
         hot_lead_criteria,
         target_channel_id,
-        status: 'draft'
+        status: 'draft',
+        filter_by_confidence: !!filter_by_confidence,
+        max_confidence_for_ai: Number.isFinite(parsedMaxConfidence) ? parsedMaxConfidence : undefined
       })
       .select()
       .single();

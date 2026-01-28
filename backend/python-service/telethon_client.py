@@ -12,6 +12,7 @@ from telethon.errors import (
 from telethon.errors.common import TypeNotFoundError
 from telethon.errors.rpcbaseerrors import ForbiddenError
 from urllib.parse import urlparse
+import re
 from typing import Dict, Optional, Callable
 import asyncio
 import os
@@ -47,107 +48,141 @@ class TelethonManager:
             
             # Check if we have session_string
             session_string_data = account.get('session_string')
+            session_spec = session_file
             if session_string_data:
                 print(f"🔧 Processing session_string for {account['account_name']}")
                 
-                # Check format: hex:dc_id or pure Telethon StringSession
-                session_str = session_string_data.strip()
+                # Normalize (remove whitespace/newlines)
+                session_str = re.sub(r'\s+', '', session_string_data).strip()
+                session_file_path = f"{session_file}.session"
                 
                 # If it contains ':' it's likely hex:dc format from account shop
                 # We need to create a session file from it
-                if ':' in session_str and not os.path.exists(f"{session_file}.session"):
-                    try:
-                        print(f"   Detected hex:dc format, creating session file")
-                        # Split hex and dc_id
-                        hex_part, dc_str = session_str.rsplit(':', 1)
-                        dc_id = int(dc_str)
-                        
-                        # Decode hex auth_key
-                        auth_key_bytes = bytes.fromhex(hex_part)
-                        
-                        print(f"   Auth key: {len(auth_key_bytes)} bytes, DC: {dc_id}")
-                        
-                        # Create StringSession from auth_key
-                        # We'll use empty StringSession and manually set auth_key
-                        # Actually, let's just use the file-based approach
-                        # Create a minimal SQLite session file with this auth_key
-                        import sqlite3
-                        
-                        session_path = f"{session_file}.session"
-                        conn = sqlite3.connect(session_path)
-                        
-                        # Create all necessary tables for Telethon
-                        conn.execute('''CREATE TABLE sessions (
-                            dc_id INTEGER PRIMARY KEY,
-                            server_address TEXT,
-                            port INTEGER,
-                            auth_key BLOB,
-                            takeout_id INTEGER
-                        )''')
-                        
-                        conn.execute('''CREATE TABLE entities (
-                            id INTEGER PRIMARY KEY,
-                            hash INTEGER NOT NULL,
-                            username TEXT,
-                            phone INTEGER,
-                            name TEXT,
-                            date INTEGER
-                        )''')
-                        
-                        conn.execute('''CREATE TABLE sent_files (
-                            md5_digest BLOB,
-                            file_size INTEGER,
-                            type INTEGER,
-                            id INTEGER,
-                            hash INTEGER,
-                            PRIMARY KEY(md5_digest, file_size, type)
-                        )''')
-                        
-                        conn.execute('''CREATE TABLE update_state (
-                            id INTEGER PRIMARY KEY,
-                            pts INTEGER,
-                            qts INTEGER,
-                            date INTEGER,
-                            seq INTEGER
-                        )''')
-                        
-                        conn.execute('''CREATE TABLE version (version INTEGER PRIMARY KEY)''')
-                        conn.execute('INSERT INTO version VALUES (8)')
-                        
-                        # Insert auth_key with DC info
-                        # We need to map DC ID to server address
-                        dc_map = {
-                            1: ('149.154.175.53', 443),
-                            2: ('149.154.167.51', 443),
-                            3: ('149.154.175.100', 443),
-                            4: ('149.154.167.91', 443),
-                            5: ('91.108.56.130', 443)
-                        }
-                        
-                        server_addr, port = dc_map.get(dc_id, ('149.154.175.53', 443))
-                        
-                        conn.execute(
-                            'INSERT INTO sessions VALUES (?, ?, ?, ?, ?)',
-                            (dc_id, server_addr, port, auth_key_bytes, None)
-                        )
-                        conn.commit()
-                        conn.close()
-                        
-                        print(f"   ✅ Created session file from hex:dc format")
-                        
-                    except Exception as e:
-                        print(f"   ❌ Failed to convert hex:dc to session: {e}")
-                        import traceback
-                        traceback.print_exc()
-                        return False
-                elif not ':' in session_str:
-                    # Pure Telethon StringSession format
-                    print(f"   Detected Telethon StringSession format")
-                    try:
-                        session_file = StringSession(session_str)
-                    except Exception as e:
-                        print(f"   ❌ Invalid StringSession format: {e}")
-                        return False
+                if ':' in session_str:
+                    if not os.path.exists(session_file_path):
+                        try:
+                            print(f"   Detected hex:dc format, creating session file")
+                            # Split hex and dc_id
+                            hex_part, dc_str = session_str.rsplit(':', 1)
+                            dc_id = int(dc_str)
+                            
+                            # Decode hex auth_key
+                            auth_key_bytes = bytes.fromhex(hex_part)
+                            
+                            print(f"   Auth key: {len(auth_key_bytes)} bytes, DC: {dc_id}")
+                            
+                            # Create StringSession from auth_key
+                            # We'll use empty StringSession and manually set auth_key
+                            # Actually, let's just use the file-based approach
+                            # Create a minimal SQLite session file with this auth_key
+                            import sqlite3
+                            
+                            conn = sqlite3.connect(session_file_path)
+                            
+                            # Create all necessary tables for Telethon
+                            conn.execute('''CREATE TABLE sessions (
+                                dc_id INTEGER PRIMARY KEY,
+                                server_address TEXT,
+                                port INTEGER,
+                                auth_key BLOB,
+                                takeout_id INTEGER
+                            )''')
+                            
+                            conn.execute('''CREATE TABLE entities (
+                                id INTEGER PRIMARY KEY,
+                                hash INTEGER NOT NULL,
+                                username TEXT,
+                                phone INTEGER,
+                                name TEXT,
+                                date INTEGER
+                            )''')
+                            
+                            conn.execute('''CREATE TABLE sent_files (
+                                md5_digest BLOB,
+                                file_size INTEGER,
+                                type INTEGER,
+                                id INTEGER,
+                                hash INTEGER,
+                                PRIMARY KEY(md5_digest, file_size, type)
+                            )''')
+                            
+                            conn.execute('''CREATE TABLE update_state (
+                                id INTEGER PRIMARY KEY,
+                                pts INTEGER,
+                                qts INTEGER,
+                                date INTEGER,
+                                seq INTEGER
+                            )''')
+                            
+                            conn.execute('''CREATE TABLE version (version INTEGER PRIMARY KEY)''')
+                            conn.execute('INSERT INTO version VALUES (8)')
+                            
+                            # Insert auth_key with DC info
+                            # We need to map DC ID to server address
+                            dc_map = {
+                                1: ('149.154.175.53', 443),
+                                2: ('149.154.167.51', 443),
+                                3: ('149.154.175.100', 443),
+                                4: ('149.154.167.91', 443),
+                                5: ('91.108.56.130', 443)
+                            }
+                            
+                            server_addr, port = dc_map.get(dc_id, ('149.154.175.53', 443))
+                            
+                            conn.execute(
+                                'INSERT INTO sessions VALUES (?, ?, ?, ?, ?)',
+                                (dc_id, server_addr, port, auth_key_bytes, None)
+                            )
+                            conn.commit()
+                            conn.close()
+                            
+                            print(f"   ✅ Created session file from hex:dc format")
+                            
+                        except Exception as e:
+                            print(f"   ❌ Failed to convert hex:dc to session: {e}")
+                            import traceback
+                            traceback.print_exc()
+                            return False
+                    session_spec = session_file
+                else:
+                    # Try hex-encoded StringSession first (common in DB)
+                    session_spec = None
+                    is_hex = re.fullmatch(r'[0-9a-fA-F]+', session_str) is not None
+                    if is_hex and len(session_str) % 2 == 0:
+                        try:
+                            decoded_bytes = bytes.fromhex(session_str)
+                            try:
+                                decoded_str = decoded_bytes.decode('utf-8')
+                            except UnicodeDecodeError:
+                                decoded_str = None
+                            
+                            if decoded_str and re.fullmatch(r'[0-9A-Za-z_-]+', decoded_str):
+                                try:
+                                    session_spec = StringSession(decoded_str)
+                                    print("   Detected hex-encoded StringSession format")
+                                except Exception as e:
+                                    print(f"   ⚠️ Hex decoded string is not a valid StringSession: {e}")
+                            else:
+                                print("   ⚠️ Hex string does not decode to a StringSession")
+                        except Exception as e:
+                            print(f"   ⚠️ Failed to decode hex session string: {e}")
+                    
+                    # Fallback: use raw StringSession
+                    if session_spec is None:
+                        try:
+                            session_spec = StringSession(session_str)
+                            print("   Detected Telethon StringSession format")
+                        except Exception as e:
+                            print(f"   ❌ Invalid StringSession format: {e}")
+                            # If a session file already exists, use it as fallback
+                            if os.path.exists(session_file_path):
+                                print("   ⚠️ Falling back to existing session file")
+                                session_spec = session_file
+                            elif is_hex:
+                                print("   ⚠️ Hex string may be auth key without DC. Use hex:dc_id format.")
+                                return False
+                            else:
+                                return False
             
             # PROXY IS MANDATORY - Check if proxy is configured
             proxy_url = account.get('proxy_url')
@@ -186,7 +221,7 @@ class TelethonManager:
             
             # Create client
             client = TelegramClient(
-                session_file,
+                session_spec,
                 account['api_id'],
                 account['api_hash'],
                 proxy=proxy
