@@ -13,7 +13,8 @@ from telethon.errors.common import TypeNotFoundError
 from telethon.errors.rpcbaseerrors import ForbiddenError
 from urllib.parse import urlparse
 import re
-from typing import Dict, Optional, Callable
+import sqlite3
+from typing import Dict, Optional, List, Any, Callable
 import asyncio
 import os
 import socks
