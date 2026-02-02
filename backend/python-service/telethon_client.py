@@ -28,18 +28,31 @@ class TelethonManager:
         self.safety = safety_manager
         self.clients: Dict[str, TelegramClient] = {}  # {account_id: client}
         self.event_handlers = {}  # {account_id: callback}
+        self.locks: Dict[str, asyncio.Lock] = {}  # {account_id: lock}
     
+    def _get_lock(self, account_id: str) -> asyncio.Lock:
+        """Get or create a lock for a specific account"""
+        if account_id not in self.locks:
+            self.locks[account_id] = asyncio.Lock()
+        return self.locks[account_id]
+
     async def init_account(self, account: Dict) -> bool:
         """
-        Initialize Telethon client for an account
-        
-        Args:
-            account: Account dict from database
-        
-        Returns:
-            True if successful, False otherwise
+        Initialize Telethon client for an account (with lock)
         """
         account_id = str(account['id'])
+        lock = self._get_lock(account_id)
+        async with lock:
+            return await self._init_account_internal(account)
+
+    async def _init_account_internal(self, account: Dict) -> bool:
+        """
+        Internal initialization (without lock)
+        """
+        account_id = str(account['id'])
+        if account_id in self.clients and self.clients[account_id].is_connected():
+            return True
+            
         session_file = f"sessions/{account['session_file']}"
         
         try:
@@ -244,7 +257,7 @@ class TelethonManager:
             
             # Check spam status with SpamBot
             print(f"🔍 Checking spam status via @SpamBot...")
-            spam_status = await self.check_spam_status(account_id)
+            spam_status = await self.check_spam_status_internal(account_id)
             
             # Update account status in database based on SpamBot response
             if spam_status['status'] == 'banned':
@@ -412,23 +425,28 @@ class TelethonManager:
     
     async def check_spam_status(self, account_id: str) -> Dict:
         """
-        Check account spam status via @SpamBot
-        
-        Args:
-            account_id: Account ID to check
-        
-        Returns:
-            Dict with status info: {
-                'is_limited': bool,
-                'status': 'active' | 'spam_blocked' | 'banned',
-                'wait_time': int (seconds, if limited),
-                'message': str (raw response from SpamBot)
-            }
+        Check account spam status via @SpamBot (with lock)
+        """
+        lock = self._get_lock(account_id)
+        async with lock:
+            return await self.check_spam_status_internal(account_id)
+
+    async def check_spam_status_internal(self, account_id: str) -> Dict:
+        """
+        Internal spam status check (without lock)
         """
         client = self.clients.get(account_id)
         if not client:
             print(f"❌ Client {account_id} not initialized for spam check")
             return {'is_limited': False, 'status': 'active', 'wait_time': 0, 'message': 'Client not initialized'}
+        
+        # Ensure connected
+        if not client.is_connected():
+            try:
+                await client.connect()
+            except Exception as e:
+                print(f"❌ Failed to connect client {account_id} for spam check: {e}")
+                return {'is_limited': False, 'status': 'active', 'wait_time': 0, 'message': f'Connect error: {e}'}
         
         try:
             print(f"🔍 Checking spam status for account {account_id}...")
@@ -547,29 +565,39 @@ class TelethonManager:
             "banned" - account banned
             "error" - other error
         """
-        client = self.clients.get(account_id)
-        if not client:
-            print(f"❌ Client {account_id} not initialized")
-            return "error"
-        
-        # Re-verify proxy before sending if account info provided
-        if account and account.get('proxy_url'):
-            proxy = self._parse_proxy(account.get('proxy_url'))
-            if proxy:
-                proxy_works = await self._check_proxy(proxy)
-                if not proxy_works:
-                    print(f"❌ Proxy check failed before sending - marking account as error")
-                    await self.supabase.mark_account_error(
-                        account_id,
-                        f"Proxy stopped working: {account.get('proxy_url')}"
-                    )
+        lock = self._get_lock(account_id)
+        async with lock:
+            client = self.clients.get(account_id)
+            if not client:
+                print(f"❌ Client {account_id} not initialized")
+                return "error"
+            
+            # Ensure connected
+            if not client.is_connected():
+                try:
+                    await client.connect()
+                except Exception as e:
+                    print(f"❌ Failed to connect client {account_id} before sending: {e}")
                     return "error"
-        
-        try:
-            # Send message
-            await client.send_message(username, message)
-            print(f"✉️ Sent message to @{username}")
-            return "success"
+            
+            # Re-verify proxy before sending if account info provided
+            if account and account.get('proxy_url'):
+                proxy = self._parse_proxy(account.get('proxy_url'))
+                if proxy:
+                    proxy_works = await self._check_proxy(proxy)
+                    if not proxy_works:
+                        print(f"❌ Proxy check failed before sending - marking account as error")
+                        await self.supabase.mark_account_error(
+                            account_id,
+                            f"Proxy stopped working: {account.get('proxy_url')}"
+                        )
+                        return "error"
+            
+            try:
+                # Send message
+                await client.send_message(username, message)
+                print(f"✉️ Sent message to @{username}")
+                return "success"
             
         except FloodWaitError as e:
             # Telegram rate limit - specific time
@@ -695,38 +723,41 @@ class TelethonManager:
     
     async def get_user_info(self, account_id: str, username: str) -> Optional[Dict]:
         """
-        Get user information
-        
-        Args:
-            account_id: Account to use
-            username: Target username
-        
-        Returns:
-            User info dict or None, or False if it's a channel
+        Get user information (with lock)
         """
-        client = self.clients.get(account_id)
-        if not client:
-            return None
-        
-        try:
-            entity = await client.get_entity(username)
+        lock = self._get_lock(account_id)
+        async with lock:
+            client = self.clients.get(account_id)
+            if not client:
+                return None
             
-            # Check if it's a channel/group (not a user)
-            if hasattr(entity, 'broadcast') or hasattr(entity, 'megagroup'):
-                print(f"⚠️ @{username} is a channel/group, not a user")
-                return False
+            # Ensure connected
+            if not client.is_connected():
+                try:
+                    await client.connect()
+                except Exception as e:
+                    print(f"❌ Failed to connect client {account_id} for user info: {e}")
+                    return None
             
-            # It's a user - return info
-            return {
-                'id': entity.id,
-                'username': getattr(entity, 'username', None),
-                'first_name': getattr(entity, 'first_name', ''),
-                'last_name': getattr(entity, 'last_name', ''),
-                'phone': getattr(entity, 'phone', None)
-            }
-        except Exception as e:
-            print(f"❌ Error getting user info: {e}")
-            return None
+            try:
+                entity = await client.get_entity(username)
+                
+                # Check if it's a channel/group (not a user)
+                if hasattr(entity, 'broadcast') or hasattr(entity, 'megagroup'):
+                    print(f"⚠️ @{username} is a channel/group, not a user")
+                    return False
+                
+                # It's a user - return info
+                return {
+                    'id': entity.id,
+                    'username': getattr(entity, 'username', None),
+                    'first_name': getattr(entity, 'first_name', ''),
+                    'last_name': getattr(entity, 'last_name', ''),
+                    'phone': getattr(entity, 'phone', None)
+                }
+            except Exception as e:
+                print(f"❌ Error getting user info: {e}")
+                return None
     
     async def reconnect_account(self, account_id: str, account: Dict) -> bool:
         """
@@ -739,32 +770,38 @@ class TelethonManager:
         Returns:
             True if successful, False otherwise
         """
-        print(f"🔄 Reconnecting account {account_id} with new settings...")
-        
-        # Close existing client if it exists
-        if account_id in self.clients:
-            try:
-                await self.clients[account_id].disconnect()
-                print(f"   ✅ Disconnected old client")
-            except Exception as e:
-                print(f"   ⚠️ Error disconnecting old client: {e}")
+        lock = self._get_lock(account_id)
+        async with lock:
+            print(f"🔄 Reconnecting account {account_id} with new settings...")
             
-            # Remove from clients dict
-            del self.clients[account_id]
+            # Close existing client if it exists
+            if account_id in self.clients:
+                try:
+                    await self.clients[account_id].disconnect()
+                    print(f"   ✅ Disconnected old client")
+                except Exception as e:
+                    print(f"   ⚠️ Error disconnecting old client: {e}")
+                
+                # Remove from clients dict
+                del self.clients[account_id]
+                
+                # Remove message handler
+                if account_id in self.event_handlers:
+                    del self.event_handlers[account_id]
             
-            # Remove message handler
-            if account_id in self.event_handlers:
-                del self.event_handlers[account_id]
-        
-        # Initialize with new settings
-        success = await self.init_account(account)
-        
-        if success:
-            print(f"   ✅ Account {account_id} reconnected successfully")
-        else:
-            print(f"   ❌ Failed to reconnect account {account_id}")
-        
-        return success
+            # Initialize with new settings
+            # We are already inside the lock, but init_account also uses it.
+            # To avoid deadlock, we need to be careful. 
+            # Actually, init_account uses 'async with lock', which is re-entrant? No, it's NOT re-entrant in asyncio.
+            # I will refactor init_account to have an internal method without lock.
+            success = await self._init_account_internal(account)
+            
+            if success:
+                print(f"   ✅ Account {account_id} reconnected successfully")
+            else:
+                print(f"   ❌ Failed to reconnect account {account_id}")
+            
+            return success
     
     async def close_all(self):
         """Close all Telethon clients"""
