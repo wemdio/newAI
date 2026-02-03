@@ -567,34 +567,34 @@ class TelethonManager:
             "error" - other error
         """
         lock = self._get_lock(account_id)
-        async with lock:
-            client = self.clients.get(account_id)
-            if not client:
-                print(f"❌ Client {account_id} not initialized")
-                return "error"
-            
-            # Ensure connected
-            if not client.is_connected():
-                try:
-                    await client.connect()
-                except Exception as e:
-                    print(f"❌ Failed to connect client {account_id} before sending: {e}")
+        try:
+            async with lock:
+                client = self.clients.get(account_id)
+                if not client:
+                    print(f"❌ Client {account_id} not initialized")
                     return "error"
-            
-            # Re-verify proxy before sending if account info provided
-            if account and account.get('proxy_url'):
-                proxy = self._parse_proxy(account.get('proxy_url'))
-                if proxy:
-                    proxy_works = await self._check_proxy(proxy)
-                    if not proxy_works:
-                        print(f"❌ Proxy check failed before sending - marking account as error")
-                        await self.supabase.mark_account_error(
-                            account_id,
-                            f"Proxy stopped working: {account.get('proxy_url')}"
-                        )
+                
+                # Ensure connected
+                if not client.is_connected():
+                    try:
+                        await client.connect()
+                    except Exception as e:
+                        print(f"❌ Failed to connect client {account_id} before sending: {e}")
                         return "error"
-            
-            try:
+                
+                # Re-verify proxy before sending if account info provided
+                if account and account.get('proxy_url'):
+                    proxy = self._parse_proxy(account.get('proxy_url'))
+                    if proxy:
+                        proxy_works = await self._check_proxy(proxy)
+                        if not proxy_works:
+                            print(f"❌ Proxy check failed before sending - marking account as error")
+                            await self.supabase.mark_account_error(
+                                account_id,
+                                f"Proxy stopped working: {account.get('proxy_url')}"
+                            )
+                            return "error"
+                
                 # Send message
                 await client.send_message(username, message)
                 print(f"✉️ Sent message to @{username}")
