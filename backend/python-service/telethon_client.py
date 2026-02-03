@@ -247,6 +247,14 @@ class TelethonManager:
             # Check authorization
             if not await client.is_user_authorized():
                 print(f"❌ Account {account['account_name']} not authorized")
+                try:
+                    await client.disconnect()
+                except Exception:
+                    pass
+                await self.supabase.mark_account_error(
+                    account_id,
+                    "Account not authorized. Re-import session or re-login."
+                )
                 return False
             
             # Get account info
