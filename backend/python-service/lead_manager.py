@@ -17,6 +17,60 @@ class LeadManager:
         self.telethon = telethon_manager
         self.active_conversations = {}  # {conversation_id: data}
         self.pending_response_tasks = {}  # {conversation_id: asyncio.Task}
+
+    def _extract_message_text(self, message) -> str:
+        """Return message text or a placeholder for non-text media."""
+        if not message:
+            return "[message]"
+
+        text = None
+        try:
+            text = message.text or message.message or message.raw_text
+        except Exception:
+            text = None
+
+        if isinstance(text, str):
+            text = text.strip()
+        if text:
+            return text
+
+        try:
+            if getattr(message, "voice", None):
+                return "[voice]"
+            if getattr(message, "video", None):
+                return "[video]"
+            if getattr(message, "photo", None):
+                return "[photo]"
+            if getattr(message, "sticker", None):
+                return "[sticker]"
+            if getattr(message, "gif", None):
+                return "[gif]"
+            if getattr(message, "poll", None):
+                return "[poll]"
+            if getattr(message, "contact", None):
+                return "[contact]"
+            if getattr(message, "geo", None) or getattr(message, "venue", None):
+                return "[location]"
+
+            doc = getattr(message, "document", None)
+            if doc:
+                mime = getattr(doc, "mime_type", None)
+                if mime:
+                    mime_lower = mime.lower()
+                    if "audio" in mime_lower:
+                        return "[audio]"
+                    if "video" in mime_lower:
+                        return "[video]"
+                    if "image" in mime_lower:
+                        return "[photo]"
+                return "[document]"
+
+            if getattr(message, "media", None):
+                return "[media]"
+        except Exception:
+            pass
+
+        return "[message]"
     
     async def process_campaign(self, campaign: Dict):
         """
@@ -269,7 +323,7 @@ class LeadManager:
                     await self.supabase.update_conversation_status(conversation_id, 'stopped')
                     return
                 
-                new_message = event.message.text
+                new_message = self._extract_message_text(event.message)
                 
                 # 🛡️ AUTO-BOT DETECTION (Immediate checks)
                 
