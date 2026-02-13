@@ -71,8 +71,17 @@ function Configuration() {
     e.preventDefault();
     
     // Validation
-    if (!config.leadPrompt.trim()) {
+    const trimmedPrompt = config.leadPrompt.trim();
+    if (!trimmedPrompt) {
       setError('Критерии определения лидов обязательны');
+      return;
+    }
+    if (trimmedPrompt.length < 20) {
+      setError('Критерии слишком короткие. Опишите подробнее (минимум 20 символов)');
+      return;
+    }
+    if (trimmedPrompt.length > 5000) {
+      setError(`Критерии слишком длинные (${trimmedPrompt.length}/5000 символов). Сократите текст`);
       return;
     }
     // Telegram Channel ID is now optional
@@ -289,8 +298,11 @@ function Configuration() {
             rows={8}
             required
           />
-          <small className="form-hint">
-            Будьте конкретны! AI будет использовать это для определения лидов.
+          <small className="form-hint" style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <span>Будьте конкретны! AI будет использовать это для определения лидов.</span>
+            <span style={{ color: config.leadPrompt.length > 5000 ? '#e74c3c' : config.leadPrompt.length > 4000 ? '#f39c12' : '#888' }}>
+              {config.leadPrompt.length}/5000
+            </span>
           </small>
         </div>
 
