@@ -2,8 +2,67 @@
  * Build user prompt for AI analysis
  */
 
+import { SYSTEM_PROMPT } from './systemPrompt.js';
+
 /**
- * Build prompt for analyzing a single message
+ * Build cacheable system prompt with user criteria.
+ * This creates a STABLE prefix that DeepSeek/Gemini/Anthropic can cache
+ * across multiple API calls for the same user.
+ * @param {string} userCriteria - User-defined lead criteria
+ * @returns {string} System prompt + criteria (cacheable prefix)
+ */
+export const buildSystemPromptWithCriteria = (userCriteria) => {
+  return `${SYSTEM_PROMPT}
+
+КРИТЕРИИ ПОИСКА ПОЛЬЗОВАТЕЛЯ (следуй точно, ОСОБЕННО секцию "НЕ СЧИТАТЬ ЛИДОМ"):
+${userCriteria}`;
+};
+
+/**
+ * Build user prompt for a single message (variable part, NOT cached).
+ * Contains only the message data and response format instructions.
+ * @param {object} message - Message data from database
+ * @returns {string} User prompt with message data only
+ */
+export const buildUserPromptForMessage = (message) => {
+  const {
+    chat_name,
+    bio,
+    message: messageText
+  } = message;
+
+  return `СООБЩЕНИЕ:
+${messageText}
+${bio ? `Био: ${bio}` : ''}
+${chat_name ? `Канал: ${chat_name}` : ''}
+
+ЗАДАЧА:
+1. Определи тип сообщения: ЭТО ПОИСК/ПРОБЛЕМА (REQUEST) или ПРЕДЛОЖЕНИЕ (OFFER)?
+   - Если человек ПРЕДЛАГАЕТ услуги ("Предлагаю", "Помогу", "Занимаемся", "Вебинар", "Возьму на себя") -> is_match: false.
+   - Если человек ИЩЕТ решение, СПРАШИВАЕТ совет или ОПИСЫВАЕТ ПРОБЛЕМУ ("Ищу", "Нужно", "Не проходит", "Завис", "Подскажите", "Как оплатить") -> переходи к шагу 2.
+
+2. Проверь соответствие КРИТЕРИЯМ ПОИСКА.
+   - Тема должна совпадать точно.
+   - ВНИМАНИЕ: Разделяй критерии на "КОГО ИСКАТЬ" и "КОГО ИСКЛЮЧИТЬ".
+   - Если сообщение совпадает с описанием из категории "исключения/не искать/конкуренты" -> is_match: false.
+
+ОТВЕТ:
+Верни ТОЛЬКО валидный JSON-объект (без markdown/текста), со СТРОГО такими полями:
+{
+  "is_match": false,
+  "confidence_score": 0,
+  "reasoning": "кратко 5-12 слов",
+  "matched_criteria": []
+}
+
+Правила:
+- confidence_score: целое число 0..100 (НЕ 0..1)
+- matched_criteria: массив строк (может быть пустым)
+`;
+};
+
+/**
+ * Build prompt for analyzing a single message (LEGACY - kept for backward compatibility)
  * @param {object} message - Message data from database
  * @param {string} userCriteria - User-defined lead criteria
  * @returns {string} Formatted user prompt
@@ -210,6 +269,8 @@ export const EXAMPLE_PROMPTS = [
 
 export default {
   buildAnalysisPrompt,
+  buildSystemPromptWithCriteria,
+  buildUserPromptForMessage,
   buildTestPrompt,
   extractCriteria,
   validateCriteria,

@@ -1,5 +1,6 @@
 import logger from '../utils/logger.js';
 import { extractCriteria } from '../prompts/promptBuilder.js';
+import { getCriteriaEmbedding, generateEmbeddings, cosineSimilarity } from '../services/embeddingService.js';
 
 /**
  * Pre-filter messages before sending to AI
@@ -300,13 +301,117 @@ export const preFilterMessage = (message, userCriteria, keywords = null) => {
 };
 
 /**
+ * Rescue messages rejected by keyword filter using embedding similarity.
+ * ADDITIVE ONLY: can only ADD messages back, never remove ones that passed keyword filter.
+ *
+ * Flow:
+ * 1. Get/cache embedding for user's positive criteria
+ * 2. Batch-embed all keyword-rejected messages (single API call)
+ * 3. Compare cosine similarity with criteria embedding
+ * 4. "Rescue" messages above threshold
+ *
+ * @param {array} keywordRejectedMessages - Messages that failed keyword filter (NOT quality-rejected)
+ * @param {string} userCriteria - Full user criteria text
+ * @param {string} userId - User identifier for embedding cache
+ * @param {string} apiKey - OpenRouter API key
+ * @returns {object} { rescued: Message[], stats: { total, rescued, avgSimilarity } }
+ */
+export const rescueWithEmbeddings = async (keywordRejectedMessages, userCriteria, userId, apiKey) => {
+  const threshold = parseFloat(process.env.EMBEDDING_RESCUE_THRESHOLD || '0.35');
+  const startTime = Date.now();
+
+  if (!keywordRejectedMessages || keywordRejectedMessages.length === 0) {
+    return { rescued: [], stats: { total: 0, rescued: 0, avgSimilarity: 0 } };
+  }
+
+  try {
+    // Step 1: Get criteria embedding (cached after first call per user)
+    const criteriaEmbedding = await getCriteriaEmbedding(userId, userCriteria, apiKey);
+
+    // Step 2: Extract text from rejected messages for batch embedding
+    const messageTexts = keywordRejectedMessages.map(msg => {
+      const parts = [msg.message || ''];
+      if (msg.bio) parts.push(msg.bio);
+      if (msg.chat_name) parts.push(msg.chat_name);
+      return parts.join(' ').substring(0, 500); // limit per message to control cost
+    });
+
+    // Step 3: Batch embed all rejected messages (single API call)
+    const messageEmbeddings = await generateEmbeddings(messageTexts, apiKey);
+
+    // Step 4: Compare and rescue
+    const rescued = [];
+    let totalSimilarity = 0;
+    const similarities = [];
+
+    for (let i = 0; i < keywordRejectedMessages.length; i++) {
+      const similarity = cosineSimilarity(criteriaEmbedding, messageEmbeddings[i]);
+      similarities.push(similarity);
+      totalSimilarity += similarity;
+
+      if (similarity >= threshold) {
+        rescued.push(keywordRejectedMessages[i]);
+        logger.debug('Embedding rescue: message rescued', {
+          messageId: keywordRejectedMessages[i].id,
+          similarity: similarity.toFixed(4),
+          threshold
+        });
+      }
+    }
+
+    const duration = Date.now() - startTime;
+    const avgSimilarity = keywordRejectedMessages.length > 0
+      ? totalSimilarity / keywordRejectedMessages.length
+      : 0;
+
+    logger.info('Embedding rescue complete', {
+      total: keywordRejectedMessages.length,
+      rescued: rescued.length,
+      rescueRate: `${Math.round((rescued.length / keywordRejectedMessages.length) * 100)}%`,
+      avgSimilarity: avgSimilarity.toFixed(4),
+      threshold,
+      duration: `${duration}ms`
+    });
+
+    return {
+      rescued,
+      stats: {
+        total: keywordRejectedMessages.length,
+        rescued: rescued.length,
+        avgSimilarity,
+        duration
+      }
+    };
+  } catch (error) {
+    // GRACEFUL FALLBACK: If embeddings fail, just return empty rescue
+    // The system continues working exactly as before — no regression
+    logger.warn('Embedding rescue failed, falling back to keyword-only filter', {
+      error: error.message,
+      rejectedCount: keywordRejectedMessages.length
+    });
+
+    return {
+      rescued: [],
+      stats: {
+        total: keywordRejectedMessages.length,
+        rescued: 0,
+        avgSimilarity: 0,
+        error: error.message
+      }
+    };
+  }
+};
+
+/**
  * Pre-filter array of messages
  * OPTIMIZED: Quality + keyword filtering to reduce API costs
+ * Now with optional embedding rescue for keyword-rejected messages.
  * @param {array} messages - Messages to filter
  * @param {string} userCriteria - User-defined criteria
+ * @param {object} options - Optional: { userId, apiKey } for embedding rescue
  * @returns {object} Filtered results
  */
-export const preFilterMessages = (messages, userCriteria) => {
+export const preFilterMessages = async (messages, userCriteria, options = {}) => {
   const startTime = Date.now();
   
   // Extract keywords once for all messages
@@ -355,8 +460,65 @@ export const preFilterMessages = (messages, userCriteria) => {
     }
   }
   
+  // ── Embedding Rescue: try to save keyword-rejected messages ──
+  const embeddingRescueEnabled = (process.env.EMBEDDING_RESCUE || 'true') === 'true';
+  const { userId, apiKey } = options;
+
+  if (embeddingRescueEnabled && userId && apiKey) {
+    // Only rescue messages rejected by KEYWORDS (not quality issues)
+    const keywordRejected = results.filtered
+      .filter((_, idx) => {
+        // The idx-th filtered message: check if it was keyword-rejected
+        // We track reasons above, but need to identify which messages
+        return true; // will re-check below
+      })
+      .map(item => item.message)
+      .filter(msg => {
+        // Re-run quality check to ensure we only rescue quality-passing messages
+        const qc = checkMessageQuality(msg);
+        return qc.isQuality;
+      });
+
+    if (keywordRejected.length > 0) {
+      logger.info('Starting embedding rescue for keyword-rejected messages', {
+        keywordRejectedCount: keywordRejected.length
+      });
+
+      const rescueResult = await rescueWithEmbeddings(keywordRejected, userCriteria, userId, apiKey);
+
+      if (rescueResult.rescued.length > 0) {
+        // Add rescued messages to passed list
+        const rescuedIds = new Set(rescueResult.rescued.map(m => m.id));
+
+        results.passed.push(...rescueResult.rescued);
+        results.stats.passed += rescueResult.rescued.length;
+
+        // Remove rescued messages from filtered list
+        results.filtered = results.filtered.filter(item => !rescuedIds.has(item.message.id));
+        results.stats.filtered -= rescueResult.rescued.length;
+
+        // Track rescue stats
+        results.stats.reasons['embedding_rescued'] = rescueResult.rescued.length;
+
+        logger.info('Embedding rescue added messages back to analysis', {
+          rescued: rescueResult.rescued.length,
+          newPassedTotal: results.stats.passed
+        });
+      }
+
+      results.stats.embeddingRescue = rescueResult.stats;
+    }
+  } else if (embeddingRescueEnabled && (!userId || !apiKey)) {
+    logger.debug('Embedding rescue skipped: missing userId or apiKey', {
+      hasUserId: !!userId,
+      hasApiKey: !!apiKey
+    });
+  }
+  
   const duration = Date.now() - startTime;
-  const filterRate = Math.round((results.stats.filtered / results.stats.total) * 100);
+  const filterRate = results.stats.total > 0
+    ? Math.round((results.stats.filtered / results.stats.total) * 100)
+    : 0;
   
   logger.info('Pre-filtering complete', {
     total: results.stats.total,
@@ -364,7 +526,8 @@ export const preFilterMessages = (messages, userCriteria) => {
     filtered: results.stats.filtered,
     filterRate: `${filterRate}%`,
     duration: `${duration}ms`,
-    reasons: results.stats.reasons
+    reasons: results.stats.reasons,
+    embeddingRescue: results.stats.embeddingRescue ? 'active' : 'off'
   });
   
   return results;
@@ -376,5 +539,6 @@ export default {
   checkMessageQuality,
   hasContactInfo,
   preFilterMessage,
-  preFilterMessages
+  preFilterMessages,
+  rescueWithEmbeddings
 };

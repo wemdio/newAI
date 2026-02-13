@@ -302,10 +302,11 @@ const processMessagesForUser = async (messages, userConfig) => {
   const userId = userConfig.user_id;
 
   try {
-    // Pre-filter messages
-    const preFilterResult = preFilterMessages(
+    // Pre-filter messages (with optional embedding rescue for keyword-rejected)
+    const preFilterResult = await preFilterMessages(
       messages,
-      userConfig.lead_prompt
+      userConfig.lead_prompt,
+      { userId, apiKey: userConfig.openrouter_api_key }
     );
 
     if (preFilterResult.passed.length === 0) {

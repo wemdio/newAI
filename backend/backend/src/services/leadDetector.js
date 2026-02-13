@@ -338,8 +338,11 @@ export const detectLeads = async (userId, userConfig, options = {}) => {
       return results;
     }
     
-    // Step 2: Pre-filter messages
-    const preFilterResult = preFilterMessages(messages, userConfig.lead_prompt);
+    // Step 2: Pre-filter messages (with optional embedding rescue)
+    const preFilterResult = await preFilterMessages(messages, userConfig.lead_prompt, {
+      userId,
+      apiKey: userConfig.openrouter_api_key
+    });
     const filteredMessages = preFilterResult.passed;
     results.messagesPreFiltered = filteredMessages.length;
     

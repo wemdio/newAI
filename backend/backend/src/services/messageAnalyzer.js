@@ -1,6 +1,5 @@
 import { getOpenRouter } from '../config/openrouter.js';
-import { SYSTEM_PROMPT } from '../prompts/systemPrompt.js';
-import { buildAnalysisPrompt } from '../prompts/promptBuilder.js';
+import { buildSystemPromptWithCriteria, buildUserPromptForMessage } from '../prompts/promptBuilder.js';
 import { validateAIResponse, logValidationResult } from '../validators/aiResponseValidator.js';
 import { estimateTokens, calculateCost } from '../utils/tokenCounter.js';
 import logger from '../utils/logger.js';
@@ -129,29 +128,32 @@ export const doubleCheckLead = async (message, initialAnalysis, userCriteria, ap
 
     const client = getOpenRouter(apiKey);
     
-    // Simplified prompt to reduce truncation issues
-    const prompt = `Проверь: это реальный лид по критериям?
+    // Criteria in system message for Gemini implicit caching (stable prefix per user)
+    const systemContent = `Ты проверяешь: является ли сообщение реальным лидом по критериям.
 
-КРИТЕРИИ:
+КРИТЕРИИ ПОИСКА:
 ${userCriteria}
 
-СООБЩЕНИЕ: "${(message.message || '').substring(0, 500)}"
+Отвечай ТОЛЬКО JSON: {"verified":true} или {"verified":false}`;
+
+    // User message — only the specific message to verify (variable part)
+    const userContent = `Проверь это сообщение:
+
+"${(message.message || '').substring(0, 500)}"
 ${message.bio ? `БИО: ${message.bio.substring(0, 100)}` : ''}
 
 ВОПРОСЫ:
 1. Человек ИЩЕТ услугу (не предлагает)?
 2. Не конкурент (проверь БИО)?
-3. Соответствует критериям?
-
-Ответь ТОЛЬКО: {"verified":true} или {"verified":false}`;
+3. Соответствует критериям?`;
 
     const response = await retryWithBackoff(async () => {
       try {
         return await client.chat.completions.create({
           model,
           messages: [
-            { role: 'system', content: 'Отвечай ТОЛЬКО JSON: {"verified":true} или {"verified":false}' },
-            { role: 'user', content: prompt }
+            { role: 'system', content: systemContent },
+            { role: 'user', content: userContent }
           ],
           response_format: { type: 'json_object' }, 
           temperature: 0,
@@ -257,9 +259,11 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
   const startTime = Date.now();
   
   try {
-    // Build prompts
-    const systemPrompt = SYSTEM_PROMPT;
-    const userPrompt = buildAnalysisPrompt(message, userCriteria);
+    // Build prompts — criteria go into system message for DeepSeek automatic prefix caching
+    // System prompt = SYSTEM_PROMPT + user criteria (STABLE prefix, cached across calls)
+    // User prompt = only message data (VARIABLE part, changes each call)
+    const systemPrompt = buildSystemPromptWithCriteria(userCriteria);
+    const userPrompt = buildUserPromptForMessage(message);
     
     // Estimate cost before making call
     const inputTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt);
@@ -433,8 +437,10 @@ export const analyzeMessageBatch = async (messages, userCriteria, apiKey) => {
       messageIds: messages.map(m => m.id)
     });
     
-    // Build batch prompt
-    const systemPrompt = SYSTEM_PROMPT;
+    // Build batch prompt — criteria in system message for DeepSeek prefix caching
+    // System prompt = SYSTEM_PROMPT + user criteria (STABLE prefix, cached across calls for same user)
+    const systemPrompt = buildSystemPromptWithCriteria(userCriteria);
+    
     // Cost optimization: omit empty optional fields (fewer prompt tokens, same semantics)
     const messagesArray = messages.map(msg => {
       const payload = {
@@ -447,39 +453,43 @@ export const analyzeMessageBatch = async (messages, userCriteria, apiKey) => {
       return payload;
     });
     
-    const userPrompt = `КРИТЕРИИ ПОЛЬЗОВАТЕЛЯ (следуй точно, ОСОБЕННО секцию "НЕ СЧИТАТЬ ЛИДОМ"):
-${userCriteria}
-
-ПРОАНАЛИЗИРУЙ СЛЕДУЮЩИЕ ${batchSize} СООБЩЕНИЙ:
+    // User prompt — only messages and format (variable part, NO criteria here)
+    const userPrompt = `ПРОАНАЛИЗИРУЙ СЛЕДУЮЩИЕ ${batchSize} СООБЩЕНИЙ:
 ${JSON.stringify(messagesArray)}
+
+ЗАДАЧА ДЛЯ КАЖДОГО СООБЩЕНИЯ:
+1. Определи тип: ПОИСК/ПРОБЛЕМА (REQUEST) или ПРЕДЛОЖЕНИЕ (OFFER)?
+   - ПРЕДЛАГАЕТ услуги -> is_match: false
+   - ИЩЕТ решение / описывает проблему -> переходи к шагу 2
+2. Проверь соответствие КРИТЕРИЯМ ПОИСКА (см. system message).
 
 ВАЖНО:
 1. Проанализируй КАЖДОЕ сообщение ОТДЕЛЬНО (не смешивай контекст!)
 2. Верни ТОЛЬКО МАССИВ из ${batchSize} JSON объектов (без дополнительного текста!)
-    3. Порядок результатов должен соответствовать порядку сообщений
-    4. Каждый результат должен содержать: id, is_match, confidence_score, reasoning, matched_criteria
-    5. Reasoning (причина) должна быть ОЧЕНЬ КРАТКОЙ (макс. 10 слов), чтобы избежать ошибок JSON.
-    
-    КРИТИЧЕСКИ ВАЖНО: Ответ должен начинаться с [ и заканчиваться ] - это должен быть чистый JSON массив!
-    
-    ФОРМАТ ОТВЕТА (ТОЛЬКО ЭТОТ JSON МАССИВ, БЕЗ ТЕКСТА):
-    [
-      {
-        "id": "message_id_1",
-        "is_match": boolean,
-        "confidence_score": 0-100,
-        "reasoning": "кратко 5-10 слов",
-        "matched_criteria": ["критерий1", "критерий2"]
-      },
-      {
-        "id": "message_id_2",
-        "is_match": boolean,
-        "confidence_score": 0-100,
-        "reasoning": "кратко 5-10 слов",
-        "matched_criteria": []
-      }
-      ... (всего ${batchSize} объектов)
-    ]`;
+3. Порядок результатов должен соответствовать порядку сообщений
+4. Каждый результат должен содержать: id, is_match, confidence_score, reasoning, matched_criteria
+5. Reasoning (причина) должна быть ОЧЕНЬ КРАТКОЙ (макс. 10 слов), чтобы избежать ошибок JSON.
+
+КРИТИЧЕСКИ ВАЖНО: Ответ должен начинаться с [ и заканчиваться ] - это должен быть чистый JSON массив!
+
+ФОРМАТ ОТВЕТА (ТОЛЬКО ЭТОТ JSON МАССИВ, БЕЗ ТЕКСТА):
+[
+  {
+    "id": "message_id_1",
+    "is_match": boolean,
+    "confidence_score": 0-100,
+    "reasoning": "кратко 5-10 слов",
+    "matched_criteria": ["критерий1", "критерий2"]
+  },
+  {
+    "id": "message_id_2",
+    "is_match": boolean,
+    "confidence_score": 0-100,
+    "reasoning": "кратко 5-10 слов",
+    "matched_criteria": []
+  }
+  ... (всего ${batchSize} объектов)
+]`;
 
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
