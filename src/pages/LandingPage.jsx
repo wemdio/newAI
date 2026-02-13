@@ -10,7 +10,6 @@ const HowItWorks = React.lazy(() => import('../components/landing/HowItWorks'));
 const Features = React.lazy(() => import('../components/landing/Features'));
 const Proof = React.lazy(() => import('../components/landing/Proof'));
 const UseCases = React.lazy(() => import('../components/landing/UseCases'));
-const Pricing = React.lazy(() => import('../components/landing/Pricing'));
 const Safety = React.lazy(() => import('../components/landing/Safety'));
 
 const Navbar = () => {
@@ -96,7 +95,6 @@ const Navbar = () => {
         `}>
           <a href="#proof" className="px-3 py-1 text-[11px] font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded-full transition-all duration-300 whitespace-nowrap uppercase tracking-wide">Результаты</a>
           <a href="#how-it-works" className="px-3 py-1 text-[11px] font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded-full transition-all duration-300 whitespace-nowrap uppercase tracking-wide">Как это работает</a>
-          <a href="#pricing" className="px-3 py-1 text-[11px] font-medium text-gray-400 hover:text-white hover:bg-white/5 rounded-full transition-all duration-300 whitespace-nowrap uppercase tracking-wide">Стоимость</a>
         </div>
 
         {/* Right Actions */}
@@ -134,9 +132,6 @@ const Navbar = () => {
               <a href="#how-it-works" onClick={() => setIsOpen(false)} className="block text-lg font-medium text-gray-300 hover:text-white">Как это работает</a>
             </li>
             <li>
-              <a href="#pricing" onClick={() => setIsOpen(false)} className="block text-lg font-medium text-gray-300 hover:text-white">Тарифы</a>
-            </li>
-            <li>
               <div className="h-px bg-white/10 my-4"></div>
               <button onClick={handleLogin} className="w-full py-3 bg-white/5 rounded-xl text-brand-500 font-bold">Войти</button>
             </li>
@@ -164,7 +159,6 @@ export default function LandingPage() {
         <LazySection><HowItWorks /></LazySection>
         <LazySection><Features onOpenLeadForm={() => handleOpenLeadForm('Features CTA')} /></LazySection>
         <LazySection><Proof /></LazySection>
-        <LazySection><Pricing onOpenLeadForm={handleOpenLeadForm} /></LazySection>
         <LazySection><UseCases /></LazySection>
         <LazySection><Safety /></LazySection>
       </main>
