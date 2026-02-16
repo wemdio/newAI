@@ -17,6 +17,39 @@ const DEFAULT_EMBEDDING_MODEL = 'openai/text-embedding-3-small';
 // In-memory cache: Map<userId, { embedding: number[], promptHash: string }>
 const criteriaEmbeddingCache = new Map();
 
+// Track API keys with recent embedding failures to avoid spamming on transient errors.
+// Map<apiKeyPrefix, { failedAt: number, error: string }>
+// Cooldown: 10 minutes — OpenRouter embedding endpoint is intermittently unreliable,
+// so we pause and retry later rather than blocking permanently.
+const failedApiKeys = new Map();
+const FAILED_KEY_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
+
+/**
+ * Check if this API key has recently failed embedding calls.
+ * Prevents spamming the API every 5 seconds during transient outages.
+ */
+export const isApiKeyBlocked = (apiKey) => {
+  if (!apiKey) return true;
+  const prefix = apiKey.substring(0, 12);
+  const entry = failedApiKeys.get(prefix);
+  if (!entry) return false;
+  if (Date.now() - entry.failedAt > FAILED_KEY_COOLDOWN_MS) {
+    failedApiKeys.delete(prefix);
+    return false; // Cooldown expired, allow retry
+  }
+  return true;
+};
+
+export const markApiKeyFailed = (apiKey, error) => {
+  if (!apiKey) return;
+  const prefix = apiKey.substring(0, 12);
+  failedApiKeys.set(prefix, { failedAt: Date.now(), error });
+  logger.info('Embedding paused for this key (10min cooldown)', {
+    keyPrefix: prefix + '...',
+    error
+  });
+};
+
 /**
  * Generate a SHA-256 hash of a string (for cache invalidation)
  * @param {string} text
@@ -64,12 +97,31 @@ export const generateEmbedding = async (text, apiKey) => {
   const model = process.env.EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL;
   const client = getOpenRouter(apiKey);
 
-  const response = await client.embeddings.create({
-    model,
-    input: text
-  });
+  let response;
+  try {
+    response = await client.embeddings.create({
+      model,
+      input: text
+    });
+  } catch (apiError) {
+    // Some OpenRouter API keys may not have access to embedding models
+    logger.warn('Embedding API call failed', {
+      model,
+      error: apiError.message,
+      status: apiError.status || apiError.code,
+      type: apiError.type
+    });
+    throw new Error(`Embedding API error: ${apiError.message}`);
+  }
 
   if (!response.data || !response.data[0] || !response.data[0].embedding) {
+    logger.warn('Unexpected embedding response format', {
+      model,
+      hasData: !!response.data,
+      isArray: Array.isArray(response.data),
+      responseKeys: response ? Object.keys(response) : 'null',
+      responsePreview: JSON.stringify(response).substring(0, 300)
+    });
     throw new Error('Invalid embedding response: missing data[0].embedding');
   }
 
@@ -89,13 +141,33 @@ export const generateEmbeddings = async (texts, apiKey) => {
   const model = process.env.EMBEDDING_MODEL || DEFAULT_EMBEDDING_MODEL;
   const client = getOpenRouter(apiKey);
 
-  // OpenAI embedding API supports batch input natively
-  const response = await client.embeddings.create({
-    model,
-    input: texts
-  });
+  let response;
+  try {
+    response = await client.embeddings.create({
+      model,
+      input: texts
+    });
+  } catch (apiError) {
+    // Some OpenRouter API keys may not have access to embedding models
+    logger.warn('Batch embedding API call failed', {
+      model,
+      textsCount: texts.length,
+      error: apiError.message,
+      status: apiError.status || apiError.code,
+      type: apiError.type
+    });
+    throw new Error(`Batch embedding API error: ${apiError.message}`);
+  }
 
   if (!response.data || !Array.isArray(response.data)) {
+    logger.warn('Unexpected batch embedding response format', {
+      model,
+      textsCount: texts.length,
+      hasData: !!response.data,
+      dataType: typeof response.data,
+      responseKeys: response ? Object.keys(response) : 'null',
+      responsePreview: JSON.stringify(response).substring(0, 500)
+    });
     throw new Error('Invalid batch embedding response: missing data array');
   }
 
@@ -236,6 +308,8 @@ export default {
   generateEmbedding,
   generateEmbeddings,
   getCriteriaEmbedding,
+  isApiKeyBlocked,
+  markApiKeyFailed,
   clearCriteriaCache,
   clearAllCache,
   getCacheStats

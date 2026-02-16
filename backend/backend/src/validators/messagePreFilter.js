@@ -1,6 +1,6 @@
 import logger from '../utils/logger.js';
 import { extractCriteria } from '../prompts/promptBuilder.js';
-import { getCriteriaEmbedding, generateEmbeddings, cosineSimilarity } from '../services/embeddingService.js';
+import { getCriteriaEmbedding, generateEmbeddings, cosineSimilarity, isApiKeyBlocked, markApiKeyFailed } from '../services/embeddingService.js';
 
 /**
  * Pre-filter messages before sending to AI
@@ -324,6 +324,12 @@ export const rescueWithEmbeddings = async (keywordRejectedMessages, userCriteria
     return { rescued: [], stats: { total: 0, rescued: 0, avgSimilarity: 0 } };
   }
 
+  // Skip if this API key recently failed embedding calls (avoid spamming every 5s)
+  if (isApiKeyBlocked(apiKey)) {
+    logger.debug('Embedding rescue skipped: API key blocked (recent failure)', { userId });
+    return { rescued: [], stats: { total: keywordRejectedMessages.length, rescued: 0, avgSimilarity: 0, skipped: 'api_key_blocked' } };
+  }
+
   try {
     // Step 1: Get criteria embedding (cached after first call per user)
     const criteriaEmbedding = await getCriteriaEmbedding(userId, userCriteria, apiKey);
@@ -387,8 +393,12 @@ export const rescueWithEmbeddings = async (keywordRejectedMessages, userCriteria
     // The system continues working exactly as before — no regression
     logger.warn('Embedding rescue failed, falling back to keyword-only filter', {
       error: error.message,
-      rejectedCount: keywordRejectedMessages.length
+      rejectedCount: keywordRejectedMessages.length,
+      userId
     });
+
+    // Mark this API key as incompatible to avoid retrying every 5 seconds
+    markApiKeyFailed(apiKey, error.message);
 
     return {
       rescued: [],
