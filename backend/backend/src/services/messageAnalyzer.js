@@ -114,38 +114,40 @@ const normalizeBatchAIResult = (aiResult, expectedMessageId) => {
  */
 export const doubleCheckLead = async (message, initialAnalysis, userCriteria, apiKey) => {
   const startTime = Date.now();
-  // Gemini 3 Flash Preview - high speed thinking model with configurable reasoning
-  // Set thinking to "minimal" to avoid token exhaustion on simple verification
-  // https://openrouter.ai/google/gemini-3-flash-preview/api
   const model = 'google/gemini-3-flash-preview';
 
   try {
     logger.info('Starting Double Check with AI', {
       messageId: message.id,
       initialConfidence: initialAnalysis.confidence_score,
+      initialReasoning: initialAnalysis.reasoning,
       model
     });
 
     const client = getOpenRouter(apiKey);
     
-    // Criteria in system message for Gemini implicit caching (stable prefix per user)
-    const systemContent = `Ты проверяешь: является ли сообщение реальным лидом по критериям.
+    const systemContent = `Ты — верификатор лидов. Первичный AI уже нашёл потенциальный лид. Твоя задача — проверить, не ошибся ли он.
 
-КРИТЕРИИ ПОИСКА:
+КРИТЕРИИ ПОИСКА ПОЛЬЗОВАТЕЛЯ:
 ${userCriteria}
 
-Отвечай ТОЛЬКО JSON: {"verified":true} или {"verified":false}`;
+ПРАВИЛА ВЕРИФИКАЦИИ:
+- Лид = человек ИЩЕТ услугу, ОПИСЫВАЕТ ПРОБЛЕМУ или ЗАДАЁТ ВОПРОС по теме критериев
+- НЕ лид = человек ПРЕДЛАГАЕТ свои услуги, рекламирует, ищет сотрудников
+- Если сообщение ПОХОЖЕ на лид (даже частично) — верифицируй как true. Сомнения в пользу лида.
+- Отвергай ТОЛЬКО если это явно НЕ лид (реклама, оффер, спам, не та тема)
 
-    // User message — only the specific message to verify (variable part)
-    const userContent = `Проверь это сообщение:
+Отвечай СТРОГО JSON: {"verified": true} или {"verified": false, "reason": "кратко почему"}`;
 
-"${(message.message || '').substring(0, 500)}"
-${message.bio ? `БИО: ${message.bio.substring(0, 100)}` : ''}
+    const userContent = `ПЕРВИЧНЫЙ AI НАШЁЛ ЛИД (confidence: ${initialAnalysis.confidence_score}%):
+Причина: "${initialAnalysis.reasoning || 'не указана'}"
 
-ВОПРОСЫ:
-1. Человек ИЩЕТ услугу (не предлагает)?
-2. Не конкурент (проверь БИО)?
-3. Соответствует критериям?`;
+СООБЩЕНИЕ:
+"${(message.message || '').substring(0, 800)}"
+${message.chat_name ? `Канал: ${message.chat_name}` : ''}
+${message.bio ? `БИО автора: ${message.bio.substring(0, 200)}` : ''}
+
+Верифицируй: это действительно лид по указанным критериям?`;
 
     const response = await retryWithBackoff(async () => {
       try {
@@ -157,16 +159,12 @@ ${message.bio ? `БИО: ${message.bio.substring(0, 100)}` : ''}
           ],
           response_format: { type: 'json_object' }, 
           temperature: 0,
-          max_tokens: 2000,
-          // Minimize reasoning tokens - we just need yes/no answer
-          reasoning: { effort: 'low' }
-          // NOTE: No provider filtering for Gemini models - they're only available via Google
+          max_tokens: 500
         });
       } catch (e) {
-        // Handle 403 Forbidden specifically - often means model not accessible/exists
         if (e.status === 403 || (e.response && e.response.status === 403)) {
-           logger.error(`Model ${model} returned 403 Forbidden. It may be restricted or require special access.`, { error: e.message });
-           throw new Error(`Model ${model} is restricted (403). Please choose a different model.`);
+           logger.error(`Model ${model} returned 403 Forbidden`, { error: e.message });
+           throw new Error(`Model ${model} is restricted (403)`);
         }
         throw e;
       }
@@ -174,11 +172,15 @@ ${message.bio ? `БИО: ${message.bio.substring(0, 100)}` : ''}
 
     const content = response.choices[0]?.message?.content;
     
-    // Detailed logging for debugging empty responses
+    logger.info('Gemini Double Check raw response', {
+      messageId: message.id,
+      content: content ? content.substring(0, 300) : 'EMPTY',
+      finishReason: response.choices[0]?.finish_reason
+    });
+    
     if (!content || content.trim() === '') {
       logger.error('Received empty response from Double Check AI', {
         model,
-        fullResponse: JSON.stringify(response),
         finishReason: response.choices[0]?.finish_reason
       });
       throw new Error('Empty response from Double Check AI');
@@ -186,50 +188,54 @@ ${message.bio ? `БИО: ${message.bio.substring(0, 100)}` : ''}
 
     let result;
     try {
-      // Clean the response
       let cleanContent = content.trim()
         .replace(/```json\n?|\n?```/g, '')
         .trim();
       
-      // Try to find JSON in response
       const jsonMatch = cleanContent.match(/\{[^}]*verified[^}]*\}/i);
       if (jsonMatch) {
         cleanContent = jsonMatch[0];
       }
       
-      // Look for true/false in the content
-      const hasTrue = /verified["']?\s*:\s*true/i.test(cleanContent);
-      const hasFalse = /verified["']?\s*:\s*false/i.test(cleanContent);
-      
-      if (hasTrue || hasFalse) {
-        result = {
-          verified: hasTrue && !hasFalse,
-          reasoning: hasTrue ? 'Verified by Gemini' : 'Rejected by Gemini',
-          confidence: hasTrue ? initialAnalysis.confidence_score : 0
-        };
-      } else {
-        // If we can't determine, try JSON parse as last resort
-        try {
-          const parsed = JSON.parse(cleanContent);
-          result = {
-            verified: parsed.verified === true,
-            reasoning: parsed.reasoning || (parsed.verified ? 'Verified' : 'Rejected'),
-            confidence: parsed.confidence || initialAnalysis.confidence_score
-          };
-        } catch {
-          throw new Error('Could not determine verified status from response');
+      let parsed;
+      try {
+        parsed = JSON.parse(cleanContent);
+      } catch {
+        const hasTrue = /verified["']?\s*:\s*true/i.test(cleanContent);
+        const hasFalse = /verified["']?\s*:\s*false/i.test(cleanContent);
+        
+        if (hasTrue || hasFalse) {
+          parsed = { verified: hasTrue && !hasFalse };
+        } else {
+          throw new Error('Could not determine verified status');
         }
       }
       
+      const verified = parsed.verified === true;
+      result = {
+        verified,
+        reasoning: parsed.reason || parsed.reasoning || (verified ? 'Verified by Gemini' : 'Rejected by Gemini'),
+        confidence: verified ? initialAnalysis.confidence_score : 0
+      };
+      
     } catch (e) {
       logger.warn('Failed to parse Gemini response', { 
-        content: content.substring(0, 200),
+        content: content.substring(0, 300),
         error: e.message 
       });
       throw e;
     }
 
     const duration = Date.now() - startTime;
+
+    if (!result.verified) {
+      logger.info('Lead rejected by Gemini Double Check', {
+        userId: 'see-caller',
+        messageId: message.id,
+        reason: result.reasoning,
+        geminiRaw: content.substring(0, 200)
+      });
+    }
     
     logger.info('Gemini Double Check complete', {
         verified: result.verified,
@@ -240,11 +246,15 @@ ${message.bio ? `БИО: ${message.bio.substring(0, 100)}` : ''}
     return result;
 
   } catch (error) {
-    logger.error('Double check failed', { error: error.message });
-    // FAIL CLOSED: If double check fails (network issues, truncated responses), 
-    // REJECT the lead to prevent garbage from passing through.
-    // This is safer than trusting potentially invalid initial results.
-    return { verified: false, reasoning: "Double check failed - rejecting for safety", confidence: 0 }; 
+    logger.error('Double check failed', { error: error.message, messageId: message.id });
+    // FAIL OPEN: if double-check itself fails, trust the initial DeepSeek analysis.
+    // DeepSeek already validated with confidence >= 70. Network/API failures
+    // should not silently kill all leads.
+    return { 
+      verified: true, 
+      reasoning: "Double check unavailable - trusting initial analysis", 
+      confidence: initialAnalysis.confidence_score 
+    }; 
   }
 };
 
