@@ -239,7 +239,7 @@ export const formatLeadMessage = (lead, analysis, messageSuggestion = null) => {
 
 📱 *Источник*
 • *Канал:* ${escapeMarkdown(lead.chat_name)}
-• *Время:* ${escapeMarkdown(new Date(lead.message_time).toLocaleString('ru-RU'))}
+• *Время:* ${escapeMarkdown(new Date(lead.message_time).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow' }))}
 
 💬 *Сообщение лида*
 *${escapeMarkdown(lead.message)}*
