@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, Suspense } from 'react';
 import { Menu, X } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import Hero from '../components/landing/Hero';
 import LazySection from '../components/LazySection';
 import LeadFormModal from '../components/landing/LeadFormModal';
@@ -165,6 +165,14 @@ export default function LandingPage() {
       
       <footer className="relative z-10 py-8 bg-[#050505] border-t border-white/5 text-center">
          <div className="max-w-7xl mx-auto px-4">
+           <div className="mb-3">
+             <Link
+               to="/privacy-policy"
+               className="text-sm text-gray-400 hover:text-white transition-colors"
+             >
+               Политика конфиденциальности
+             </Link>
+           </div>
            <p className="text-gray-600 text-sm">
              © 2025 Telegram Lead Scanner. All rights reserved.
            </p>

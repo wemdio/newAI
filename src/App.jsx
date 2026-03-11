@@ -17,6 +17,7 @@ const LeadAudit = React.lazy(() => import('./pages/LeadAudit'));
 const LandingPage = React.lazy(() => import('./pages/LandingPage'));
 const Contacts = React.lazy(() => import('./pages/Contacts'));
 const Outreach = React.lazy(() => import('./pages/Outreach'));
+const PrivacyPolicy = React.lazy(() => import('./pages/PrivacyPolicy'));
 
 const LoadingSpinner = () => (
   <div className="app loading-screen">
@@ -387,6 +388,8 @@ function App() {
           <Route path="/login" element={
              !session && !isTelegram ? <Login supabase={supabase} /> : <Navigate to="/leads" replace />
           } />
+
+          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
 
           {/* Protected Routes */}
           <Route path="/*" element={
