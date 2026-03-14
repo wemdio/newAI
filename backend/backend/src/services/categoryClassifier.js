@@ -104,7 +104,7 @@ const classifyBatch = async (messages) => {
     throw new Error('No API key found in user configs — set it in admin settings');
   }
 
-  const model = process.env.CATEGORY_AI_MODEL || 'novita/deepseek/deepseek-v3.2';
+  const model = process.env.CATEGORY_AI_MODEL || 'google/gemini-2.0-flash-001';
   const client = getOpenRouter(apiKey);
   const { systemPrompt, userPrompt } = buildCategoryBatchPrompt(messages);
 
