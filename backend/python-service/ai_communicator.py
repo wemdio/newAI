@@ -1,4 +1,5 @@
 """AI Communicator - Handles conversation with leads using Gemini 3 Pro Preview"""
+import os
 import aiohttp
 import json
 import re
@@ -229,7 +230,7 @@ Username: @{username}
         if not self.openrouter_api_key:
             raise ValueError("OpenRouter API key not configured for this user")
         
-        url = 'https://openrouter.ai/api/v1/chat/completions'
+        url = os.getenv('OPENROUTER_BASE_URL', 'https://router.requesty.ai/v1') + '/chat/completions'
         
         # Build messages array
         messages = [{'role': 'system', 'content': system_prompt}]

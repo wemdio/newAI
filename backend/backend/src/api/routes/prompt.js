@@ -278,7 +278,8 @@ ${feedback ? `ОБРАТНАЯ СВЯЗЬ:\n${feedback}\n` : ''}
 Проанализируй и улучши промпт.`;
 
   try {
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const baseUrl = process.env.OPENROUTER_BASE_URL || 'https://router.requesty.ai/v1';
+    const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,

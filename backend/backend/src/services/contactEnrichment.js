@@ -23,7 +23,7 @@ const CONFIG = {
   ADVANCED_ENRICHMENT_BATCH_SIZE: 5, // Для Gemini лучше меньшие батчи
   
   // API
-  OPENROUTER_BASE_URL: 'https://openrouter.ai/api/v1/chat/completions',
+  OPENROUTER_BASE_URL: `${process.env.OPENROUTER_BASE_URL || 'https://router.requesty.ai/v1'}/chat/completions`,
   MAX_TOKENS: 3000,                // Лимит токенов на ответ (увеличено с 2000)
   ADVANCED_MAX_TOKENS: 2500,
   

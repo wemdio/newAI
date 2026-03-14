@@ -532,7 +532,7 @@ class AIHandler:
     def __init__(self, api_key: str, model: str = 'google/gemini-2.0-flash-001'):
         self.api_key = api_key
         self.model = model
-        self.base_url = 'https://openrouter.ai/api/v1/chat/completions'
+        self.base_url = os.getenv('OPENROUTER_BASE_URL', 'https://router.requesty.ai/v1') + '/chat/completions'
     
     async def generate_response(
         self,

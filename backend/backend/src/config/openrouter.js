@@ -26,7 +26,7 @@ export const initializeOpenRouter = (apiKey = null) => {
     const siteName = process.env.YOUR_SITE_NAME || 'Telegram Lead Scanner';
 
     openrouterClient = new OpenAI({
-      baseURL: process.env.OPENROUTER_BASE_URL || 'https://openrouter.ai/api/v1',
+      baseURL: process.env.OPENROUTER_BASE_URL || 'https://router.requesty.ai/v1',
       apiKey: key,
       defaultHeaders: {
         'HTTP-Referer': siteUrl,
@@ -116,7 +116,8 @@ export const getAvailableModels = async () => {
     const client = getOpenRouter();
     
     // OpenRouter models endpoint
-    const response = await fetch('https://openrouter.ai/api/v1/models', {
+    const baseUrl = process.env.OPENROUTER_BASE_URL || 'https://router.requesty.ai/v1';
+    const response = await fetch(`${baseUrl}/models`, {
       headers: {
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`
       }
