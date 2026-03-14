@@ -1,0 +1,204 @@
+import logger from '../utils/logger.js';
+
+const VALID_CATEGORIES = [
+  'development',
+  'infobusiness',
+  'marketing',
+  'hr',
+  'design',
+  'realestate',
+  'legal',
+  'finance',
+  'logistics',
+  'marketplaces',
+  'construction',
+  'tenders'
+];
+
+const CATEGORY_LABELS = {
+  development: 'Разработка (сайт, приложение, бот)',
+  infobusiness: 'Инфобизнес / Онлайн-школы',
+  marketing: 'Маркетинг / SMM / Реклама',
+  hr: 'HR / Найм персонала',
+  design: 'Дизайн',
+  realestate: 'Недвижимость',
+  legal: 'Юриспруденция',
+  finance: 'Бухгалтерия / Финансы',
+  logistics: 'Логистика / Карго / Китай',
+  marketplaces: 'Маркетплейсы (WB / Ozon)',
+  construction: 'Строительство / Ремонт',
+  tenders: 'Тендеры / Госзакупки'
+};
+
+const SYSTEM_PROMPT = `Ты — классификатор запросов из Telegram-чатов. Твоя задача — определить, является ли сообщение ЗАПРОСОМ на услугу/товар/специалиста, и если да — отнести его к одной из категорий.
+
+ПРАВИЛА ОПРЕДЕЛЕНИЯ ЗАПРОСА:
+- ЗАПРОС = человек ИЩЕТ услугу, товар, специалиста, решение проблемы, задаёт вопрос
+  Маркеры: "ищу", "нужен", "нужно", "подскажите", "кто может", "требуется", "посоветуйте", "есть ли", "помогите найти", "хочу заказать"
+- НЕ ЗАПРОС = человек ПРЕДЛАГАЕТ свои услуги, рекламирует, ищет сотрудников/вакансии, спам, новости, обсуждение
+  Маркеры: "предлагаю", "помогу", "занимаемся", "оказываем услуги", "продам", "сделаю", "настрою", "реклама", "вакансия", "набираем"
+
+КАТЕГОРИИ:
+1. development — Разработка (сайт, приложение, бот, CRM, автоматизация, парсинг, интеграции)
+2. infobusiness — Инфобизнес / Онлайн-школы (курсы, обучение, вебинары, наставничество, запуск школы)
+3. marketing — Маркетинг / SMM / Реклама (продвижение, таргет, контекст, SEO, контент, PR, Telegram-реклама)
+4. hr — HR / Найм персонала (рекрутинг, поиск сотрудников, аутстаффинг, HR-процессы)
+5. design — Дизайн (логотип, фирменный стиль, UI/UX, баннеры, упаковка, визуал)
+6. realestate — Недвижимость (покупка, продажа, аренда, ипотека, застройщики, ВНЖ через недвижимость)
+7. legal — Юриспруденция (юрист, адвокат, договор, регистрация ООО/ИП, лицензии, суды)
+8. finance — Бухгалтерия / Финансы (бухгалтер, налоги, отчётность, финансовый учёт, аудит)
+9. logistics — Логистика / Карго / Китай (доставка, карго, таможня, Китай, фулфилмент, склад)
+10. marketplaces — Маркетплейсы WB / Ozon (Wildberries, Ozon, карточки товаров, аналитика МП, запуск на МП)
+11. construction — Строительство / Ремонт (стройка, ремонт, отделка, сантехника, электрика, дизайн интерьера)
+12. tenders — Тендеры / Госзакупки (тендеры, 44-ФЗ, 223-ФЗ, госзакупки, ЭТП, подготовка заявок)
+
+ВАЖНО:
+- Если сообщение не является запросом — is_request: false, category: null
+- Если запрос не подходит ни под одну категорию — is_request: false, category: null
+- Выбирай ОДНУ наиболее подходящую категорию
+- reasoning должен быть ОЧЕНЬ КРАТКИЙ (5-10 слов)`;
+
+export const buildCategoryBatchPrompt = (messages) => {
+  const messagesArray = messages.map(msg => {
+    const payload = { id: msg.id.toString(), message: msg.message || '' };
+    if (msg.chat_name) payload.chat_name = msg.chat_name;
+    if (msg.username) payload.username = msg.username;
+    if (msg.bio) payload.bio = msg.bio;
+    return payload;
+  });
+
+  const userPrompt = `ПРОАНАЛИЗИРУЙ ${messages.length} СООБЩЕНИЙ И КЛАССИФИЦИРУЙ:
+${JSON.stringify(messagesArray)}
+
+Для каждого сообщения определи:
+1. Это ЗАПРОС (ищет услугу/товар/специалиста) или НЕ ЗАПРОС?
+2. Если запрос — какая категория?
+
+Ответ — СТРОГО JSON массив из ${messages.length} объектов:
+[
+  {
+    "id": "message_id",
+    "is_request": true,
+    "category": "development",
+    "confidence_score": 85,
+    "reasoning": "Ищет разработчика бота"
+  },
+  {
+    "id": "message_id",
+    "is_request": false,
+    "category": null,
+    "confidence_score": 0,
+    "reasoning": "Предлагает свои услуги"
+  }
+]
+
+КРИТИЧЕСКИ ВАЖНО: Ответ должен начинаться с [ и заканчиваться ] — чистый JSON массив!`;
+
+  return { systemPrompt: SYSTEM_PROMPT, userPrompt };
+};
+
+export const parseCategoryBatchResponse = (content, expectedCount) => {
+  if (!content || content.trim() === '') {
+    throw new Error('Empty AI response');
+  }
+
+  let cleanContent = content.trim();
+  if (cleanContent.startsWith('```json')) {
+    cleanContent = cleanContent.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+  } else if (cleanContent.startsWith('```')) {
+    cleanContent = cleanContent.replace(/^```\n?/, '').replace(/\n?```$/, '');
+  }
+
+  let parsed;
+  try {
+    parsed = JSON.parse(cleanContent);
+  } catch (firstError) {
+    try {
+      const lastBraceIndex = Math.max(
+        cleanContent.lastIndexOf('}]'),
+        cleanContent.lastIndexOf('}')
+      );
+      if (lastBraceIndex > 0) {
+        const truncated = cleanContent.substring(
+          0,
+          lastBraceIndex + (cleanContent[lastBraceIndex + 1] === ']' ? 2 : 1)
+        );
+        parsed = JSON.parse(truncated);
+      } else {
+        throw firstError;
+      }
+    } catch {
+      try {
+        const fixed = cleanContent
+          .replace(/[\u0000-\u001F]+/g, '')
+          .replace(/,(\s*[}\]])/g, '$1')
+          .trim();
+        parsed = JSON.parse(fixed);
+      } catch {
+        throw firstError;
+      }
+    }
+  }
+
+  let results;
+  if (Array.isArray(parsed)) {
+    results = parsed;
+  } else if (parsed.results && Array.isArray(parsed.results)) {
+    results = parsed.results;
+  } else {
+    throw new Error(`Unexpected response format: ${Object.keys(parsed).join(', ')}`);
+  }
+
+  if (results.length !== expectedCount) {
+    logger.warn('Category batch size mismatch', { expected: expectedCount, received: results.length });
+  }
+
+  return results.map((r) => {
+    const normalized = { ...r };
+
+    if (normalized.id != null) normalized.id = String(normalized.id);
+
+    if (typeof normalized.is_request === 'string') {
+      normalized.is_request = normalized.is_request.trim().toLowerCase() === 'true';
+    }
+    if (normalized.isRequest != null && normalized.is_request == null) {
+      normalized.is_request = normalized.isRequest === true || normalized.isRequest === 'true';
+    }
+
+    if (typeof normalized.confidence_score === 'string') {
+      const n = Number(normalized.confidence_score);
+      if (Number.isFinite(n)) normalized.confidence_score = n;
+    }
+    if (typeof normalized.confidence_score === 'number') {
+      if (normalized.confidence_score > 0 && normalized.confidence_score <= 1) {
+        normalized.confidence_score = Math.round(normalized.confidence_score * 100);
+      }
+      normalized.confidence_score = Math.max(0, Math.min(100, normalized.confidence_score));
+    }
+
+    if (normalized.category && !VALID_CATEGORIES.includes(normalized.category)) {
+      logger.warn('Unknown category from AI, discarding', { category: normalized.category, id: normalized.id });
+      normalized.category = null;
+      normalized.is_request = false;
+    }
+
+    if (!normalized.is_request) {
+      normalized.category = null;
+    }
+
+    if (typeof normalized.reasoning !== 'string') {
+      normalized.reasoning = '';
+    }
+
+    return normalized;
+  });
+};
+
+export { VALID_CATEGORIES, CATEGORY_LABELS };
+
+export default {
+  buildCategoryBatchPrompt,
+  parseCategoryBatchResponse,
+  VALID_CATEGORIES,
+  CATEGORY_LABELS
+};

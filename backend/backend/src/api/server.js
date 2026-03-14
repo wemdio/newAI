@@ -21,6 +21,7 @@ import landingRoutes from './routes/landing.js';
 // TEMPORARILY DISABLED - debugging crash
 import outreachRoutes from './routes/outreach.js';
 import contactsRoutes from './routes/contacts.js';
+import classifierRoutes from './routes/classifier.js';
 
 /**
  * Express server setup
@@ -124,6 +125,7 @@ app.use('/api/landing', landingRoutes);
 // TEMPORARILY DISABLED - debugging crash
 app.use('/api/outreach', outreachRoutes);
 app.use('/api/contacts', contactsRoutes);
+app.use('/api/classifier', classifierRoutes);
 
 // 404 handler
 app.use((req, res) => {

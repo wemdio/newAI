@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { startServer } from './api/server.js';
 import { startRealtimeScanner } from './services/realtimeScanner.js';
 import { startMiniAppBot } from './services/miniAppBot.js';
+import { startCategoryClassifier } from './services/categoryClassifier.js';
 import { getActiveUserConfigs } from './database/queries.js';
 import logger from './utils/logger.js';
 
@@ -31,6 +32,17 @@ const main = async () => {
         error: scannerError.message
       });
       // Continue - scanner can be started via API if needed
+    }
+    
+    // Start Category Classifier (runs 24/7, controlled via system_config)
+    logger.info('Starting category classifier...');
+    try {
+      await startCategoryClassifier();
+      logger.info('Category classifier started (controlled via /api/classifier/toggle)');
+    } catch (classifierError) {
+      logger.error('Failed to start category classifier', {
+        error: classifierError.message
+      });
     }
     
     // Start Mini App Bot (for Telegram auto-login)
