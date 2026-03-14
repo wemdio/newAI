@@ -1,7 +1,6 @@
 import { getSupabase } from '../config/database.js';
 import { getOpenRouter } from '../config/openrouter.js';
 import { buildCategoryBatchPrompt, parseCategoryBatchResponse } from './categoryPrompt.js';
-import { getActiveUserConfigs } from '../database/queries.js';
 import { retryWithBackoff } from '../utils/errorHandler.js';
 import logger from '../utils/logger.js';
 import crypto from 'crypto';
@@ -11,6 +10,9 @@ const BATCH_SIZE = parseInt(process.env.CATEGORY_CLASSIFIER_BATCH_SIZE || '5', 1
 const MESSAGES_PER_CYCLE = 500;
 const DEDUP_WINDOW_DAYS = 7;
 const MIN_MESSAGE_LENGTH = 15;
+
+const API_KEYS = [process.env.CATEGORY_API_KEY, process.env.CATEGORY_API_KEY_2].filter(Boolean);
+let keyIndex = 0;
 
 let isRunning = false;
 let intervalHandle = null;
@@ -92,17 +94,17 @@ const deduplicateMessages = async (messages) => {
   return messages.filter((m) => !existingSet.has(m.username));
 };
 
-const getClassifierApiKey = async () => {
-  if (process.env.CATEGORY_API_KEY) return process.env.CATEGORY_API_KEY;
-  const configs = await getActiveUserConfigs();
-  const config = configs.find((c) => c.openrouter_api_key);
-  return config?.openrouter_api_key || null;
+const getNextApiKey = () => {
+  if (API_KEYS.length === 0) return null;
+  const key = API_KEYS[keyIndex % API_KEYS.length];
+  keyIndex++;
+  return key;
 };
 
 const classifyBatch = async (messages) => {
-  const apiKey = await getClassifierApiKey();
+  const apiKey = getNextApiKey();
   if (!apiKey) {
-    throw new Error('No API key found — set CATEGORY_API_KEY in env or enter a key in admin settings');
+    throw new Error('No API keys configured — set CATEGORY_API_KEY (and optionally CATEGORY_API_KEY_2) in env');
   }
 
   const model = process.env.CATEGORY_AI_MODEL || 'google/gemini-2.0-flash-001';
