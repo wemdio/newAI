@@ -22,7 +22,7 @@ services:
       # OpenRouter headers
       - YOUR_SITE_URL=${FRONTEND_URL}
       - YOUR_SITE_NAME=Telegram Lead Scanner
-      - AI_MODEL=deepseek/deepseek-v3.2
+      - AI_MODEL=novita/deepseek/deepseek-v3.2
     restart: always
 
   worker:
