@@ -23,6 +23,7 @@ services:
       - YOUR_SITE_URL=${FRONTEND_URL}
       - YOUR_SITE_NAME=Telegram Lead Scanner
       - AI_MODEL=novita/deepseek/deepseek-v3.2
+      - CATEGORY_API_KEY=${CATEGORY_API_KEY}
     restart: always
 
   worker:

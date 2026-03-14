@@ -92,16 +92,17 @@ const deduplicateMessages = async (messages) => {
   return messages.filter((m) => !existingSet.has(m.username));
 };
 
-const getApiKeyFromConfig = async () => {
+const getClassifierApiKey = async () => {
+  if (process.env.CATEGORY_API_KEY) return process.env.CATEGORY_API_KEY;
   const configs = await getActiveUserConfigs();
   const config = configs.find((c) => c.openrouter_api_key);
   return config?.openrouter_api_key || null;
 };
 
 const classifyBatch = async (messages) => {
-  const apiKey = await getApiKeyFromConfig();
+  const apiKey = await getClassifierApiKey();
   if (!apiKey) {
-    throw new Error('No API key found in user configs — set it in admin settings');
+    throw new Error('No API key found — set CATEGORY_API_KEY in env or enter a key in admin settings');
   }
 
   const model = process.env.CATEGORY_AI_MODEL || 'google/gemini-2.0-flash-001';
