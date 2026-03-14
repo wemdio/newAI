@@ -588,6 +588,65 @@
   margin: 0;
 }
 
+/* Classifier Panel */
+.classifier-panel {
+  background: #111;
+  border-radius: 4px;
+  padding: 0;
+  margin: 30px 0;
+  border: 1px solid #222;
+  overflow: hidden;
+}
+
+.classifier-toggle-row {
+  display: flex;
+  align-items: center;
+}
+
+.classifier-description {
+  color: #888;
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 0 0 16px 0;
+}
+
+.classifier-runtime {
+  margin-bottom: 12px;
+}
+
+.classifier-stats {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #222;
+}
+
+.category-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.category-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 2px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.category-name {
+  color: #b0b0b0;
+}
+
+.category-count {
+  color: #7dd17d;
+  font-weight: 500;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .config-form {

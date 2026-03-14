@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { configApi, scannerApi } from '../services/api';
+import { configApi, scannerApi, classifierApi } from '../services/api';
 import './Configuration.css';
 
 function Configuration() {
@@ -8,7 +8,7 @@ function Configuration() {
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
   const [configExists, setConfigExists] = useState(false);
-  const [maskedApiKey, setMaskedApiKey] = useState(null); // Store masked key
+  const [maskedApiKey, setMaskedApiKey] = useState(null);
   const [config, setConfig] = useState({
     openrouterApiKey: '',
     leadPrompt: '',
@@ -18,15 +18,18 @@ function Configuration() {
     isActive: true
   });
 
-  // Scanner status (read-only)
   const [scannerStatus, setScannerStatus] = useState(null);
+
+  const [classifierEnabled, setClassifierEnabled] = useState(false);
+  const [classifierStats, setClassifierStats] = useState(null);
+  const [classifierRuntime, setClassifierRuntime] = useState(null);
+  const [classifierLoading, setClassifierLoading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     loadConfiguration();
     loadScannerStatus();
-    
-    // Auto-polling disabled to reduce API requests
-    // Use the refresh button or scanner control buttons to update status
+    loadClassifierStatus();
   }, []);
 
   const loadConfiguration = async () => {
@@ -154,6 +157,54 @@ function Configuration() {
     } catch (err) {
       console.error('Scanner status error:', err);
     }
+  };
+
+  const loadClassifierStatus = async () => {
+    try {
+      const response = await classifierApi.status();
+      setIsAdmin(true);
+      setClassifierEnabled(response.data.enabled);
+      setClassifierRuntime(response.data.runtime);
+
+      const statsResponse = await classifierApi.stats();
+      setClassifierStats(statsResponse.data.stats);
+    } catch (err) {
+      if (err.response?.status === 403) {
+        setIsAdmin(false);
+      } else {
+        console.error('Classifier status error:', err);
+      }
+    }
+  };
+
+  const handleToggleClassifier = async () => {
+    try {
+      setClassifierLoading(true);
+      const newState = !classifierEnabled;
+      await classifierApi.toggle(newState);
+      setClassifierEnabled(newState);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 2000);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Не удалось переключить классификатор');
+    } finally {
+      setClassifierLoading(false);
+    }
+  };
+
+  const categoryLabels = {
+    development: 'Разработка',
+    infobusiness: 'Инфобизнес',
+    marketing: 'Маркетинг / SMM',
+    hr: 'HR / Найм',
+    design: 'Дизайн',
+    realestate: 'Недвижимость',
+    legal: 'Юриспруденция',
+    finance: 'Бухгалтерия / Финансы',
+    logistics: 'Логистика / Карго',
+    marketplaces: 'Маркетплейсы',
+    construction: 'Строительство',
+    tenders: 'Тендеры / Госзакупки',
   };
 
   if (loading) {
@@ -376,6 +427,66 @@ function Configuration() {
           )}
         </div>
       </div>
+
+      {/* Category Classifier (Admin Only) */}
+      {isAdmin && (
+        <div className="classifier-panel">
+          <div className="panel-header">
+            <h3>Классификатор лидов по нишам</h3>
+            <div className="classifier-toggle-row">
+              <label className="toggle-label">
+                <input
+                  type="checkbox"
+                  checked={classifierEnabled}
+                  onChange={handleToggleClassifier}
+                  disabled={classifierLoading}
+                  className="toggle-input"
+                />
+                <span className="toggle-slider"></span>
+                <span className="toggle-text">
+                  {classifierLoading ? 'Переключение...' : classifierEnabled ? 'Включён' : 'Выключен'}
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div className="panel-content">
+            <p className="classifier-description">
+              Автоматически анализирует входящие сообщения и распределяет лиды по 12 нишам
+              (разработка, маркетинг, HR, дизайн и др.) для бота фрилансера.
+            </p>
+
+            {classifierRuntime && (
+              <div className="classifier-runtime">
+                <p className="scanner-info">
+                  <strong>Обработано:</strong> {classifierRuntime.processedCount ?? 0} сообщений
+                </p>
+                <p className="scanner-info">
+                  <strong>Найдено лидов:</strong> {classifierRuntime.savedCount ?? 0}
+                </p>
+              </div>
+            )}
+
+            {classifierStats && (
+              <div className="classifier-stats">
+                <p className="scanner-info">
+                  <strong>Всего в базе:</strong> {classifierStats.total} лидов
+                </p>
+                {classifierStats.byCategory && classifierStats.byCategory.length > 0 && (
+                  <div className="category-grid">
+                    {classifierStats.byCategory.map(({ category, count }) => (
+                      <div key={category} className="category-chip">
+                        <span className="category-name">{categoryLabels[category] || category}</span>
+                        <span className="category-count">{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

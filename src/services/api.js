@@ -137,4 +137,11 @@ export const contactsApi = {
   delete: (id) => api.delete(`/contacts/${id}`),
 };
 
+// Category Classifier API (admin-only)
+export const classifierApi = {
+  status: () => api.get('/classifier/status'),
+  toggle: (enabled) => api.post('/classifier/toggle', { enabled }),
+  stats: () => api.get('/classifier/stats'),
+};
+
 export default api;
