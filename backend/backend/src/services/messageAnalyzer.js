@@ -157,9 +157,9 @@ ${message.bio ? `БИО автора: ${message.bio.substring(0, 200)}` : ''}
             { role: 'system', content: systemContent },
             { role: 'user', content: userContent }
           ],
-          response_format: { type: 'json_object' }, 
+          response_format: { type: 'json_object' },
           temperature: 0,
-          max_tokens: 500
+          max_tokens: 2000
         });
       } catch (e) {
         if (e.status === 403 || (e.response && e.response.status === 403)) {
