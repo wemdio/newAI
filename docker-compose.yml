@@ -17,7 +17,8 @@ services:
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - FRONTEND_URL=${FRONTEND_URL}
       - USE_BATCH_API=${USE_BATCH_API}
-      - BATCH_SIZE=${BATCH_SIZE}
+      - BATCH_SIZE=${BATCH_SIZE:-10}
+      - AI_CONCURRENCY=${AI_CONCURRENCY:-5}
       - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://router.requesty.ai/v1}
       # OpenRouter headers
       - YOUR_SITE_URL=${FRONTEND_URL}

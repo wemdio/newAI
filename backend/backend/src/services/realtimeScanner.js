@@ -274,11 +274,11 @@ const processBatch = async () => {
           toId: messages[messages.length - 1].id
         });
         
-        // Update user's last processed ID
-        userLastProcessedIds.set(userId, messages[messages.length - 1].id);
-        
-        // Process messages for this user
+        // Process messages for this user BEFORE advancing the pointer
         await processMessagesForUser(messages, userConfig);
+        
+        // Only advance after successful processing so failed messages get retried
+        userLastProcessedIds.set(userId, messages[messages.length - 1].id);
         
       } catch (error) {
         logger.error('Failed to process messages for user', {
