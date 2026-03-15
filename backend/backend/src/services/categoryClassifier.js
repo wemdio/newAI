@@ -6,7 +6,8 @@ import logger from '../utils/logger.js';
 import crypto from 'crypto';
 
 const BATCH_INTERVAL = parseInt(process.env.CATEGORY_CLASSIFIER_BATCH_INTERVAL || '10000', 10);
-const BATCH_SIZE = parseInt(process.env.CATEGORY_CLASSIFIER_BATCH_SIZE || '5', 10);
+const BATCH_SIZE = parseInt(process.env.CATEGORY_CLASSIFIER_BATCH_SIZE || '15', 10);
+const BATCH_DELAY = parseInt(process.env.CATEGORY_CLASSIFIER_BATCH_DELAY || '4000', 10);
 const MESSAGES_PER_CYCLE = 500;
 const DEDUP_WINDOW_DAYS = 7;
 const MIN_MESSAGE_LENGTH = 15;
@@ -225,6 +226,7 @@ const processCycle = async () => {
 
     let totalSaved = 0;
     for (let i = 0; i < deduped.length; i += BATCH_SIZE) {
+      if (i > 0) await sleep(BATCH_DELAY);
       const chunk = deduped.slice(i, i + BATCH_SIZE);
       try {
         const results = await classifyBatch(chunk);
