@@ -108,7 +108,7 @@ const classifyBatch = async (messages) => {
     throw new Error('No API keys configured — set CATEGORY_API_KEY (and optionally CATEGORY_API_KEY_2) in env');
   }
 
-  const model = process.env.CATEGORY_AI_MODEL || 'google/gemini-2.0-flash-001';
+  const model = process.env.CATEGORY_AI_MODEL || 'policy/lead-classifier';
   const client = getOpenRouter(apiKey);
   const { systemPrompt, userPrompt } = buildCategoryBatchPrompt(messages);
 

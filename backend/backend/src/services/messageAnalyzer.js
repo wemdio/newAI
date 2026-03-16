@@ -114,7 +114,7 @@ const normalizeBatchAIResult = (aiResult, expectedMessageId) => {
  */
 export const doubleCheckLead = async (message, initialAnalysis, userCriteria, apiKey) => {
   const startTime = Date.now();
-  const model = 'google/gemini-3-flash-preview';
+  const model = process.env.DOUBLE_CHECK_MODEL || 'policy/lead-doublecheck';
 
   try {
     logger.info('Starting Double Check with AI', {
