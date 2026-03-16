@@ -339,7 +339,7 @@ const processMessagesForUser = async (messages, userConfig) => {
         userConfig.lead_prompt,
         userConfig.openrouter_api_key,
         {
-          maxConcurrent: parseInt(process.env.AI_CONCURRENCY || '20', 10),
+          maxConcurrent: parseInt(process.env.AI_CONCURRENCY || '5', 10),
           stopOnError: false,
           useBatchApi: process.env.USE_BATCH_API !== 'false', // Enable by default
           batchSize: parseInt(process.env.BATCH_SIZE || '5', 10) // 5 messages per API call
@@ -369,6 +369,12 @@ const processMessagesForUser = async (messages, userConfig) => {
       matches: analysisResults.stats.matches,
       failed: analysisResults.stats.failed
     });
+
+    if (analysisResults.stats.failed > 0 && analysisResults.stats.analyzed === 0) {
+      throw new Error(
+        `All ${analysisResults.stats.failed} messages failed AI analysis — likely rate limited, will retry next cycle`
+      );
+    }
 
     // Process matches (leads found)
     if (analysisResults.matches.length === 0) {

@@ -107,13 +107,19 @@ export const retryWithBackoff = async (
   maxDelay = 10000
 ) => {
   let lastError;
-  
+
   for (let i = 0; i < maxRetries; i++) {
     try {
       return await fn();
     } catch (error) {
       lastError = error;
-      
+
+      const status = error.status || error.code || error.response?.status;
+      if (status === 429) {
+        logger.warn('Rate limited (429) — not retrying, will wait for next cycle');
+        throw error;
+      }
+
       if (i < maxRetries - 1) {
         const delay = Math.min(initialDelay * Math.pow(2, i), maxDelay);
         logger.warn(`Retry attempt ${i + 1}/${maxRetries} after ${delay}ms`, {
@@ -123,7 +129,7 @@ export const retryWithBackoff = async (
       }
     }
   }
-  
+
   throw lastError;
 };
 

@@ -765,8 +765,13 @@ ${JSON.stringify(messagesArray)}
     };
 
     logger.error('Batch AI analysis failed', errorDetails);
-    
-    // Fallback: analyze individually if batch fails
+
+    const statusCode = error.status || error.code;
+    if (statusCode === 429) {
+      logger.warn('Rate limited (429) — skipping batch, will retry next cycle');
+      throw error;
+    }
+
     logger.warn('Falling back to individual analysis');
     const results = [];
     for (const message of messages) {
@@ -777,7 +782,7 @@ ${JSON.stringify(messagesArray)}
         logger.error('Individual analysis also failed', {
           messageId: message.id,
           error: individualError.message,
-          data: individualError.details?.data // Use details from analyzeMessage
+          data: individualError.details?.data
         });
         results.push(null);
       }

@@ -209,14 +209,19 @@ const processCycle = async () => {
     const rawMessages = await fetchNewMessages();
     if (rawMessages.length === 0) return;
 
-    lastProcessedId = rawMessages[rawMessages.length - 1].id;
     stats.messagesScanned += rawMessages.length;
 
     const filtered = filterMessages(rawMessages);
-    if (filtered.length === 0) return;
+    if (filtered.length === 0) {
+      lastProcessedId = rawMessages[rawMessages.length - 1].id;
+      return;
+    }
 
     const deduped = await deduplicateMessages(filtered);
-    if (deduped.length === 0) return;
+    if (deduped.length === 0) {
+      lastProcessedId = rawMessages[rawMessages.length - 1].id;
+      return;
+    }
 
     logger.info('[CategoryClassifier] Processing messages', {
       raw: rawMessages.length,
@@ -225,6 +230,7 @@ const processCycle = async () => {
     });
 
     let totalSaved = 0;
+    let totalFailed = 0;
     for (let i = 0; i < deduped.length; i += BATCH_SIZE) {
       if (i > 0) await sleep(BATCH_DELAY);
       const chunk = deduped.slice(i, i + BATCH_SIZE);
@@ -237,9 +243,17 @@ const processCycle = async () => {
           error: err.message,
           chunkSize: chunk.length
         });
+        totalFailed += chunk.length;
         stats.errors++;
       }
     }
+
+    if (totalFailed === deduped.length) {
+      logger.warn('[CategoryClassifier] All batches failed — not advancing pointer, will retry next cycle');
+      return;
+    }
+
+    lastProcessedId = rawMessages[rawMessages.length - 1].id;
 
     if (totalSaved > 0) {
       stats.leadsFound += totalSaved;
