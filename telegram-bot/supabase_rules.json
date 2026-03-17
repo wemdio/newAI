@@ -1,0 +1,16 @@
+{
+  "rules": [
+    {"category": "development", "keywords": ["сайт", "лендинг", "приложение", "бот", "разработка", "crm", "backend", "frontend"]},
+    {"category": "infobusiness", "keywords": ["онлайн-школ", "курс", "обучение", "инфобизнес"]},
+    {"category": "marketing", "keywords": ["маркетинг", "smm", "таргет", "реклама", "лид", "продвижение", "контекст"]},
+    {"category": "hr", "keywords": ["hr", "найм", "подбор", "рекрутер"]},
+    {"category": "design", "keywords": ["дизайн", "дизайнер", "логотип", "ui", "ux"]},
+    {"category": "realestate", "keywords": ["недвижим", "риэлтор", "квартира", "аренда", "ипотек"]},
+    {"category": "legal", "keywords": ["юрист", "договор", "суд", "регистрация", "лиценз"]},
+    {"category": "finance", "keywords": ["бухгалтер", "учет", "отчетность", "налог", "финанс"]},
+    {"category": "logistics", "keywords": ["логист", "карго", "китай", "доставка", "импорт"]},
+    {"category": "marketplaces", "keywords": ["wb", "ozon", "маркетплейс", "wildberries"]},
+    {"category": "construction", "keywords": ["строител", "ремонт", "отделка", "прораб"]},
+    {"category": "tenders", "keywords": ["тендер", "госзакуп", "закупк"]}
+  ]
+}

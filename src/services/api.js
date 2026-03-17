@@ -144,4 +144,11 @@ export const classifierApi = {
   stats: () => api.get('/classifier/stats'),
 };
 
+// Lead Bot API (admin-only)
+export const leadbotApi = {
+  status: () => api.get('/leadbot/status'),
+  toggle: (enabled) => api.post('/leadbot/toggle', { enabled }),
+  stats: () => api.get('/leadbot/stats'),
+};
+
 export default api;

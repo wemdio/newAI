@@ -1,0 +1,142 @@
+from datetime import datetime
+from typing import Optional
+
+from .constants import Category
+
+
+START_TEXT = (
+    "Бот присылает реальные заявки из Telegram-чатов.\n\n"
+    "Мы отслеживаем 200+ чатов и находим сообщения где ищут:\n\n"
+    "• разработчиков\n"
+    "• маркетологов\n"
+    "• дизайнеров\n"
+    "• подрядчиков\n"
+    "• специалистов\n\n"
+    "Вы получаете лиды сразу после появления.\n\n"
+    "🎁 При старте — 10 бесплатных лидов.\n"
+    "5 последних из базы + 5 новых.\n"
+    "Выберите категорию:"
+)
+
+
+BONUS_ACCESS_TEXT = (
+    "Можно получить бесплатный доступ на 30 дней.\n\n"
+    "Если вы можете добавить нас в закрытый чат, где регулярно публикуются заявки и ищут подрядчиков — напишите.\n\n"
+    "После проверки мы выдадим бесплатный доступ к категориям.\n\n"
+    "Написать:\n@sorichev"
+)
+
+
+def categories_text(price_rub: int) -> str:
+    return (
+        "Выберите категории заявок.\n\n"
+        "Подписка на категорию:\n"
+        f"{price_rub} ₽ / месяц\n\n"
+        f"{BONUS_ACCESS_TEXT}"
+    )
+
+
+def category_text(category: Category, price_rub: int) -> str:
+    return (
+        f"Категория: {category.full_title}\n\n"
+        "Лидов:\n"
+        f"{category.monthly_leads} в месяц\n\n"
+        "Подписка:\n"
+        f"{price_rub} ₽ / месяц\n\n"
+        "После оплаты вы будете получать новые заявки сразу после их появления."
+    )
+
+
+def free_ended_text(price_rub: int) -> str:
+    return (
+        "Бесплатные лиды закончились.\n\n"
+        "Чтобы продолжить получать заявки, оформите подписку.\n\n"
+        "Стоимость:\n"
+        f"{price_rub} ₽ / месяц"
+    )
+
+
+def subscription_activated_text(category: Category, duration_days: int) -> str:
+    return (
+        "Подписка активирована.\n\n"
+        f"Категория:\n{category.title}\n\n"
+        f"Срок:\n{duration_days} дней\n\n"
+        "Новые лиды будут приходить автоматически."
+    )
+
+
+def subscription_renewed_text(category: Category, duration_days: int) -> str:
+    return (
+        "Подписка продлена.\n\n"
+        f"Категория:\n{category.title}\n\n"
+        f"Срок:\n{duration_days} дней\n\n"
+        "Новые лиды будут приходить автоматически."
+    )
+
+
+def payment_link_text(category: Category, price_rub: int, duration_days: int) -> str:
+    return (
+        "Оплата подписки.\n\n"
+        f"Категория:\n{category.title}\n\n"
+        f"Стоимость:\n{price_rub} ₽ / {duration_days} дней\n\n"
+        "При оплате способ оплаты будет сохранен для автопродления.\n"
+        "Отменить автопродление можно в разделе «Мои подписки»."
+    )
+
+
+def payment_pending_text() -> str:
+    return "Платеж еще обрабатывается. Попробуйте проверить позже."
+
+
+def payment_canceled_text(category: Category) -> str:
+    return (
+        "Платеж отменен или истек.\n\n"
+        f"Категория:\n{category.title}\n\n"
+        "Если хотите оформить подписку, попробуйте еще раз."
+    )
+
+
+def autorenew_disabled_text(category: Category, end_date: datetime) -> str:
+    return (
+        "Автопродление отключено.\n\n"
+        f"Категория:\n{category.title}\n\n"
+        f"Доступ действует до:\n{end_date.strftime('%d.%m.%Y')}"
+    )
+
+
+def autorenew_enabled_text(category: Category, end_date: datetime) -> str:
+    return (
+        "Автопродление включено.\n\n"
+        f"Категория:\n{category.title}\n\n"
+        f"Доступ действует до:\n{end_date.strftime('%d.%m.%Y')}"
+    )
+
+
+def help_text(price_rub: int) -> str:
+    return (
+        "Бот присылает заявки из Telegram-чатов.\n\n"
+        "Подписка:\n"
+        f"{price_rub} ₽ / месяц за категорию.\n\n"
+        "Вы получаете новые лиды сразу после их появления.\n\n"
+        "Если есть вопросы:\n@sorichev\n\n"
+        f"{BONUS_ACCESS_TEXT}"
+    )
+
+
+def grant_message(category: Category, duration_days: int, grant_type: str) -> str:
+    text = (
+        "Вам выдан бесплатный доступ.\n\n"
+        f"Категория:\n{category.title}\n\n"
+        f"Срок:\n{duration_days} дней\n\n"
+    )
+    if grant_type == "bonus":
+        text += "Спасибо за помощь с источником лидов.\n"
+    text += "Новые заявки будут приходить автоматически."
+    return text
+
+
+def my_subscriptions_text(lines: list[str]) -> str:
+    header = "Ваши подписки\n\n"
+    if not lines:
+        return header + "У вас пока нет подписок."
+    return header + "\n\n".join(lines)

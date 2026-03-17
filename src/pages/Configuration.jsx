@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { configApi, scannerApi, classifierApi } from '../services/api';
+import { configApi, scannerApi, classifierApi, leadbotApi } from '../services/api';
 import './Configuration.css';
 
 function Configuration() {
@@ -26,10 +26,15 @@ function Configuration() {
   const [classifierLoading, setClassifierLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
+  const [leadbotEnabled, setLeadbotEnabled] = useState(false);
+  const [leadbotStats, setLeadbotStats] = useState(null);
+  const [leadbotLoading, setLeadbotLoading] = useState(false);
+
   useEffect(() => {
     loadConfiguration();
     loadScannerStatus();
     loadClassifierStatus();
+    loadLeadbotStatus();
   }, []);
 
   const loadConfiguration = async () => {
@@ -189,6 +194,33 @@ function Configuration() {
       setError(err.response?.data?.error || 'Не удалось переключить классификатор');
     } finally {
       setClassifierLoading(false);
+    }
+  };
+
+  const loadLeadbotStatus = async () => {
+    try {
+      const response = await leadbotApi.status();
+      setLeadbotEnabled(response.data.enabled);
+      setLeadbotStats(response.data.stats);
+    } catch (err) {
+      if (err.response?.status !== 403) {
+        console.error('Leadbot status error:', err);
+      }
+    }
+  };
+
+  const handleToggleLeadbot = async () => {
+    try {
+      setLeadbotLoading(true);
+      const newState = !leadbotEnabled;
+      await leadbotApi.toggle(newState);
+      setLeadbotEnabled(newState);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 2000);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Не удалось переключить Lead Bot');
+    } finally {
+      setLeadbotLoading(false);
     }
   };
 
@@ -482,6 +514,59 @@ function Configuration() {
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Lead Bot (Admin Only) */}
+      {isAdmin && (
+        <div className="classifier-panel">
+          <div className="panel-header">
+            <h3>Telegram Lead Bot</h3>
+            <div className="classifier-toggle-row">
+              <label className="toggle-label">
+                <input
+                  type="checkbox"
+                  checked={leadbotEnabled}
+                  onChange={handleToggleLeadbot}
+                  disabled={leadbotLoading}
+                  className="toggle-input"
+                />
+                <span className="toggle-slider"></span>
+                <span className="toggle-text">
+                  {leadbotLoading ? 'Переключение...' : leadbotEnabled ? 'Включён' : 'Выключен'}
+                </span>
+              </label>
+            </div>
+          </div>
+
+          <div className="panel-content">
+            <p className="classifier-description">
+              Telegram-бот доставляет категоризированные лиды пользователям.
+              Модель freemium: 10 бесплатных лидов, далее подписка 990 руб/мес через YooKassa.
+            </p>
+
+            <div className="info-box" style={{ marginTop: '12px' }}>
+              <div className="info-icon">ℹ️</div>
+              <div className="info-text">
+                <p className="info-title">Админ-команды бота</p>
+                <p className="info-description">
+                  <code>/grant &lt;telegram_id&gt; &lt;category&gt; &lt;days&gt;</code> — выдать
+                  пользователю бесплатный доступ к категории на N дней.
+                </p>
+              </div>
+            </div>
+
+            {leadbotStats && (
+              <div className="classifier-stats" style={{ marginTop: '12px' }}>
+                <p className="scanner-info">
+                  <strong>Всего лидов в фиде:</strong> {leadbotStats.totalLeads}
+                </p>
+                <p className="scanner-info">
+                  <strong>Лидов за 24ч:</strong> {leadbotStats.leadsLast24h}
+                </p>
               </div>
             )}
           </div>

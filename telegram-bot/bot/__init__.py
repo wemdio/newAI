@@ -1,0 +1,1 @@
+"""Leadscanly bot package."""

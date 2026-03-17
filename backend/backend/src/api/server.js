@@ -22,6 +22,7 @@ import landingRoutes from './routes/landing.js';
 import outreachRoutes from './routes/outreach.js';
 import contactsRoutes from './routes/contacts.js';
 import classifierRoutes from './routes/classifier.js';
+import leadbotRoutes from './routes/leadbot.js';
 
 /**
  * Express server setup
@@ -126,6 +127,7 @@ app.use('/api/landing', landingRoutes);
 app.use('/api/outreach', outreachRoutes);
 app.use('/api/contacts', contactsRoutes);
 app.use('/api/classifier', classifierRoutes);
+app.use('/api/leadbot', leadbotRoutes);
 
 // 404 handler
 app.use((req, res) => {

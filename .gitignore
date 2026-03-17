@@ -1,4 +1,4 @@
-﻿# Dependencies
+# Dependencies
 node_modules/
 
 # Build output
@@ -39,3 +39,8 @@ imports/
 *.csv
 processed_*.txt
 proxies.txt
+
+# Telegram lead bot
+telegram-bot/data/
+telegram-bot/certs/*.crt
+telegram-bot/certs/*.pem
