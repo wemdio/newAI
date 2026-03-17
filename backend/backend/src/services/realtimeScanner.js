@@ -177,6 +177,7 @@ const shouldRunGeminiDoubleCheck = (message, aiResponse) => {
 
 let realtimeChannel = null;
 let isRunning = false;
+let isProcessingBatch = false;
 let subscribedAt = null;
 let processedMessageIds = new Set();
 const BATCH_INTERVAL = 5000; // 5 seconds
@@ -191,6 +192,13 @@ let userLastProcessedIds = new Map();
  * Each user tracks their own lastProcessedId to ensure they get ALL new messages
  */
 const processBatch = async () => {
+  if (isProcessingBatch) {
+    logger.warn('Previous realtime batch is still running, skipping overlapping cycle');
+    return;
+  }
+
+  isProcessingBatch = true;
+
   try {
     const supabase = getSupabase();
     
@@ -292,6 +300,8 @@ const processBatch = async () => {
       error: error.message,
       stack: error.stack
     });
+  } finally {
+    isProcessingBatch = false;
   }
 };
 
@@ -699,6 +709,7 @@ export const stopRealtimeScanner = async () => {
     
     // Clear user tracking
     userLastProcessedIds.clear();
+    isProcessingBatch = false;
 
     logger.info('✅ Realtime scanner stopped');
 
@@ -721,6 +732,7 @@ export const stopRealtimeScanner = async () => {
 export const getScannerStatus = () => {
   return {
     isRunning,
+    isProcessingBatch,
     subscribedAt,
     pendingBatchSize: pendingMessages.length,
     processedMessagesCount: processedMessageIds.size,

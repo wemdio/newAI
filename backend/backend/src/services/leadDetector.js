@@ -65,6 +65,11 @@ const looksRiskyNonLead = (message) => {
   return DOUBLECHECK_RISK_PATTERNS.some((re) => re.test(text));
 };
 
+const isUniqueViolation = (error) => {
+  const message = String(error?.message || '').toLowerCase();
+  return error?.code === '23505' || message.includes('duplicate key');
+};
+
 const shouldRunGeminiDoubleCheck = (message, aiResponse) => {
   // Backward-compatible default
   if (DOUBLECHECK_MODE === 'always') return true;
@@ -210,6 +215,34 @@ export const saveDetectedLead = async (userId, message, analysis) => {
     // Use username as sender identifier (this is the actual field in messages table)
     // Fallback to message_hash if no username
     const senderId = message.username || messageHash;
+
+    // Exact duplicate guard: same user, same source message.
+    // This protects against overlapping scanner cycles re-processing the same message.
+    const { data: exactDuplicates, error: exactCheckError } = await supabase
+      .from('detected_leads')
+      .select('id, detected_at, posted_to_telegram')
+      .eq('user_id', userId)
+      .eq('message_id', message.id)
+      .limit(1);
+
+    if (exactCheckError) {
+      logger.warn('Failed to check exact lead duplicate, proceeding with save', {
+        userId,
+        messageId: message.id,
+        error: exactCheckError.message
+      });
+    }
+
+    if (exactDuplicates && exactDuplicates.length > 0) {
+      logger.info('Exact duplicate lead detected - skipping save', {
+        userId,
+        messageId: message.id,
+        existingLeadId: exactDuplicates[0].id,
+        postedToTelegram: exactDuplicates[0].posted_to_telegram,
+        lastDetected: exactDuplicates[0].detected_at
+      });
+      return null;
+    }
     
     // Check for duplicates in the last 7 days
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -268,7 +301,17 @@ export const saveDetectedLead = async (userId, message, analysis) => {
       .select()
       .single();
     
-    if (error) throw error;
+    if (error) {
+      if (isUniqueViolation(error)) {
+        logger.info('Detected lead insert raced with an existing exact duplicate, skipping save', {
+          userId,
+          messageId: message.id,
+          senderId
+        });
+        return null;
+      }
+      throw error;
+    }
     
     logger.info('Saved detected lead', {
       leadId: data.id,
