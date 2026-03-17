@@ -15,6 +15,41 @@ const MIN_MESSAGE_LENGTH = 15;
 const API_KEYS = [process.env.CATEGORY_API_KEY, process.env.CATEGORY_API_KEY_2].filter(Boolean);
 let keyIndex = 0;
 
+const JOB_SEEKER_PATTERNS = [
+  /\bищу\s+работ/i,
+  /\bв\s+поиске\s+работ/i,
+  /\bищу\s+подработ/i,
+  /\bищу\s+ваканси/i,
+  /\bрезюме\b/i,
+  /\bрассмотрю\s+предложени/i,
+  /\bopen\s*to\s*work\b/i
+];
+
+const PARTNERSHIP_PATTERNS = [
+  /\bищ(у|ем)\s+партн[её]р/i,
+  /\bпартн[её]рств/i,
+  /\bколлаборац/i,
+  /\bсотрудничеств/i
+];
+
+const OFFER_PATTERNS = [
+  /\bпредлагаю\b/i,
+  /\bмогу\s+помочь\b/i,
+  /\bпомогу\b/i,
+  /\bоказыва(ю|ем)\b/i,
+  /\bподробности\s+в\s+лич/i,
+  /\bпишите\s+(в\s+)?(whatsapp|ватсап|wa|tg|телеграм|личку|лс)\b/i
+];
+
+const REQUEST_MARKER_PATTERNS = [
+  /\bищу\s+(специалист|подрядчик|исполнитель|дизайнер|разработчик|маркетолог|таргетолог|юрист|бухгалтер|монтаж[её]р|моушн)\b/i,
+  /\bнуж(ен|на|но|ны)\b/i,
+  /\bкто\s+(может|делает|возьм[её]тся)\b/i,
+  /\bсколько\s+стоит\b/i,
+  /\bхочу\s+заказать\b/i,
+  /\bтребуется\s+(специалист|исполнитель)\b/i
+];
+
 let isRunning = false;
 let intervalHandle = null;
 let lastProcessedId = null;
@@ -22,6 +57,20 @@ let startedAt = null;
 let stats = { cycles: 0, messagesScanned: 0, leadsFound: 0, errors: 0 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const matchesAny = (text, patterns) => patterns.some((pattern) => pattern.test(text));
+
+const getHardRejectReason = (messageText) => {
+  const text = (messageText || '').replace(/\s+/g, ' ').trim();
+  if (!text) return null;
+
+  if (matchesAny(text, JOB_SEEKER_PATTERNS)) return 'job_seeker';
+  if (matchesAny(text, PARTNERSHIP_PATTERNS)) return 'partnership';
+  if (matchesAny(text, OFFER_PATTERNS) && !matchesAny(text, REQUEST_MARKER_PATTERNS)) {
+    return 'self_promo';
+  }
+
+  return null;
+};
 
 const isClassifierEnabled = async () => {
   try {
@@ -148,8 +197,19 @@ const saveClassifiedLeads = async (messages, results) => {
     if ((result.confidence_score || 0) < 75) continue;
 
     const messageText = msg.message || '';
-    const messageHash = crypto.createHash('sha256').update(messageText).digest('hex');
     const senderId = msg.username;
+    const hardRejectReason = getHardRejectReason(messageText);
+    if (hardRejectReason) {
+      logger.info('[CategoryClassifier] Hard-rejected candidate', {
+        messageId: msg.id,
+        senderId,
+        category: result.category,
+        reason: hardRejectReason
+      });
+      continue;
+    }
+
+    const messageHash = crypto.createHash('sha256').update(messageText).digest('hex');
 
     const windowStart = new Date(Date.now() - DEDUP_WINDOW_DAYS * 24 * 60 * 60 * 1000).toISOString();
     const { data: dup } = await supabase
