@@ -99,6 +99,13 @@ const normalizeBatchAIResult = (aiResult, expectedMessageId) => {
   return normalized;
 };
 
+const getResponseMeta = (requestedModel, response) => ({
+  requestedModel,
+  resolvedModel: response?.model || null,
+  usage: response?.usage || null,
+  finishReason: response?.choices?.[0]?.finish_reason || null
+});
+
 /**
  * Core AI message analysis service
  * Handles communication with OpenRouter and validation
@@ -171,7 +178,12 @@ ${message.bio ? `БИО автора: ${message.bio.substring(0, 200)}` : ''}
     }, 3, 1000);
 
     const content = response.choices[0]?.message?.content;
-    
+
+    logger.info('Gemini Double Check response metadata', {
+      messageId: message.id,
+      ...getResponseMeta(model, response)
+    });
+
     logger.info('Gemini Double Check raw response', {
       messageId: message.id,
       content: content ? content.substring(0, 300) : 'EMPTY',
@@ -238,6 +250,8 @@ ${message.bio ? `БИО автора: ${message.bio.substring(0, 200)}` : ''}
     }
     
     logger.info('Gemini Double Check complete', {
+        messageId: message.id,
+        ...getResponseMeta(model, response),
         verified: result.verified,
         reason: result.reasoning,
         duration
@@ -313,6 +327,11 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     }, 3, 1000);
     
     const duration = Date.now() - startTime;
+
+    logger.info('OpenRouter AI response metadata', {
+      messageId: message.id,
+      ...getResponseMeta(model, response)
+    });
     
     // Extract response content
     const content = response.choices[0]?.message?.content;
@@ -395,6 +414,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     // Log result
     logger.info('AI analysis complete (simplified)', {
       messageId: message.id,
+      ...getResponseMeta(model, response),
       isMatch: isValidMatch,
       confidence: aiResponse.confidence_score,
       validationPassed: validation.valid,
@@ -535,6 +555,12 @@ ${JSON.stringify(messagesArray)}
     }, 3, 1000);
     
     const duration = Date.now() - startTime;
+
+    logger.info('Batch OpenRouter response metadata', {
+      batchSize,
+      messageIds: messages.map(m => m.id),
+      ...getResponseMeta(model, response)
+    });
     
     // Parse response
     const content = response.choices[0]?.message?.content;
@@ -544,6 +570,7 @@ ${JSON.stringify(messagesArray)}
     
     logger.info('Raw batch response received', {
       batchSize,
+      ...getResponseMeta(model, response),
       contentLength: content.length,
       contentPreview: content.substring(0, 200)
     });

@@ -58,6 +58,12 @@ let stats = { cycles: 0, messagesScanned: 0, leadsFound: 0, errors: 0 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const matchesAny = (text, patterns) => patterns.some((pattern) => pattern.test(text));
+const getResponseMeta = (requestedModel, response) => ({
+  requestedModel,
+  resolvedModel: response?.model || null,
+  usage: response?.usage || null,
+  finishReason: response?.choices?.[0]?.finish_reason || null
+});
 
 const getHardRejectReason = (messageText) => {
   const text = (messageText || '').replace(/\s+/g, ' ').trim();
@@ -172,6 +178,12 @@ const classifyBatch = async (messages) => {
       max_tokens: 4000
     });
   }, 3, 1000);
+
+  logger.info('[CategoryClassifier] Response metadata', {
+    batchSize: messages.length,
+    messageIds: messages.map((msg) => msg.id),
+    ...getResponseMeta(model, response)
+  });
 
   const content = response.choices[0]?.message?.content;
   if (!content) throw new Error('Empty response from classification AI');

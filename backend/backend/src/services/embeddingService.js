@@ -24,6 +24,12 @@ const criteriaEmbeddingCache = new Map();
 const failedApiKeys = new Map();
 const FAILED_KEY_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes
 
+const getEmbeddingResponseMeta = (requestedModel, response) => ({
+  requestedModel,
+  resolvedModel: response?.model || null,
+  usage: response?.usage || null
+});
+
 /**
  * Check if this API key has recently failed embedding calls.
  * Prevents spamming the API every 5 seconds during transient outages.
@@ -125,6 +131,12 @@ export const generateEmbedding = async (text, apiKey) => {
     throw new Error('Invalid embedding response: missing data[0].embedding');
   }
 
+  logger.info('Embedding response metadata', {
+    textLength: text.length,
+    embeddingDimensions: response.data[0].embedding.length,
+    ...getEmbeddingResponseMeta(model, response)
+  });
+
   return response.data[0].embedding;
 };
 
@@ -170,6 +182,12 @@ export const generateEmbeddings = async (texts, apiKey) => {
     });
     throw new Error('Invalid batch embedding response: missing data array');
   }
+
+  logger.info('Batch embedding response metadata', {
+    textsCount: texts.length,
+    returnedEmbeddings: response.data.length,
+    ...getEmbeddingResponseMeta(model, response)
+  });
 
   // Sort by index to ensure order matches input
   const sorted = response.data.sort((a, b) => a.index - b.index);

@@ -144,13 +144,15 @@ ${lead.message}
     // Log full response for debugging
     logger.info('OpenRouter API response received', {
       leadId: lead.id,
+      requestedModel: model,
+      resolvedModel: response.model,
       hasChoices: !!response.choices,
       choicesLength: response.choices?.length,
       hasMessage: !!response.choices?.[0]?.message,
       hasContent: !!response.choices?.[0]?.message?.content,
       contentLength: response.choices?.[0]?.message?.content?.length,
       contentPreview: response.choices?.[0]?.message?.content?.substring(0, 100),
-      model: response.model,
+      finishReason: response.choices?.[0]?.finish_reason,
       usage: response.usage
     });
 
@@ -184,6 +186,9 @@ ${lead.message}
 
     logger.info('Message suggestion generated', {
       leadId: lead.id,
+      requestedModel: model,
+      resolvedModel: response.model,
+      usage: response.usage,
       duration,
       cost: cost.totalCost
     });
