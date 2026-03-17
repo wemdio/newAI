@@ -145,7 +145,7 @@ const saveClassifiedLeads = async (messages, results) => {
     }
 
     if (!result.is_request || !result.category) continue;
-    if ((result.confidence_score || 0) < 60) continue;
+    if ((result.confidence_score || 0) < 75) continue;
 
     const messageText = msg.message || '';
     const messageHash = crypto.createHash('sha256').update(messageText).digest('hex');
