@@ -26,7 +26,7 @@ class Database:
     async def connect(self) -> None:
         if not self.dsn:
             raise RuntimeError("Supabase Postgres credentials are required for the lead bot")
-        dsn, require_ssl = self._normalize_dsn(self.dsn)
+        dsn, ssl_mode = self._normalize_dsn(self.dsn)
         connect_args = {
             "dsn": dsn,
             "min_size": 1,
@@ -35,8 +35,14 @@ class Database:
             "statement_cache_size": 0,
             "init": self._init_connection,
         }
-        if require_ssl:
-            connect_args["ssl"] = self._build_ssl_context() if self.ssl_insecure else True
+        if ssl_mode and ssl_mode != "disable":
+            # Match libpq semantics more closely:
+            # - require: encrypt, but do not verify certificate chain
+            # - verify-ca / verify-full: verify certificates unless insecure override is set
+            if self.ssl_insecure or ssl_mode == "require":
+                connect_args["ssl"] = self._build_ssl_context()
+            else:
+                connect_args["ssl"] = True
         self.pool = await asyncpg.create_pool(**connect_args)
 
     async def close(self) -> None:
@@ -694,20 +700,19 @@ class Database:
         return ctx
 
     @staticmethod
-    def _normalize_dsn(dsn: str) -> tuple[str, bool]:
-        require_ssl = False
+    def _normalize_dsn(dsn: str) -> tuple[str, Optional[str]]:
+        ssl_mode: Optional[str] = None
         parts = urlsplit(dsn)
         if parts.query:
             query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)]
             filtered: list[tuple[str, str]] = []
             for key, value in query:
                 if key.lower() == "sslmode":
-                    if value.lower() in ("require", "verify-full", "verify-ca"):
-                        require_ssl = True
+                    ssl_mode = value.lower()
                     continue
                 filtered.append((key, value))
             new_query = urlencode(filtered)
             dsn = urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
         if dsn.startswith("postgresql+asyncpg://"):
-            return dsn.replace("postgresql+asyncpg://", "postgresql://", 1), require_ssl
-        return dsn, require_ssl
+            return dsn.replace("postgresql+asyncpg://", "postgresql://", 1), ssl_mode
+        return dsn, ssl_mode

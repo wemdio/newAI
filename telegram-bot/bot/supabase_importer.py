@@ -34,10 +34,10 @@ class SupabaseImporter:
     async def start(self) -> None:
         if not self.dsn:
             return
-        dsn, require_ssl = self._normalize_dsn(self.dsn)
+        dsn, ssl_mode = self._normalize_dsn(self.dsn)
         connect_args = {}
-        if require_ssl:
-            if self.ssl_insecure:
+        if ssl_mode and ssl_mode != "disable":
+            if self.ssl_insecure or ssl_mode == "require":
                 ctx = ssl.create_default_context()
                 ctx.check_hostname = False
                 ctx.verify_mode = ssl.CERT_NONE
@@ -217,22 +217,21 @@ class SupabaseImporter:
             return None
 
     @staticmethod
-    def _normalize_dsn(dsn: str) -> tuple[str, bool]:
-        require_ssl = False
+    def _normalize_dsn(dsn: str) -> tuple[str, Optional[str]]:
+        ssl_mode: Optional[str] = None
         parts = urlsplit(dsn)
         if parts.query:
             query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)]
             filtered: list[tuple[str, str]] = []
             for key, value in query:
                 if key.lower() == "sslmode":
-                    if value.lower() in ("require", "verify-full", "verify-ca"):
-                        require_ssl = True
+                    ssl_mode = value.lower()
                     continue
                 filtered.append((key, value))
             new_query = urlencode(filtered)
             dsn = urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
         if dsn.startswith("postgresql+asyncpg://"):
-            return dsn, require_ssl
+            return dsn, ssl_mode
         if dsn.startswith("postgresql://"):
-            return dsn.replace("postgresql://", "postgresql+asyncpg://", 1), require_ssl
-        return dsn, require_ssl
+            return dsn.replace("postgresql://", "postgresql+asyncpg://", 1), ssl_mode
+        return dsn, ssl_mode
