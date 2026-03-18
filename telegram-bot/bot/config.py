@@ -15,6 +15,15 @@ def _parse_bool(value: str) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _getenv(name: str, fallback_name: Optional[str] = None, default: Optional[str] = None) -> Optional[str]:
+    value = os.getenv(name)
+    if value is None and fallback_name:
+        value = os.getenv(fallback_name)
+    if value is None:
+        return default
+    return value
+
+
 @dataclass(frozen=True)
 class Config:
     bot_token: str
@@ -42,11 +51,11 @@ class Config:
 
 
 def load_config() -> Config:
-    bot_token = os.getenv("BOT_TOKEN", "").strip()
+    bot_token = (_getenv("BOT_TOKEN", "LEADBOT_BOT_TOKEN", "") or "").strip()
     if not bot_token:
         raise RuntimeError("BOT_TOKEN is required")
 
-    admin_ids_raw = os.getenv("ADMIN_IDS", "").strip()
+    admin_ids_raw = (_getenv("ADMIN_IDS", "LEADBOT_ADMIN_IDS", "") or "").strip()
     admin_ids: List[int] = []
     if admin_ids_raw:
         for chunk in admin_ids_raw.split(","):
@@ -54,17 +63,17 @@ def load_config() -> Config:
             if chunk:
                 admin_ids.append(int(chunk))
 
-    sqlite_path = os.getenv("SQLITE_PATH", "./data/bot.db")
-    leads_api_base = os.getenv("LEADS_API_BASE", "").strip() or None
-    leads_api_token = os.getenv("LEADS_API_TOKEN", "").strip() or None
-    supabase_dsn = os.getenv("SUPABASE_DSN", "").strip() or None
+    sqlite_path = (_getenv("SQLITE_PATH", "LEADBOT_SQLITE_PATH", "./data/bot.db") or "./data/bot.db")
+    leads_api_base = (_getenv("LEADS_API_BASE", "LEADBOT_LEADS_API_BASE", "") or "").strip() or None
+    leads_api_token = (_getenv("LEADS_API_TOKEN", "LEADBOT_LEADS_API_TOKEN", "") or "").strip() or None
+    supabase_dsn = (_getenv("SUPABASE_DSN", "LEADBOT_SUPABASE_DSN", "") or "").strip() or None
     if not supabase_dsn:
-        supabase_host = os.getenv("SUPABASE_HOST", "").strip()
-        supabase_port = os.getenv("SUPABASE_PORT", "").strip() or "5432"
-        supabase_db = os.getenv("SUPABASE_DB", "").strip() or "postgres"
-        supabase_user = os.getenv("SUPABASE_USER", "").strip()
-        supabase_password = os.getenv("SUPABASE_PASSWORD", "").strip()
-        supabase_sslmode = os.getenv("SUPABASE_SSLMODE", "").strip() or "require"
+        supabase_host = (_getenv("SUPABASE_HOST", "LEADBOT_SUPABASE_HOST", "") or "").strip()
+        supabase_port = (_getenv("SUPABASE_PORT", "LEADBOT_SUPABASE_PORT", "5432") or "5432").strip()
+        supabase_db = (_getenv("SUPABASE_DB", "LEADBOT_SUPABASE_DB", "postgres") or "postgres").strip()
+        supabase_user = (_getenv("SUPABASE_USER", "LEADBOT_SUPABASE_USER", "") or "").strip()
+        supabase_password = (_getenv("SUPABASE_PASSWORD", "LEADBOT_SUPABASE_PASSWORD", "") or "").strip()
+        supabase_sslmode = (_getenv("SUPABASE_SSLMODE", "LEADBOT_SUPABASE_SSLMODE", "require") or "require").strip()
         if supabase_host and ".supabase.co" in supabase_host and ".pooler." not in supabase_host:
             raise RuntimeError(
                 "SUPABASE_HOST must be the pooler host (e.g. aws-0-<region>.pooler.supabase.com)"
@@ -83,40 +92,40 @@ def load_config() -> Config:
                 "SUPABASE_DSN must use the pooler host (e.g. aws-0-<region>.pooler.supabase.com)"
             )
     supabase_poll_interval_seconds = _parse_int(
-        os.getenv("SUPABASE_POLL_INTERVAL_SECONDS", "30"), 30
+        _getenv("SUPABASE_POLL_INTERVAL_SECONDS", "LEADBOT_SUPABASE_POLL_SECONDS", "30"), 30
     )
     supabase_initial_backfill_limit = _parse_int(
-        os.getenv("SUPABASE_INITIAL_BACKFILL_LIMIT", "300"), 300
+        _getenv("SUPABASE_INITIAL_BACKFILL_LIMIT", "LEADBOT_BACKFILL_LIMIT", "300"), 300
     )
-    supabase_ssl_insecure = _parse_bool(os.getenv("SUPABASE_SSL_INSECURE", "0"))
+    supabase_ssl_insecure = _parse_bool(_getenv("SUPABASE_SSL_INSECURE", "LEADBOT_SUPABASE_SSL_INSECURE", "0"))
 
     leads_poll_interval_seconds = _parse_int(
-        os.getenv("LEADS_POLL_INTERVAL_SECONDS", "20"), 20
+        _getenv("LEADS_POLL_INTERVAL_SECONDS", "LEADBOT_LEADS_POLL_INTERVAL_SECONDS", "20"), 20
     )
     leads_send_interval_seconds = _parse_int(
-        os.getenv("LEADS_SEND_INTERVAL_SECONDS", "5"), 5
+        _getenv("LEADS_SEND_INTERVAL_SECONDS", "LEADBOT_LEADS_SEND_INTERVAL_SECONDS", "5"), 5
     )
-    free_leads_total = _parse_int(os.getenv("FREE_LEADS_TOTAL", "10"), 10)
-    subscription_price_rub = _parse_int(os.getenv("SUBSCRIPTION_PRICE_RUB", "990"), 990)
+    free_leads_total = _parse_int(_getenv("FREE_LEADS_TOTAL", "LEADBOT_FREE_LEADS", "10"), 10)
+    subscription_price_rub = _parse_int(_getenv("SUBSCRIPTION_PRICE_RUB", "LEADBOT_PRICE_RUB", "990"), 990)
     subscription_duration_days = _parse_int(
-        os.getenv("SUBSCRIPTION_DURATION_DAYS", "30"), 30
+        _getenv("SUBSCRIPTION_DURATION_DAYS", "LEADBOT_DURATION_DAYS", "30"), 30
     )
     subscription_auto_renew_default = _parse_bool(
-        os.getenv("SUBSCRIPTION_AUTO_RENEW_DEFAULT", "1")
+        _getenv("SUBSCRIPTION_AUTO_RENEW_DEFAULT", "LEADBOT_SUBSCRIPTION_AUTO_RENEW_DEFAULT", "1")
     )
     subscription_renew_before_days = _parse_int(
-        os.getenv("SUBSCRIPTION_RENEW_BEFORE_DAYS", "1"), 1
+        _getenv("SUBSCRIPTION_RENEW_BEFORE_DAYS", "LEADBOT_SUBSCRIPTION_RENEW_BEFORE_DAYS", "1"), 1
     )
     subscription_renew_interval_seconds = _parse_int(
-        os.getenv("SUBSCRIPTION_RENEW_INTERVAL_SECONDS", "3600"), 3600
+        _getenv("SUBSCRIPTION_RENEW_INTERVAL_SECONDS", "LEADBOT_SUBSCRIPTION_RENEW_INTERVAL_SECONDS", "3600"), 3600
     )
     payments_poll_interval_seconds = _parse_int(
-        os.getenv("PAYMENTS_POLL_INTERVAL_SECONDS", "5"), 5
+        _getenv("PAYMENTS_POLL_INTERVAL_SECONDS", "LEADBOT_PAYMENTS_POLL_INTERVAL_SECONDS", "5"), 5
     )
-    yookassa_shop_id = os.getenv("YOOKASSA_SHOP_ID", "").strip() or None
-    yookassa_secret_key = os.getenv("YOOKASSA_SECRET_KEY", "").strip() or None
-    yookassa_return_url = os.getenv("YOOKASSA_RETURN_URL", "").strip() or None
-    log_level = os.getenv("LOG_LEVEL", "INFO")
+    yookassa_shop_id = (_getenv("YOOKASSA_SHOP_ID", "LEADBOT_YOOKASSA_SHOP_ID", "") or "").strip() or None
+    yookassa_secret_key = (_getenv("YOOKASSA_SECRET_KEY", "LEADBOT_YOOKASSA_SECRET_KEY", "") or "").strip() or None
+    yookassa_return_url = (_getenv("YOOKASSA_RETURN_URL", "LEADBOT_YOOKASSA_RETURN_URL", "") or "").strip() or None
+    log_level = _getenv("LOG_LEVEL", "LEADBOT_LOG_LEVEL", "INFO") or "INFO"
 
     return Config(
         bot_token=bot_token,

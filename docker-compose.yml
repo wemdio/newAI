@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   api:
     build:
@@ -8,24 +6,24 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - PORT=3000
-      - NODE_ENV=production
-      - NO_COLOR=1
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - FRONTEND_URL=${FRONTEND_URL}
-      - USE_BATCH_API=${USE_BATCH_API}
-      - BATCH_SIZE=${BATCH_SIZE}
-      - AI_CONCURRENCY=${AI_CONCURRENCY:-5}
-      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://router.requesty.ai/v1}
+      PORT: "3000"
+      NODE_ENV: production
+      NO_COLOR: "1"
+      SUPABASE_URL:
+      SUPABASE_ANON_KEY:
+      SUPABASE_SERVICE_ROLE_KEY:
+      TELEGRAM_BOT_TOKEN:
+      FRONTEND_URL:
+      USE_BATCH_API:
+      BATCH_SIZE:
+      AI_CONCURRENCY: "5"
+      OPENROUTER_BASE_URL: https://router.requesty.ai/v1
       # OpenRouter headers
-      - YOUR_SITE_URL=${FRONTEND_URL}
-      - YOUR_SITE_NAME=Telegram Lead Scanner
-      - AI_MODEL=policy/lead-analysis
-      - CATEGORY_API_KEY=${CATEGORY_API_KEY}
-      - CATEGORY_API_KEY_2=${CATEGORY_API_KEY_2}
+      YOUR_SITE_URL:
+      YOUR_SITE_NAME: Telegram Lead Scanner
+      AI_MODEL: policy/lead-analysis
+      CATEGORY_API_KEY:
+      CATEGORY_API_KEY_2:
     restart: always
 
   worker:
@@ -33,15 +31,15 @@ services:
       context: ./backend/python-service
       dockerfile: Dockerfile
     environment:
-      - PYTHONUTF8=1
-      - PYTHONIOENCODING=utf-8
-      - LANG=C.UTF-8
-      - LC_ALL=C.UTF-8
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://router.requesty.ai/v1}
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      SUPABASE_URL:
+      SUPABASE_ANON_KEY:
+      SUPABASE_SERVICE_ROLE_KEY:
+      TELEGRAM_BOT_TOKEN:
+      OPENROUTER_BASE_URL: https://router.requesty.ai/v1
     restart: always
 
   outreach-worker:
@@ -50,15 +48,15 @@ services:
       dockerfile: Dockerfile
     command: ["python", "-u", "outreach_worker.py"]
     environment:
-      - PYTHONUTF8=1
-      - PYTHONIOENCODING=utf-8
-      - LANG=C.UTF-8
-      - LC_ALL=C.UTF-8
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
-      - OPENROUTER_BASE_URL=${OPENROUTER_BASE_URL:-https://router.requesty.ai/v1}
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+      LANG: C.UTF-8
+      LC_ALL: C.UTF-8
+      SUPABASE_URL:
+      SUPABASE_ANON_KEY:
+      SUPABASE_SERVICE_ROLE_KEY:
+      TELEGRAM_BOT_TOKEN:
+      OPENROUTER_BASE_URL: https://router.requesty.ai/v1
     restart: always
 
   leadbot:
@@ -68,25 +66,25 @@ services:
     volumes:
       - leadbot-data:/app/data
     environment:
-      - PYTHONUTF8=1
-      - PYTHONIOENCODING=utf-8
-      - BOT_TOKEN=${LEADBOT_BOT_TOKEN}
-      - ADMIN_IDS=${LEADBOT_ADMIN_IDS}
-      - SUPABASE_HOST=${LEADBOT_SUPABASE_HOST}
-      - SUPABASE_PORT=${LEADBOT_SUPABASE_PORT:-5432}
-      - SUPABASE_DB=${LEADBOT_SUPABASE_DB:-postgres}
-      - SUPABASE_USER=${LEADBOT_SUPABASE_USER}
-      - SUPABASE_PASSWORD=${LEADBOT_SUPABASE_PASSWORD}
-      - SUPABASE_SSLMODE=${LEADBOT_SUPABASE_SSLMODE:-require}
-      - SUPABASE_POLL_INTERVAL_SECONDS=${LEADBOT_SUPABASE_POLL_SECONDS:-30}
-      - SUPABASE_INITIAL_BACKFILL_LIMIT=${LEADBOT_BACKFILL_LIMIT:-300}
-      - FREE_LEADS_TOTAL=${LEADBOT_FREE_LEADS:-10}
-      - SUBSCRIPTION_PRICE_RUB=${LEADBOT_PRICE_RUB:-990}
-      - SUBSCRIPTION_DURATION_DAYS=${LEADBOT_DURATION_DAYS:-30}
-      - YOOKASSA_SHOP_ID=${LEADBOT_YOOKASSA_SHOP_ID}
-      - YOOKASSA_SECRET_KEY=${LEADBOT_YOOKASSA_SECRET_KEY}
-      - YOOKASSA_RETURN_URL=${LEADBOT_YOOKASSA_RETURN_URL}
-      - LOG_LEVEL=${LEADBOT_LOG_LEVEL:-INFO}
+      PYTHONUTF8: "1"
+      PYTHONIOENCODING: utf-8
+      LEADBOT_BOT_TOKEN:
+      LEADBOT_ADMIN_IDS:
+      LEADBOT_SUPABASE_HOST:
+      LEADBOT_SUPABASE_PORT:
+      LEADBOT_SUPABASE_DB:
+      LEADBOT_SUPABASE_USER:
+      LEADBOT_SUPABASE_PASSWORD:
+      LEADBOT_SUPABASE_SSLMODE:
+      LEADBOT_SUPABASE_POLL_SECONDS:
+      LEADBOT_BACKFILL_LIMIT:
+      LEADBOT_FREE_LEADS:
+      LEADBOT_PRICE_RUB:
+      LEADBOT_DURATION_DAYS:
+      LEADBOT_YOOKASSA_SHOP_ID:
+      LEADBOT_YOOKASSA_SECRET_KEY:
+      LEADBOT_YOOKASSA_RETURN_URL:
+      LEADBOT_LOG_LEVEL:
     restart: always
 
 volumes:
