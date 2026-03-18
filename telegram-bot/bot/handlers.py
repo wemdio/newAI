@@ -195,6 +195,13 @@ async def cb_buy_contact(
         await query.answer()
         return
     if not payment_row or not payment_row["confirmation_url"]:
+        logging.error(
+            "Payment row missing confirmation_url for contact purchase user_id=%s category_id=%s lead_id=%s payment_id=%s",
+            user_id,
+            category_id,
+            lead_id,
+            payment_row["payment_id"] if payment_row else None,
+        )
         await query.message.answer("Не удалось создать платеж. Попробуйте позже.")
         await query.answer()
         return
@@ -246,6 +253,12 @@ async def cb_buy(
         await query.answer()
         return
     if not payment_row or not payment_row["confirmation_url"]:
+        logging.error(
+            "Payment row missing confirmation_url for subscription user_id=%s category_id=%s payment_id=%s",
+            user_id,
+            category_id,
+            payment_row["payment_id"] if payment_row else None,
+        )
         await query.message.answer("Не удалось создать платеж. Попробуйте позже.")
         await query.answer()
         return
