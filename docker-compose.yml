@@ -63,8 +63,6 @@ services:
     build:
       context: ./telegram-bot
       dockerfile: Dockerfile
-    volumes:
-      - leadbot-data:/app/data
     environment:
       PYTHONUTF8: "1"
       PYTHONIOENCODING: utf-8
@@ -86,6 +84,3 @@ services:
       LEADBOT_YOOKASSA_RETURN_URL:
       LEADBOT_LOG_LEVEL:
     restart: always
-
-volumes:
-  leadbot-data:
