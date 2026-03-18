@@ -1,198 +1,190 @@
 from __future__ import annotations
 
-import asyncio
-from pathlib import Path
+import logging
+import ssl
 from typing import Iterable, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
-import aiosqlite
+import asyncpg
 
 from .constants import CATEGORIES, Category
 from .utils import iso_now
 
 _UNSET = object()
+SCHEMA = "leadbot"
+MISSING_SCHEMA_ERROR = (
+    "Leadbot tables are missing in Supabase. Apply the leadbot Postgres migration before starting the bot."
+)
 
 
 class Database:
-    def __init__(self, path: str) -> None:
-        self.path = path
-        self.conn: Optional[aiosqlite.Connection] = None
-        self._lock = asyncio.Lock()
+    def __init__(self, dsn: str, ssl_insecure: bool = False) -> None:
+        self.dsn = dsn
+        self.ssl_insecure = ssl_insecure
+        self.pool: Optional[asyncpg.Pool] = None
 
     async def connect(self) -> None:
-        self.conn = await aiosqlite.connect(self.path)
-        self.conn.row_factory = aiosqlite.Row
+        if not self.dsn:
+            raise RuntimeError("Supabase Postgres credentials are required for the lead bot")
+        dsn, require_ssl = self._normalize_dsn(self.dsn)
+        connect_args = {
+            "dsn": dsn,
+            "min_size": 1,
+            "max_size": 5,
+            "command_timeout": 60,
+            "statement_cache_size": 0,
+            "init": self._init_connection,
+        }
+        if require_ssl:
+            connect_args["ssl"] = self._build_ssl_context() if self.ssl_insecure else True
+        self.pool = await asyncpg.create_pool(**connect_args)
 
     async def close(self) -> None:
-        if self.conn:
-            await self.conn.close()
+        if self.pool:
+            await self.pool.close()
+            self.pool = None
 
     async def init_db(self) -> None:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        migrations_dir = Path(__file__).resolve().parent.parent / "migrations"
-        migration_files = sorted(migrations_dir.glob("*.sql"))
-        async with self._lock:
-            await self.conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS schema_migrations (
-                    filename TEXT PRIMARY KEY,
-                    applied_at TEXT NOT NULL
-                )
-                """
-            )
-            await self.conn.commit()
-            for sql_path in migration_files:
-                cursor = await self.conn.execute(
-                    "SELECT 1 FROM schema_migrations WHERE filename = ?",
-                    (sql_path.name,),
-                )
-                row = await cursor.fetchone()
-                if row:
-                    continue
-                sql = sql_path.read_text(encoding="utf-8")
-                await self.conn.executescript(sql)
-                await self.conn.execute(
-                    "INSERT INTO schema_migrations (filename, applied_at) VALUES (?, ?)",
-                    (sql_path.name, iso_now()),
-                )
-                await self.conn.commit()
+        pool = self._pool()
+        try:
+            await pool.fetchval(f"SELECT 1 FROM {SCHEMA}.categories LIMIT 1")
+        except asyncpg.PostgresError as exc:
+            raise RuntimeError(MISSING_SCHEMA_ERROR) from exc
         await self.upsert_categories(CATEGORIES)
 
     async def upsert_categories(self, categories: Iterable[Category]) -> None:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            for category in categories:
-                await self.conn.execute(
-                    """
-                    INSERT INTO categories (id, code, title, full_title, emoji, monthly_leads)
-                    VALUES (?, ?, ?, ?, ?, ?)
+        pool = self._pool()
+        rows = [
+            (
+                category.id,
+                category.code,
+                category.title,
+                category.full_title,
+                category.emoji,
+                category.monthly_leads,
+            )
+            for category in categories
+        ]
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.executemany(
+                    f"""
+                    INSERT INTO {SCHEMA}.categories (id, code, title, full_title, emoji, monthly_leads)
+                    VALUES ($1, $2, $3, $4, $5, $6)
                     ON CONFLICT(id) DO UPDATE SET
-                        code=excluded.code,
-                        title=excluded.title,
-                        full_title=excluded.full_title,
-                        emoji=excluded.emoji,
-                        monthly_leads=excluded.monthly_leads
+                        code = EXCLUDED.code,
+                        title = EXCLUDED.title,
+                        full_title = EXCLUDED.full_title,
+                        emoji = EXCLUDED.emoji,
+                        monthly_leads = EXCLUDED.monthly_leads
                     """,
-                    (
-                        category.id,
-                        category.code,
-                        category.title,
-                        category.full_title,
-                        category.emoji,
-                        category.monthly_leads,
-                    ),
+                    rows,
                 )
-            await self.conn.commit()
 
     async def ensure_user(self, telegram_id: int, username: Optional[str]) -> int:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            await self.conn.execute(
-                """
-                INSERT INTO users (telegram_id, username, created_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(telegram_id) DO UPDATE SET username=excluded.username
-                """,
-                (telegram_id, username, iso_now()),
-            )
-            await self.conn.commit()
-            cursor = await self.conn.execute(
-                "SELECT id FROM users WHERE telegram_id = ?", (telegram_id,)
-            )
-            row = await cursor.fetchone()
-        return int(row[0])
+        pool = self._pool()
+        row = await pool.fetchrow(
+            f"""
+            INSERT INTO {SCHEMA}.users (telegram_id, username, created_at)
+            VALUES ($1, $2, $3)
+            ON CONFLICT(telegram_id) DO UPDATE SET username = EXCLUDED.username
+            RETURNING id
+            """,
+            telegram_id,
+            username,
+            iso_now(),
+        )
+        if not row:
+            raise RuntimeError("Failed to ensure leadbot user")
+        return int(row["id"])
 
-    async def get_user_by_telegram_id(self, telegram_id: int) -> Optional[aiosqlite.Row]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                "SELECT * FROM users WHERE telegram_id = ?", (telegram_id,)
-            )
-            return await cursor.fetchone()
+    async def get_user_by_telegram_id(self, telegram_id: int) -> Optional[asyncpg.Record]:
+        return await self._pool().fetchrow(
+            f"SELECT * FROM {SCHEMA}.users WHERE telegram_id = $1",
+            telegram_id,
+        )
 
-    async def get_user_by_id(self, user_id: int) -> Optional[aiosqlite.Row]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                "SELECT * FROM users WHERE id = ?", (user_id,)
-            )
-            return await cursor.fetchone()
+    async def get_user_by_id(self, user_id: int) -> Optional[asyncpg.Record]:
+        return await self._pool().fetchrow(
+            f"SELECT * FROM {SCHEMA}.users WHERE id = $1",
+            user_id,
+        )
 
     async def ensure_user_category_state(
         self, user_id: int, category_id: int, free_total: int
-    ) -> aiosqlite.Row:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
+    ) -> asyncpg.Record:
+        pool = self._pool()
         now = iso_now()
-        async with self._lock:
-            await self.conn.execute(
-                """
-                INSERT INTO user_category_state
-                    (user_id, category_id, free_leads_total, free_leads_used, free_started, created_at, updated_at)
-                VALUES (?, ?, ?, 0, 0, ?, ?)
-                ON CONFLICT(user_id, category_id) DO NOTHING
-                """,
-                (user_id, category_id, free_total, now, now),
-            )
-            await self.conn.commit()
-            cursor = await self.conn.execute(
-                "SELECT * FROM user_category_state WHERE user_id = ? AND category_id = ?",
-                (user_id, category_id),
-            )
-            return await cursor.fetchone()
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.execute(
+                    f"""
+                    INSERT INTO {SCHEMA}.user_category_state
+                        (user_id, category_id, free_leads_total, free_leads_used, free_started, created_at, updated_at)
+                    VALUES ($1, $2, $3, 0, FALSE, $4, $4)
+                    ON CONFLICT(user_id, category_id) DO NOTHING
+                    """,
+                    user_id,
+                    category_id,
+                    free_total,
+                    now,
+                )
+                row = await conn.fetchrow(
+                    f"""
+                    SELECT *
+                    FROM {SCHEMA}.user_category_state
+                    WHERE user_id = $1 AND category_id = $2
+                    """,
+                    user_id,
+                    category_id,
+                )
+        if not row:
+            raise RuntimeError("Failed to ensure user category state")
+        return row
 
     async def set_free_started(self, user_id: int, category_id: int, value: int = 1) -> None:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            await self.conn.execute(
-                """
-                UPDATE user_category_state
-                SET free_started = ?, updated_at = ?
-                WHERE user_id = ? AND category_id = ?
-                """,
-                (value, iso_now(), user_id, category_id),
-            )
-            await self.conn.commit()
+        await self._pool().execute(
+            f"""
+            UPDATE {SCHEMA}.user_category_state
+            SET free_started = $1, updated_at = $2
+            WHERE user_id = $3 AND category_id = $4
+            """,
+            bool(value),
+            iso_now(),
+            user_id,
+            category_id,
+        )
 
     async def increment_free_leads_used(self, user_id: int, category_id: int, delta: int = 1) -> None:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            await self.conn.execute(
-                """
-                UPDATE user_category_state
-                SET free_leads_used = free_leads_used + ?, updated_at = ?
-                WHERE user_id = ? AND category_id = ?
-                """,
-                (delta, iso_now(), user_id, category_id),
-            )
-            await self.conn.commit()
+        await self._pool().execute(
+            f"""
+            UPDATE {SCHEMA}.user_category_state
+            SET free_leads_used = free_leads_used + $1, updated_at = $2
+            WHERE user_id = $3 AND category_id = $4
+            """,
+            delta,
+            iso_now(),
+            user_id,
+            category_id,
+        )
 
-    async def get_user_category_state(self, user_id: int, category_id: int) -> Optional[aiosqlite.Row]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                "SELECT * FROM user_category_state WHERE user_id = ? AND category_id = ?",
-                (user_id, category_id),
-            )
-            return await cursor.fetchone()
+    async def get_user_category_state(self, user_id: int, category_id: int) -> Optional[asyncpg.Record]:
+        return await self._pool().fetchrow(
+            f"""
+            SELECT *
+            FROM {SCHEMA}.user_category_state
+            WHERE user_id = $1 AND category_id = $2
+            """,
+            user_id,
+            category_id,
+        )
 
     async def list_user_category_state_ids(self, user_id: int) -> list[int]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                "SELECT category_id FROM user_category_state WHERE user_id = ?",
-                (user_id,),
-            )
-            rows = await cursor.fetchall()
-        return [int(row[0]) for row in rows]
+        rows = await self._pool().fetch(
+            f"SELECT category_id FROM {SCHEMA}.user_category_state WHERE user_id = $1",
+            user_id,
+        )
+        return [int(row["category_id"]) for row in rows]
 
     async def upsert_subscription(
         self,
@@ -203,51 +195,45 @@ class Database:
         end_date: str,
         grant_type: str,
     ) -> None:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
         now = iso_now()
-        async with self._lock:
-            await self.conn.execute(
-                """
-                INSERT INTO subscriptions
-                    (user_id, category_id, status, start_date, end_date, grant_type, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT(user_id, category_id) DO UPDATE SET
-                    status=excluded.status,
-                    start_date=excluded.start_date,
-                    end_date=excluded.end_date,
-                    grant_type=excluded.grant_type,
-                    updated_at=excluded.updated_at
-                """,
-                (user_id, category_id, status, start_date, end_date, grant_type, now, now),
-            )
-            await self.conn.commit()
+        await self._pool().execute(
+            f"""
+            INSERT INTO {SCHEMA}.subscriptions
+                (user_id, category_id, status, start_date, end_date, grant_type, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $7)
+            ON CONFLICT(user_id, category_id) DO UPDATE SET
+                status = EXCLUDED.status,
+                start_date = EXCLUDED.start_date,
+                end_date = EXCLUDED.end_date,
+                grant_type = EXCLUDED.grant_type,
+                updated_at = EXCLUDED.updated_at
+            """,
+            user_id,
+            category_id,
+            status,
+            start_date,
+            end_date,
+            grant_type,
+            now,
+        )
 
-    async def get_subscription(self, user_id: int, category_id: int) -> Optional[aiosqlite.Row]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                "SELECT * FROM subscriptions WHERE user_id = ? AND category_id = ?",
-                (user_id, category_id),
-            )
-            return await cursor.fetchone()
+    async def get_subscription(self, user_id: int, category_id: int) -> Optional[asyncpg.Record]:
+        return await self._pool().fetchrow(
+            f"SELECT * FROM {SCHEMA}.subscriptions WHERE user_id = $1 AND category_id = $2",
+            user_id,
+            category_id,
+        )
 
-    async def list_user_subscriptions(self, user_id: int) -> list[aiosqlite.Row]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                """
-                SELECT s.*, c.title, c.full_title, c.code
-                FROM subscriptions s
-                JOIN categories c ON c.id = s.category_id
-                WHERE s.user_id = ?
-                """,
-                (user_id,),
-            )
-            rows = await cursor.fetchall()
-        return list(rows)
+    async def list_user_subscriptions(self, user_id: int) -> list[asyncpg.Record]:
+        return await self._pool().fetch(
+            f"""
+            SELECT s.*, c.title, c.full_title, c.code
+            FROM {SCHEMA}.subscriptions s
+            JOIN {SCHEMA}.categories c ON c.id = s.category_id
+            WHERE s.user_id = $1
+            """,
+            user_id,
+        )
 
     async def update_subscription_billing(
         self,
@@ -259,38 +245,41 @@ class Database:
         last_payment_id: Optional[str] = None,
         canceled_at: object = _UNSET,
     ) -> None:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
         fields: list[str] = []
         values: list[object] = []
+
         if auto_renew is not None:
-            fields.append("auto_renew = ?")
-            values.append(auto_renew)
+            values.append(bool(auto_renew))
+            fields.append(f"auto_renew = ${len(values)}")
         if provider is not None:
-            fields.append("provider = ?")
             values.append(provider)
+            fields.append(f"provider = ${len(values)}")
         if payment_method_id is not None:
-            fields.append("payment_method_id = ?")
             values.append(payment_method_id)
+            fields.append(f"payment_method_id = ${len(values)}")
         if last_payment_id is not None:
-            fields.append("last_payment_id = ?")
             values.append(last_payment_id)
+            fields.append(f"last_payment_id = ${len(values)}")
         if canceled_at is not _UNSET:
-            fields.append("canceled_at = ?")
             values.append(canceled_at)
+            fields.append(f"canceled_at = ${len(values)}")
         if not fields:
             return
-        fields.append("updated_at = ?")
+
         values.append(iso_now())
+        fields.append(f"updated_at = ${len(values)}")
         values.extend([user_id, category_id])
-        sql = f"""
-            UPDATE subscriptions
+        user_idx = len(values) - 1
+        category_idx = len(values)
+
+        await self._pool().execute(
+            f"""
+            UPDATE {SCHEMA}.subscriptions
             SET {", ".join(fields)}
-            WHERE user_id = ? AND category_id = ?
-        """
-        async with self._lock:
-            await self.conn.execute(sql, tuple(values))
-            await self.conn.commit()
+            WHERE user_id = ${user_idx} AND category_id = ${category_idx}
+            """,
+            *values,
+        )
 
     async def create_payment_record(
         self,
@@ -308,113 +297,99 @@ class Database:
         payment_method_id: Optional[str] = None,
         cancellation_reason: Optional[str] = None,
     ) -> None:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
         now = iso_now()
-        async with self._lock:
-            await self.conn.execute(
-                """
-                INSERT INTO payments
-                    (user_id, category_id, provider, payment_id, status, amount_rub, currency,
-                     confirmation_url, idempotence_key, kind, lead_id, payment_method_id,
-                     cancellation_reason, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    user_id,
-                    category_id,
-                    provider,
-                    payment_id,
-                    status,
-                    amount_rub,
-                    currency,
-                    confirmation_url,
-                    idempotence_key,
-                    kind,
-                    lead_id,
-                    payment_method_id,
-                    cancellation_reason,
-                    now,
-                    now,
-                ),
-            )
-            await self.conn.commit()
+        await self._pool().execute(
+            f"""
+            INSERT INTO {SCHEMA}.payments
+                (user_id, category_id, provider, payment_id, status, amount_rub, currency,
+                 confirmation_url, idempotence_key, kind, lead_id, payment_method_id,
+                 cancellation_reason, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)
+            """,
+            user_id,
+            category_id,
+            provider,
+            payment_id,
+            status,
+            amount_rub,
+            currency,
+            confirmation_url,
+            idempotence_key,
+            kind,
+            lead_id,
+            payment_method_id,
+            cancellation_reason,
+            now,
+        )
 
-    async def get_payment_record(self, payment_id: str) -> Optional[aiosqlite.Row]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                "SELECT * FROM payments WHERE payment_id = ?",
-                (payment_id,),
-            )
-            return await cursor.fetchone()
+    async def get_payment_record(self, payment_id: str) -> Optional[asyncpg.Record]:
+        return await self._pool().fetchrow(
+            f"SELECT * FROM {SCHEMA}.payments WHERE payment_id = $1",
+            payment_id,
+        )
 
     async def update_payment_record(self, payment_id: str, **fields: object) -> None:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
         if not fields:
             return
-        columns: list[str] = []
+
+        assignments: list[str] = []
         values: list[object] = []
         for key, value in fields.items():
-            columns.append(f"{key} = ?")
             values.append(value)
-        columns.append("updated_at = ?")
+            assignments.append(f"{key} = ${len(values)}")
         values.append(iso_now())
+        assignments.append(f"updated_at = ${len(values)}")
         values.append(payment_id)
-        sql = f"UPDATE payments SET {', '.join(columns)} WHERE payment_id = ?"
-        async with self._lock:
-            await self.conn.execute(sql, tuple(values))
-            await self.conn.commit()
+        payment_idx = len(values)
+
+        await self._pool().execute(
+            f"""
+            UPDATE {SCHEMA}.payments
+            SET {", ".join(assignments)}
+            WHERE payment_id = ${payment_idx}
+            """,
+            *values,
+        )
 
     async def mark_payment_applied(self, payment_id: str) -> bool:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
         now = iso_now()
-        async with self._lock:
-            cursor = await self.conn.execute(
-                """
-                UPDATE payments
-                SET applied_at = ?, updated_at = ?
-                WHERE payment_id = ? AND applied_at IS NULL
-                """,
-                (now, now, payment_id),
-            )
-            await self.conn.commit()
-            return cursor.rowcount > 0
+        row = await self._pool().fetchrow(
+            f"""
+            UPDATE {SCHEMA}.payments
+            SET applied_at = $1, updated_at = $1
+            WHERE payment_id = $2 AND applied_at IS NULL
+            RETURNING 1
+            """,
+            now,
+            payment_id,
+        )
+        return row is not None
 
     async def mark_payment_lead_delivered(self, payment_id: str) -> bool:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
         now = iso_now()
-        async with self._lock:
-            cursor = await self.conn.execute(
-                """
-                UPDATE payments
-                SET lead_delivered_at = ?, updated_at = ?
-                WHERE payment_id = ? AND lead_delivered_at IS NULL
-                """,
-                (now, now, payment_id),
-            )
-            await self.conn.commit()
-            return cursor.rowcount > 0
+        row = await self._pool().fetchrow(
+            f"""
+            UPDATE {SCHEMA}.payments
+            SET lead_delivered_at = $1, updated_at = $1
+            WHERE payment_id = $2 AND lead_delivered_at IS NULL
+            RETURNING 1
+            """,
+            now,
+            payment_id,
+        )
+        return row is not None
 
-    async def list_pending_payments(self, limit: int = 200) -> list[aiosqlite.Row]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                """
-                SELECT * FROM payments
-                WHERE status IN ('pending', 'waiting_for_capture')
-                ORDER BY created_at ASC
-                LIMIT ?
-                """,
-                (limit,),
-            )
-            rows = await cursor.fetchall()
-        return list(rows)
+    async def list_pending_payments(self, limit: int = 200) -> list[asyncpg.Record]:
+        return await self._pool().fetch(
+            f"""
+            SELECT *
+            FROM {SCHEMA}.payments
+            WHERE status IN ('pending', 'waiting_for_capture')
+            ORDER BY created_at ASC
+            LIMIT $1
+            """,
+            limit,
+        )
 
     async def get_latest_pending_payment(
         self,
@@ -422,29 +397,26 @@ class Database:
         category_id: int,
         kind: Optional[str] = None,
         lead_id: Optional[int] = None,
-    ) -> Optional[aiosqlite.Row]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        clauses = ["user_id = ?", "category_id = ?", "status IN ('pending', 'waiting_for_capture')"]
+    ) -> Optional[asyncpg.Record]:
+        clauses = ["user_id = $1", "category_id = $2", "status IN ('pending', 'waiting_for_capture')"]
         values: list[object] = [user_id, category_id]
         if kind:
-            clauses.append("kind = ?")
             values.append(kind)
+            clauses.append(f"kind = ${len(values)}")
         if lead_id is not None:
-            clauses.append("lead_id = ?")
             values.append(lead_id)
-        where_sql = " AND ".join(clauses)
-        async with self._lock:
-            cursor = await self.conn.execute(
-                f"""
-                SELECT * FROM payments
-                WHERE {where_sql}
-                ORDER BY created_at DESC
-                LIMIT 1
-                """,
-                tuple(values),
-            )
-            return await cursor.fetchone()
+            clauses.append(f"lead_id = ${len(values)}")
+
+        return await self._pool().fetchrow(
+            f"""
+            SELECT *
+            FROM {SCHEMA}.payments
+            WHERE {' AND '.join(clauses)}
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            *values,
+        )
 
     async def get_recent_pending_payment(
         self,
@@ -452,270 +424,290 @@ class Database:
         category_id: int,
         kind: str,
         since_iso: str,
-    ) -> Optional[aiosqlite.Row]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                """
-                SELECT * FROM payments
-                WHERE user_id = ? AND category_id = ? AND kind = ?
-                  AND status IN ('pending', 'waiting_for_capture')
-                  AND created_at >= ?
-                ORDER BY created_at DESC
-                LIMIT 1
-                """,
-                (user_id, category_id, kind, since_iso),
-            )
-            return await cursor.fetchone()
+    ) -> Optional[asyncpg.Record]:
+        return await self._pool().fetchrow(
+            f"""
+            SELECT *
+            FROM {SCHEMA}.payments
+            WHERE user_id = $1 AND category_id = $2 AND kind = $3
+              AND status IN ('pending', 'waiting_for_capture')
+              AND created_at >= $4
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            user_id,
+            category_id,
+            kind,
+            since_iso,
+        )
 
-    async def list_subscriptions_for_renewal(self, before_iso: str) -> list[aiosqlite.Row]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                """
-                SELECT s.*, u.telegram_id
-                FROM subscriptions s
-                JOIN users u ON u.id = s.user_id
-                WHERE s.status = 'active'
-                  AND s.auto_renew = 1
-                  AND s.payment_method_id IS NOT NULL
-                  AND s.end_date <= ?
-                """,
-                (before_iso,),
-            )
-            rows = await cursor.fetchall()
-        return list(rows)
+    async def list_subscriptions_for_renewal(self, before_iso: str) -> list[asyncpg.Record]:
+        return await self._pool().fetch(
+            f"""
+            SELECT s.*, u.telegram_id
+            FROM {SCHEMA}.subscriptions s
+            JOIN {SCHEMA}.users u ON u.id = s.user_id
+            WHERE s.status = 'active'
+              AND s.auto_renew = TRUE
+              AND s.payment_method_id IS NOT NULL
+              AND s.end_date <= $1
+            """,
+            before_iso,
+        )
 
-    async def list_recipients_for_category(self, category_id: int) -> list[aiosqlite.Row]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                """
-                SELECT u.id AS user_id,
-                       u.telegram_id,
-                       u.username,
-                       ucs.free_leads_total,
-                       ucs.free_leads_used,
-                       ucs.free_started,
-                       s.status AS sub_status,
-                       s.start_date AS sub_start_date,
-                       s.end_date AS sub_end_date,
-                       s.grant_type AS sub_grant_type
-                FROM user_category_state ucs
-                JOIN users u ON u.id = ucs.user_id
-                LEFT JOIN subscriptions s
-                       ON s.user_id = ucs.user_id AND s.category_id = ucs.category_id
-                WHERE ucs.category_id = ?
-                """,
-                (category_id,),
-            )
-            rows = await cursor.fetchall()
-        return list(rows)
+    async def list_recipients_for_category(self, category_id: int) -> list[asyncpg.Record]:
+        return await self._pool().fetch(
+            f"""
+            SELECT u.id AS user_id,
+                   u.telegram_id,
+                   u.username,
+                   ucs.free_leads_total,
+                   ucs.free_leads_used,
+                   ucs.free_started,
+                   s.status AS sub_status,
+                   s.start_date AS sub_start_date,
+                   s.end_date AS sub_end_date,
+                   s.grant_type AS sub_grant_type
+            FROM {SCHEMA}.user_category_state ucs
+            JOIN {SCHEMA}.users u ON u.id = ucs.user_id
+            LEFT JOIN {SCHEMA}.subscriptions s
+                   ON s.user_id = ucs.user_id AND s.category_id = ucs.category_id
+            WHERE ucs.category_id = $1
+            """,
+            category_id,
+        )
 
     async def mark_sent_lead(self, user_id: int, category_id: int, lead_id: int) -> bool:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                """
-                INSERT OR IGNORE INTO sent_leads (user_id, category_id, lead_id, sent_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (user_id, category_id, lead_id, iso_now()),
-            )
-            await self.conn.commit()
-            return cursor.rowcount > 0
+        row = await self._pool().fetchrow(
+            f"""
+            INSERT INTO {SCHEMA}.sent_leads (user_id, category_id, lead_id, sent_at)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT(user_id, lead_id) DO NOTHING
+            RETURNING lead_id
+            """,
+            user_id,
+            category_id,
+            lead_id,
+            iso_now(),
+        )
+        return row is not None
 
     async def was_sent_lead(self, user_id: int, lead_id: int) -> bool:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                "SELECT 1 FROM sent_leads WHERE user_id = ? AND lead_id = ?",
-                (user_id, lead_id),
-            )
-            row = await cursor.fetchone()
-            return row is not None
+        row = await self._pool().fetchval(
+            f"SELECT 1 FROM {SCHEMA}.sent_leads WHERE user_id = $1 AND lead_id = $2",
+            user_id,
+            lead_id,
+        )
+        return row is not None
 
     async def get_max_sent_lead_id(self, user_id: int, category_id: int) -> int:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                "SELECT MAX(lead_id) FROM sent_leads WHERE user_id = ? AND category_id = ?",
-                (user_id, category_id),
-            )
-            row = await cursor.fetchone()
-            return int(row[0] or 0)
+        value = await self._pool().fetchval(
+            f"SELECT MAX(lead_id) FROM {SCHEMA}.sent_leads WHERE user_id = $1 AND category_id = $2",
+            user_id,
+            category_id,
+        )
+        return int(value or 0)
 
     async def store_leads(self, leads: Iterable[dict]) -> None:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            await self.conn.executemany(
-                """
-                INSERT OR IGNORE INTO leads
-                    (lead_id, category_id, text, contact, source, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                [
-                    (
-                        lead["lead_id"],
-                        lead["category_id"],
-                        lead["text"],
-                        lead.get("contact"),
-                        lead.get("source"),
-                        lead["created_at"],
-                    )
-                    for lead in leads
-                ],
+        pool = self._pool()
+        rows = [
+            (
+                lead["lead_id"],
+                lead["category_id"],
+                lead["text"],
+                lead.get("contact"),
+                lead.get("source"),
+                lead["created_at"],
             )
-            await self.conn.commit()
+            for lead in leads
+        ]
+        if not rows:
+            return
 
-    async def get_latest_leads(self, category_id: int, limit: int) -> list[aiosqlite.Row]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                """
-                SELECT * FROM leads
-                WHERE category_id = ?
-                ORDER BY lead_id DESC
-                LIMIT ?
-                """,
-                (category_id, limit),
-            )
-            rows = await cursor.fetchall()
-        return list(rows)
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.executemany(
+                    f"""
+                    INSERT INTO {SCHEMA}.leads
+                        (lead_id, category_id, text, contact, source, created_at)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    ON CONFLICT(lead_id) DO NOTHING
+                    """,
+                    rows,
+                )
 
-    async def get_leads_after(self, category_id: int, after_id: int) -> list[aiosqlite.Row]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                """
-                SELECT * FROM leads
-                WHERE category_id = ? AND lead_id > ?
-                ORDER BY lead_id ASC
-                """,
-                (category_id, after_id),
-            )
-            rows = await cursor.fetchall()
-        return list(rows)
+    async def get_latest_leads(self, category_id: int, limit: int) -> list[asyncpg.Record]:
+        return await self._pool().fetch(
+            f"""
+            SELECT *
+            FROM {SCHEMA}.leads
+            WHERE category_id = $1
+            ORDER BY lead_id DESC
+            LIMIT $2
+            """,
+            category_id,
+            limit,
+        )
 
-    async def get_lead_by_id(self, lead_id: int) -> Optional[aiosqlite.Row]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute("SELECT * FROM leads WHERE lead_id = ?", (lead_id,))
-            return await cursor.fetchone()
+    async def get_leads_after(self, category_id: int, after_id: int) -> list[asyncpg.Record]:
+        return await self._pool().fetch(
+            f"""
+            SELECT *
+            FROM {SCHEMA}.leads
+            WHERE category_id = $1 AND lead_id > $2
+            ORDER BY lead_id ASC
+            """,
+            category_id,
+            after_id,
+        )
+
+    async def get_lead_by_id(self, lead_id: int) -> Optional[asyncpg.Record]:
+        return await self._pool().fetchrow(
+            f"SELECT * FROM {SCHEMA}.leads WHERE lead_id = $1",
+            lead_id,
+        )
 
     async def update_category_last_lead_id(self, category_id: int, last_lead_id: int) -> None:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            await self.conn.execute(
-                """
-                INSERT INTO category_state (category_id, last_lead_id, updated_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(category_id) DO UPDATE SET
-                    last_lead_id=excluded.last_lead_id,
-                    updated_at=excluded.updated_at
-                """,
-                (category_id, last_lead_id, iso_now()),
-            )
-            await self.conn.commit()
+        await self._pool().execute(
+            f"""
+            INSERT INTO {SCHEMA}.category_state (category_id, last_lead_id, updated_at)
+            VALUES ($1, $2, $3)
+            ON CONFLICT(category_id) DO UPDATE SET
+                last_lead_id = EXCLUDED.last_lead_id,
+                updated_at = EXCLUDED.updated_at
+            """,
+            category_id,
+            last_lead_id,
+            iso_now(),
+        )
 
     async def get_category_last_lead_id(self, category_id: int) -> int:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                "SELECT last_lead_id FROM category_state WHERE category_id = ?",
-                (category_id,),
-            )
-            row = await cursor.fetchone()
-            return int(row[0]) if row else 0
+        value = await self._pool().fetchval(
+            f"SELECT last_lead_id FROM {SCHEMA}.category_state WHERE category_id = $1",
+            category_id,
+        )
+        return int(value or 0)
 
     async def get_supabase_state(self) -> tuple[Optional[str], Optional[int]]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                "SELECT last_message_time, last_message_id FROM supabase_state WHERE id = 1"
-            )
-            row = await cursor.fetchone()
-            if not row:
-                return None, None
-            return row["last_message_time"], row["last_message_id"]
+        row = await self._pool().fetchrow(
+            f"SELECT last_message_time, last_message_id FROM {SCHEMA}.supabase_state WHERE id = 1"
+        )
+        if not row:
+            return None, None
+        return row["last_message_time"], row["last_message_id"]
 
     async def update_supabase_state(
         self, last_message_time: Optional[str], last_message_id: Optional[int]
     ) -> None:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            await self.conn.execute(
-                """
-                INSERT INTO supabase_state (id, last_message_time, last_message_id)
-                VALUES (1, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    last_message_time=excluded.last_message_time,
-                    last_message_id=excluded.last_message_id
-                """,
-                (last_message_time, last_message_id),
-            )
-            await self.conn.commit()
+        await self._pool().execute(
+            f"""
+            INSERT INTO {SCHEMA}.supabase_state (id, last_message_time, last_message_id)
+            VALUES (1, $1, $2)
+            ON CONFLICT(id) DO UPDATE SET
+                last_message_time = EXCLUDED.last_message_time,
+                last_message_id = EXCLUDED.last_message_id
+            """,
+            last_message_time,
+            last_message_id,
+        )
 
     async def clear_pending_leads(self, user_id: int, category_id: int) -> None:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            await self.conn.execute(
-                "DELETE FROM pending_leads WHERE user_id = ? AND category_id = ?",
-                (user_id, category_id),
-            )
-            await self.conn.commit()
+        await self._pool().execute(
+            f"DELETE FROM {SCHEMA}.pending_leads WHERE user_id = $1 AND category_id = $2",
+            user_id,
+            category_id,
+        )
 
     async def enqueue_pending_leads(
         self, user_id: int, category_id: int, lead_ids: list[int]
     ) -> None:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        if not lead_ids:
+        pool = self._pool()
+        rows = [(user_id, category_id, lead_id, iso_now()) for lead_id in lead_ids]
+        if not rows:
             return
-        async with self._lock:
-            await self.conn.executemany(
-                """
-                INSERT OR IGNORE INTO pending_leads (user_id, category_id, lead_id, created_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                [(user_id, category_id, lead_id, iso_now()) for lead_id in lead_ids],
-            )
-            await self.conn.commit()
+
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                await conn.executemany(
+                    f"""
+                    INSERT INTO {SCHEMA}.pending_leads (user_id, category_id, lead_id, created_at)
+                    VALUES ($1, $2, $3, $4)
+                    ON CONFLICT(user_id, category_id, lead_id) DO NOTHING
+                    """,
+                    rows,
+                )
 
     async def pop_pending_lead(self, user_id: int, category_id: int) -> Optional[int]:
-        if not self.conn:
-            raise RuntimeError("Database not connected")
-        async with self._lock:
-            cursor = await self.conn.execute(
-                """
+        lead_id = await self._pool().fetchval(
+            f"""
+            WITH next_row AS (
                 SELECT id, lead_id
-                FROM pending_leads
-                WHERE user_id = ? AND category_id = ?
+                FROM {SCHEMA}.pending_leads
+                WHERE user_id = $1 AND category_id = $2
                 ORDER BY id ASC
                 LIMIT 1
-                """,
-                (user_id, category_id),
+                FOR UPDATE SKIP LOCKED
             )
-            row = await cursor.fetchone()
-            if not row:
-                return None
-            pending_id = int(row["id"])
-            lead_id = int(row["lead_id"])
-            await self.conn.execute("DELETE FROM pending_leads WHERE id = ?", (pending_id,))
-            await self.conn.commit()
-            return lead_id
+            DELETE FROM {SCHEMA}.pending_leads p
+            USING next_row
+            WHERE p.id = next_row.id
+            RETURNING next_row.lead_id
+            """,
+            user_id,
+            category_id,
+        )
+        return int(lead_id) if lead_id is not None else None
+
+    async def is_leadbot_enabled(self) -> bool:
+        pool = self._pool()
+        try:
+            enabled = await pool.fetchval(
+                """
+                SELECT COALESCE(
+                    (
+                        SELECT (value::text)::boolean
+                        FROM public.system_config
+                        WHERE key = 'leadbot_enabled'
+                        LIMIT 1
+                    ),
+                    TRUE
+                )
+                """
+            )
+        except Exception as exc:
+            logging.warning("Failed to read leadbot_enabled flag, defaulting to enabled: %s", exc)
+            return True
+        return True if enabled is None else bool(enabled)
+
+    def _pool(self) -> asyncpg.Pool:
+        if not self.pool:
+            raise RuntimeError("Database not connected")
+        return self.pool
+
+    async def _init_connection(self, conn: asyncpg.Connection) -> None:
+        await conn.execute("SET TIME ZONE 'UTC'")
+
+    def _build_ssl_context(self) -> ssl.SSLContext:
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
+
+    @staticmethod
+    def _normalize_dsn(dsn: str) -> tuple[str, bool]:
+        require_ssl = False
+        parts = urlsplit(dsn)
+        if parts.query:
+            query = [(k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)]
+            filtered: list[tuple[str, str]] = []
+            for key, value in query:
+                if key.lower() == "sslmode":
+                    if value.lower() in ("require", "verify-full", "verify-ca"):
+                        require_ssl = True
+                    continue
+                filtered.append((key, value))
+            new_query = urlencode(filtered)
+            dsn = urlunsplit((parts.scheme, parts.netloc, parts.path, new_query, parts.fragment))
+        if dsn.startswith("postgresql+asyncpg://"):
+            return dsn.replace("postgresql+asyncpg://", "postgresql://", 1), require_ssl
+        return dsn, require_ssl

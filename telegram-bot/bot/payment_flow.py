@@ -3,8 +3,6 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, Optional
 
-import aiosqlite
-
 from aiogram import Bot
 
 from .config import Config
@@ -38,7 +36,7 @@ async def start_user_payment(
     amount_rub: int,
     kind: str,
     lead_id: Optional[int] = None,
-) -> aiosqlite.Row:
+) -> Any:
     category = CATEGORY_BY_ID[category_id]
     description = build_payment_description(category, config, kind)
     metadata = {"user_id": user_id, "category_id": category_id, "kind": kind}
@@ -80,7 +78,7 @@ async def start_recurring_payment(
     category_id: int,
     amount_rub: int,
     payment_method_id: str,
-) -> aiosqlite.Row:
+) -> Any:
     category = CATEGORY_BY_ID[category_id]
     description = build_payment_description(category, config, "renewal")
     metadata = {"user_id": user_id, "category_id": category_id, "kind": "renewal"}

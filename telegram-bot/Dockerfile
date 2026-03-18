@@ -24,7 +24,4 @@ COPY bot /app/bot
 COPY migrations /app/migrations
 COPY supabase_rules.json /app/supabase_rules.json
 
-ENV SQLITE_PATH=/app/data/bot.db
-RUN mkdir -p /app/data
-
 CMD ["python", "-m", "bot"]

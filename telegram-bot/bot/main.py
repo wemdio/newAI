@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import contextlib
-from pathlib import Path
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -30,8 +29,13 @@ async def main() -> None:
     config = load_config()
     _setup_logging(config.log_level)
 
-    Path(config.sqlite_path).parent.mkdir(parents=True, exist_ok=True)
-    db = Database(config.sqlite_path)
+    if not config.supabase_dsn:
+        raise RuntimeError(
+            "Supabase Postgres credentials are required for the lead bot. "
+            "Set SUPABASE_DSN or SUPABASE_HOST / SUPABASE_USER / SUPABASE_PASSWORD."
+        )
+
+    db = Database(config.supabase_dsn, ssl_insecure=config.supabase_ssl_insecure)
     await db.connect()
     await db.init_db()
 
@@ -52,8 +56,7 @@ async def main() -> None:
     async def on_startup() -> None:
         nonlocal poller_task, supabase_task, payments_task, renewal_task
         poller_task = asyncio.create_task(start_lead_polling(bot, db, leads, config))
-        if config.supabase_dsn:
-            supabase_task = asyncio.create_task(supabase.run())
+        supabase_task = asyncio.create_task(supabase.run())
         if payments.enabled:
             payments_task = asyncio.create_task(start_payment_polling(bot, db, payments, config, leads))
             renewal_task = asyncio.create_task(start_subscription_renewal(bot, db, payments, config))

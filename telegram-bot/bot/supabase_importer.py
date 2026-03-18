@@ -59,6 +59,9 @@ class SupabaseImporter:
         max_backoff = max(self.poll_interval, 300)
         while True:
             try:
+                if not await self.db.is_leadbot_enabled():
+                    await asyncio.sleep(self.poll_interval)
+                    continue
                 await self._tick()
                 self._error_streak = 0
                 backoff = self.poll_interval

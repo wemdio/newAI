@@ -19,6 +19,9 @@ from .utils import extract_contact_url, is_contact_hidden, parse_iso
 
 async def start_lead_polling(bot: Bot, db: Database, lead_service: LeadService, config: Config) -> None:
     while True:
+        if not await db.is_leadbot_enabled():
+            await asyncio.sleep(config.leads_poll_interval_seconds)
+            continue
         for category in CATEGORIES:
             try:
                 await _process_category(bot, db, lead_service, config, category.id)
@@ -123,6 +126,9 @@ async def start_payment_polling(
     if not payments.enabled:
         return
     while True:
+        if not await db.is_leadbot_enabled():
+            await asyncio.sleep(config.payments_poll_interval_seconds)
+            continue
         try:
             pending = await db.list_pending_payments()
             for payment_row in pending:
@@ -152,6 +158,9 @@ async def start_subscription_renewal(
     if not payments.enabled:
         return
     while True:
+        if not await db.is_leadbot_enabled():
+            await asyncio.sleep(config.subscription_renew_interval_seconds)
+            continue
         try:
             await _process_subscription_renewals(bot, db, payments, config)
         except Exception as exc:
