@@ -438,50 +438,74 @@ async def cmd_grant(message: Message, db: Database, config: Config) -> None:
         return
     parts = message.text.split()
     if len(parts) < 4:
-        await message.answer("Формат: /grant <telegram_id> <category_code|id> <days> [reason]")
+        await message.answer("Формат: /grant <telegram_id> <category_code|id|all> <days> [reason]")
         return
     telegram_id = int(parts[1])
     category_key = parts[2]
     days = int(parts[3])
     reason = parts[4] if len(parts) > 4 else "admin"
 
-    category = CATEGORY_BY_CODE.get(category_key)
-    if not category:
-        try:
-            category = CATEGORY_BY_ID.get(int(category_key))
-        except ValueError:
-            category = None
-    if not category:
-        await message.answer("Категория не найдена")
-        return
+    if category_key.lower() == "all":
+        target_categories = list(CATEGORIES)
+    else:
+        cat = CATEGORY_BY_CODE.get(category_key)
+        if not cat:
+            try:
+                cat = CATEGORY_BY_ID.get(int(category_key))
+            except ValueError:
+                cat = None
+        if not cat:
+            await message.answer("Категория не найдена")
+            return
+        target_categories = [cat]
 
     user_row = await db.get_user_by_telegram_id(telegram_id)
     if user_row:
         user_id = int(user_row["id"])
     else:
         user_id = await db.ensure_user(telegram_id, None)
-    await db.ensure_user_category_state(user_id, category.id, config.free_leads_total)
 
     grant_type = "bonus" if reason in ("bonus", "source_access_bonus") else "admin"
-    end_date = await activate_subscription(
-        db,
-        config,
-        user_id,
-        category.id,
-        grant_type=grant_type,
-        duration_days=days,
-    )
-    try:
-        await message.bot.send_message(
-            telegram_id,
-            grant_message(category, days, grant_type),
-            reply_markup=post_activation_keyboard(),
+    granted_names = []
+    last_end_date = None
+
+    for category in target_categories:
+        await db.ensure_user_category_state(user_id, category.id, config.free_leads_total)
+        last_end_date = await activate_subscription(
+            db,
+            config,
+            user_id,
+            category.id,
+            grant_type=grant_type,
+            duration_days=days,
         )
-    except Exception as exc:
-        logging.warning("Failed to notify user %s: %s", telegram_id, exc)
-    await message.answer(
-        f"Доступ выдан: {category.title} до {end_date.strftime('%d.%m.%Y')} (type: {grant_type})."
-    )
+        granted_names.append(category.title)
+
+    if len(target_categories) == 1:
+        cat = target_categories[0]
+        try:
+            await message.bot.send_message(
+                telegram_id,
+                grant_message(cat, days, grant_type),
+                reply_markup=post_activation_keyboard(),
+            )
+        except Exception as exc:
+            logging.warning("Failed to notify user %s: %s", telegram_id, exc)
+        await message.answer(
+            f"Доступ выдан: {cat.title} до {last_end_date.strftime('%d.%m.%Y')} (type: {grant_type})."
+        )
+    else:
+        try:
+            await message.bot.send_message(
+                telegram_id,
+                f"Вам выдан доступ ко всем {len(target_categories)} категориям на {days} дней!",
+                reply_markup=post_activation_keyboard(),
+            )
+        except Exception as exc:
+            logging.warning("Failed to notify user %s: %s", telegram_id, exc)
+        await message.answer(
+            f"Доступ выдан ко всем {len(granted_names)} категориям до {last_end_date.strftime('%d.%m.%Y')} (type: {grant_type})."
+        )
 
 
 def _resolve_access(state, subscription) -> bool:
