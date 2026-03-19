@@ -15,6 +15,15 @@ def _parse_bool(value: str) -> bool:
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _parse_optional_int(value: Optional[str]) -> Optional[int]:
+    if value is None:
+        return None
+    value = str(value).strip()
+    if not value:
+        return None
+    return int(value)
+
+
 def _getenv(name: str, fallback_name: Optional[str] = None, default: Optional[str] = None) -> Optional[str]:
     value = os.getenv(name)
     if value is None and fallback_name:
@@ -47,6 +56,9 @@ class Config:
     yookassa_shop_id: Optional[str]
     yookassa_secret_key: Optional[str]
     yookassa_return_url: Optional[str]
+    yookassa_receipt_email: Optional[str]
+    yookassa_receipt_vat_code: int
+    yookassa_receipt_tax_system_code: Optional[int]
     log_level: str
 
 
@@ -125,6 +137,13 @@ def load_config() -> Config:
     yookassa_shop_id = (_getenv("YOOKASSA_SHOP_ID", "LEADBOT_YOOKASSA_SHOP_ID", "") or "").strip() or None
     yookassa_secret_key = (_getenv("YOOKASSA_SECRET_KEY", "LEADBOT_YOOKASSA_SECRET_KEY", "") or "").strip() or None
     yookassa_return_url = (_getenv("YOOKASSA_RETURN_URL", "LEADBOT_YOOKASSA_RETURN_URL", "") or "").strip() or None
+    yookassa_receipt_email = (_getenv("YOOKASSA_RECEIPT_EMAIL", "LEADBOT_YOOKASSA_RECEIPT_EMAIL", "") or "").strip() or None
+    yookassa_receipt_vat_code = _parse_int(
+        _getenv("YOOKASSA_RECEIPT_VAT_CODE", "LEADBOT_YOOKASSA_RECEIPT_VAT_CODE", "1"), 1
+    )
+    yookassa_receipt_tax_system_code = _parse_optional_int(
+        _getenv("YOOKASSA_RECEIPT_TAX_SYSTEM_CODE", "LEADBOT_YOOKASSA_RECEIPT_TAX_SYSTEM_CODE")
+    )
     log_level = _getenv("LOG_LEVEL", "LEADBOT_LOG_LEVEL", "INFO") or "INFO"
 
     return Config(
@@ -149,5 +168,8 @@ def load_config() -> Config:
         yookassa_shop_id=yookassa_shop_id,
         yookassa_secret_key=yookassa_secret_key,
         yookassa_return_url=yookassa_return_url,
+        yookassa_receipt_email=yookassa_receipt_email,
+        yookassa_receipt_vat_code=yookassa_receipt_vat_code,
+        yookassa_receipt_tax_system_code=yookassa_receipt_tax_system_code,
         log_level=log_level,
     )

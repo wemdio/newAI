@@ -15,6 +15,9 @@ class PaymentService:
         self.shop_id = config.yookassa_shop_id or ""
         self.secret_key = config.yookassa_secret_key or ""
         self.return_url = config.yookassa_return_url
+        self.receipt_email = config.yookassa_receipt_email
+        self.receipt_vat_code = config.yookassa_receipt_vat_code
+        self.receipt_tax_system_code = config.yookassa_receipt_tax_system_code
         self._client: Optional[httpx.AsyncClient] = None
         if self.return_url and "t.me/" in self.return_url:
             logging.warning(
@@ -49,6 +52,9 @@ class PaymentService:
             "confirmation": {"type": "redirect", "return_url": self.return_url},
             "description": description,
         }
+        receipt = self._build_receipt(amount_rub=amount_rub, description=description)
+        if receipt:
+            payload["receipt"] = receipt
         if save_payment_method:
             payload["save_payment_method"] = True
         if metadata:
@@ -99,6 +105,9 @@ class PaymentService:
             "payment_method_id": payment_method_id,
             "description": description,
         }
+        receipt = self._build_receipt(amount_rub=amount_rub, description=description)
+        if receipt:
+            payload["receipt"] = receipt
         if metadata:
             payload["metadata"] = _normalize_metadata(metadata)
         try:
@@ -140,6 +149,31 @@ class PaymentService:
             raise
         return response.json()
 
+    def _build_receipt(
+        self,
+        *,
+        amount_rub: int,
+        description: str,
+    ) -> Optional[Dict[str, Any]]:
+        if not self.receipt_email:
+            return None
+        receipt: Dict[str, Any] = {
+            "customer": {"email": self.receipt_email},
+            "items": [
+                {
+                    "description": _normalize_receipt_item_description(description),
+                    "quantity": "1.00",
+                    "amount": {"value": _format_amount(amount_rub), "currency": "RUB"},
+                    "vat_code": self.receipt_vat_code,
+                    "payment_mode": "full_payment",
+                    "payment_subject": "service",
+                }
+            ],
+        }
+        if self.receipt_tax_system_code is not None:
+            receipt["tax_system_code"] = self.receipt_tax_system_code
+        return receipt
+
 
 def _format_amount(amount_rub: int) -> str:
     return f"{amount_rub:.2f}"
@@ -152,3 +186,10 @@ def _normalize_metadata(metadata: Dict[str, Any]) -> Dict[str, str]:
 def _safe_response_text(response: httpx.Response) -> str:
     text = (response.text or "").strip()
     return text[:2000]
+
+
+def _normalize_receipt_item_description(description: str) -> str:
+    text = " ".join((description or "").split()).strip()
+    if not text:
+        return "Подписка на Telegram-лиды"
+    return text[:128]
