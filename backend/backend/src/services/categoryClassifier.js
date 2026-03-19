@@ -25,6 +25,39 @@ const JOB_SEEKER_PATTERNS = [
   /\bopen\s*to\s*work\b/i
 ];
 
+const DIRECT_VACANCY_PATTERNS = [
+  /\bнужны\s+люди\b/i,
+  /\bнужны\s+(грузчик|курьер|водител|разнорабоч|сотрудник|менеджер|оператор|продав)/i,
+  /\bищем\s+(сотрудник|менеджер|оператор|продав|курьер|водител|грузчик)/i,
+  /\bтребуются\s+(сотрудник|менеджер|оператор|продав|курьер|водител|грузчик|люди)/i,
+  /\bзп\s+\d/i,
+  /\bзарплата\s+\d/i,
+  /\bоплата\s+(в\s+)?(день|неделю|смену|час)\b/i,
+  /\bвыплаты\s+(ежедневн|еженедельн)/i,
+  /\bподработка\b/i,
+  /\bвакансия\b/i,
+  /\bстажировка\b/i
+];
+
+const MLM_SPAM_PATTERNS = [
+  /онлайн[\s\-]?(занятость|заработок|работа|доход)/i,
+  /удал[её]нн(ый|ая|ое|ые)\s+(заработок|доход)/i,
+  /доход\s+(без|от)\s+\d/i,
+  /пассивн(ый|ая|ое|ые)\s+доход/i,
+  /финансов(ая|ую)\s+свобод/i,
+  /сетев(ой|ого|ому)\s+(маркетинг|бизнес)/i,
+  /\bmlm\b/i,
+  /без\s+вложений/i,
+  /работа\s+на\s+себя.*\d.*руб/i
+];
+
+const GIG_LABOR_PATTERNS = [
+  /\b(разгруз|погруз|разбор(ка|ать)|уборк|сборк).{0,30}\d+\s*₽/i,
+  /\b(разгруз|погруз|разбор(ка|ать)|уборк|сборк).{0,30}\d+\s*руб/i,
+  /\bна\s+\d+\s*(час|ч\b)/i,
+  /\bгрузчик/i
+];
+
 const PARTNERSHIP_PATTERNS = [
   /\bищ(у|ем)\s+партн[её]р/i,
   /\bпартн[её]рств/i,
@@ -65,11 +98,42 @@ const getResponseMeta = (requestedModel, response) => ({
   finishReason: response?.choices?.[0]?.finish_reason || null
 });
 
+const normalizeUnicode = (text) => {
+  const MAP = {
+    '\u1d00': 'а', '\u1d04': 'с', '\u1d07': 'е', '\u1d0b': 'к', '\u1d0d': 'м',
+    '\u1d0f': 'о', '\u1d18': 'р', '\u1d1b': 'т', '\u1d1c': 'у', '\u1d21': 'ш',
+    '\u0280': 'р', '\u0262': 'г', '\u029f': 'л', '\u0274': 'н',
+    '\u0410': 'А', '\u0430': 'а', '\u0412': 'В', '\u0432': 'в',
+    'ᴇ': 'е', 'ᴀ': 'а', 'ᴘ': 'р', 'ᴏ': 'о', 'ᴄ': 'с', 'ᴛ': 'т',
+    'ᴜ': 'у', 'ᴋ': 'к', 'ᴍ': 'м', 'ᴎ': 'н', 'ᴅ': 'д',
+    'ω': 'ш', 'ʏ': 'у', 'ɪ': 'и',
+    'ᴧ': 'л', 'ᴨ': 'п', 'ᴩ': 'р', 'ᴦ': 'г',
+    'ᴪ': 'ψ', 'ɢ': 'г', 'ᴥ': 'б',
+    'ᴘ': 'р', 'ᴀ': 'а', 'ᴇ': 'е', 'ᴏ': 'о', 'ᴄ': 'с',
+  };
+  return text.replace(/./g, ch => MAP[ch] || ch);
+};
+
+const hasUnicodeObfuscation = (text) => {
+  const suspicious = /[\u0250-\u02AF\u1D00-\u1D7F\u0370-\u03FF]/;
+  const matches = text.match(suspicious);
+  if (!matches) return false;
+  const count = (text.match(new RegExp(suspicious.source, 'g')) || []).length;
+  return count >= 3;
+};
+
 const getHardRejectReason = (messageText) => {
-  const text = (messageText || '').replace(/\s+/g, ' ').trim();
-  if (!text) return null;
+  const raw = (messageText || '').replace(/\s+/g, ' ').trim();
+  if (!raw) return null;
+
+  if (hasUnicodeObfuscation(raw)) return 'unicode_spam';
+
+  const text = normalizeUnicode(raw);
 
   if (matchesAny(text, JOB_SEEKER_PATTERNS)) return 'job_seeker';
+  if (matchesAny(text, DIRECT_VACANCY_PATTERNS)) return 'direct_vacancy';
+  if (matchesAny(text, MLM_SPAM_PATTERNS)) return 'mlm_spam';
+  if (matchesAny(text, GIG_LABOR_PATTERNS)) return 'gig_labor';
   if (matchesAny(text, PARTNERSHIP_PATTERNS)) return 'partnership';
   if (matchesAny(text, OFFER_PATTERNS) && !matchesAny(text, REQUEST_MARKER_PATTERNS)) {
     return 'self_promo';
