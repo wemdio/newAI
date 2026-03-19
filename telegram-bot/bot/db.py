@@ -8,7 +8,9 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 import asyncpg
 
 from .constants import CATEGORIES, Category
-from .utils import iso_now
+from datetime import timedelta
+
+from .utils import iso_now, now_utc
 
 _UNSET = object()
 SCHEMA = "leadbot"
@@ -385,15 +387,18 @@ class Database:
         )
         return row is not None
 
-    async def list_pending_payments(self, limit: int = 200) -> list[asyncpg.Record]:
+    async def list_pending_payments(self, limit: int = 200, max_age_seconds: int = 3600) -> list[asyncpg.Record]:
+        cutoff = (now_utc() - timedelta(seconds=max_age_seconds)).isoformat()
         return await self._pool().fetch(
             f"""
             SELECT *
             FROM {SCHEMA}.payments
             WHERE status IN ('pending', 'waiting_for_capture')
+              AND created_at >= $1
             ORDER BY created_at ASC
-            LIMIT $1
+            LIMIT $2
             """,
+            cutoff,
             limit,
         )
 
