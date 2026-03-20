@@ -128,14 +128,17 @@ async def cb_free_leads(
         return
 
     latest_leads = sorted(latest_leads, key=lambda item: item.lead_id)
+    visible_ids = [
+        lead.lead_id for lead in latest_leads
+        if not (lead.contact and is_contact_hidden(lead.contact))
+    ]
     pending_ids: list[int] = []
-    for lead in latest_leads:
-        if lead.contact and is_contact_hidden(lead.contact):
-            continue
-        if await db.was_sent_lead(user_id, lead.lead_id):
-            continue
-        pending_ids.append(lead.lead_id)
+    for lid in visible_ids:
+        if not await db.was_sent_lead(user_id, lid):
+            pending_ids.append(lid)
 
+    if not pending_ids:
+        pending_ids = visible_ids[-3:]
     if not pending_ids:
         await query.message.answer("Пока нет новых лидов для выдачи.")
         await query.answer()
