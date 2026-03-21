@@ -82,14 +82,12 @@ if (process.env.PHOENIX_COLLECTOR_ENDPOINT) {
       on: phoenixErrorHandler
     }));
 
-    const phoenixAssetProxy = createProxyMiddleware({
+    app.use(createProxyMiddleware({
       target: phoenixTarget,
       changeOrigin: true,
+      pathFilter: ['/assets/**', '/v1/**', '/__generated/**'],
       on: phoenixErrorHandler
-    });
-    app.use('/assets', phoenixAssetProxy);
-    app.use('/v1', phoenixAssetProxy);
-    app.use('/__generated', phoenixAssetProxy);
+    }));
 
     logger.info(`Phoenix UI proxied at /phoenix/ → ${phoenixTarget}`);
   } catch (e) {
