@@ -11,8 +11,7 @@ import crypto from 'crypto';
  * All embeddings for user criteria are cached in-memory (Map by userId).
  */
 
-// Requesty exposes this embedding model without the `openai/` prefix.
-const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
+const DEFAULT_EMBEDDING_MODEL = 'openai/text-embedding-3-small';
 
 // In-memory cache: Map<userId, { embedding: number[], promptHash: string }>
 const criteriaEmbeddingCache = new Map();
