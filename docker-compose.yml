@@ -1,10 +1,4 @@
 services:
-  phoenix:
-    image: arizephoenix/phoenix:latest
-    ports:
-      - "6006:6006"
-    restart: always
-
   api:
     build:
       context: ./backend/backend
@@ -101,4 +95,8 @@ services:
       LEADBOT_YOOKASSA_RECEIPT_VAT_CODE:
       LEADBOT_YOOKASSA_RECEIPT_TAX_SYSTEM_CODE:
       LEADBOT_LOG_LEVEL:
+    restart: always
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
     restart: always
