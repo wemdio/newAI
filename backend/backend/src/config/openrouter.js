@@ -2,10 +2,71 @@ import OpenAI from 'openai';
 import logger from '../utils/logger.js';
 import { AIServiceError } from '../utils/errorHandler.js';
 
-/**
- * OpenRouter client configuration
- * Using OpenAI SDK with OpenRouter base URL
- */
+let _tracer = null;
+try {
+  const api = await import('@opentelemetry/api');
+  _tracer = api.trace.getTracer('lead-scanner-backend');
+} catch { /* tracing not available */ }
+
+function _wrapClient(client) {
+  if (!_tracer) return client;
+
+  const origChat = client.chat.completions.create.bind(client.chat.completions);
+  client.chat.completions.create = async function tracedCreate(params) {
+    const span = _tracer.startSpan('llm_call', {
+      attributes: {
+        'openinference.span.kind': 'LLM',
+        'llm.model_name': params.model || '',
+        'llm.invocation_parameters': JSON.stringify({
+          temperature: params.temperature,
+          max_tokens: params.max_tokens,
+        }),
+        'input.value': JSON.stringify(params.messages || []).substring(0, 4000),
+      },
+    });
+    try {
+      const res = await origChat(params);
+      const content = res.choices?.[0]?.message?.content || '';
+      span.setAttribute('output.value', content.substring(0, 4000));
+      if (res.usage) {
+        span.setAttribute('llm.token_count.prompt', res.usage.prompt_tokens || 0);
+        span.setAttribute('llm.token_count.completion', res.usage.completion_tokens || 0);
+        span.setAttribute('llm.token_count.total', res.usage.total_tokens || 0);
+      }
+      span.end();
+      return res;
+    } catch (e) {
+      span.setAttribute('error.message', e.message);
+      span.setStatus({ code: 2, message: e.message });
+      span.end();
+      throw e;
+    }
+  };
+
+  if (client.embeddings?.create) {
+    const origEmb = client.embeddings.create.bind(client.embeddings);
+    client.embeddings.create = async function tracedEmbedding(params) {
+      const span = _tracer.startSpan('embedding', {
+        attributes: {
+          'openinference.span.kind': 'EMBEDDING',
+          'llm.model_name': params.model || '',
+        },
+      });
+      try {
+        const res = await origEmb(params);
+        span.end();
+        return res;
+      } catch (e) {
+        span.setAttribute('error.message', e.message);
+        span.setStatus({ code: 2, message: e.message });
+        span.end();
+        throw e;
+      }
+    };
+  }
+
+  return client;
+}
 
 let openrouterClient = null;
 
@@ -25,14 +86,14 @@ export const initializeOpenRouter = (apiKey = null) => {
     const siteUrl = process.env.YOUR_SITE_URL || 'https://telegram-scanner.ru';
     const siteName = process.env.YOUR_SITE_NAME || 'Telegram Lead Scanner';
 
-    openrouterClient = new OpenAI({
+    openrouterClient = _wrapClient(new OpenAI({
       baseURL: process.env.OPENROUTER_BASE_URL || 'https://router.requesty.ai/v1',
       apiKey: key,
       defaultHeaders: {
         'HTTP-Referer': siteUrl,
         'X-Title': siteName,
       }
-    });
+    }));
 
     logger.info('OpenRouter client initialized successfully', { 
       siteUrl, 
