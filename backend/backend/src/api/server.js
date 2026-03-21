@@ -65,20 +65,32 @@ if (process.env.PHOENIX_COLLECTOR_ENDPOINT) {
   try {
     const { createProxyMiddleware } = await import('http-proxy-middleware');
     const phoenixTarget = process.env.PHOENIX_COLLECTOR_ENDPOINT;
+    const phoenixErrorHandler = {
+      error: (err, req, res) => {
+        logger.warn('Phoenix proxy error', { error: err.message });
+        if (res.writeHead) {
+          res.writeHead(502).end('Phoenix is not available yet.');
+        }
+      }
+    };
+
     app.use('/phoenix', createProxyMiddleware({
       target: phoenixTarget,
       changeOrigin: true,
       pathRewrite: { '^/phoenix': '' },
       ws: true,
-      on: {
-        error: (err, req, res) => {
-          logger.warn('Phoenix proxy error', { error: err.message });
-          if (res.writeHead) {
-            res.writeHead(502).end('Phoenix is not available yet.');
-          }
-        }
-      }
+      on: phoenixErrorHandler
     }));
+
+    const phoenixAssetProxy = createProxyMiddleware({
+      target: phoenixTarget,
+      changeOrigin: true,
+      on: phoenixErrorHandler
+    });
+    app.use('/assets', phoenixAssetProxy);
+    app.use('/v1', phoenixAssetProxy);
+    app.use('/__generated', phoenixAssetProxy);
+
     logger.info(`Phoenix UI proxied at /phoenix/ → ${phoenixTarget}`);
   } catch (e) {
     logger.warn('Phoenix proxy not available, skipping', { error: e.message });
