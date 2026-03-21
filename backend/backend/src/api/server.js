@@ -67,13 +67,6 @@ if (process.env.PHOENIX_COLLECTOR_ENDPOINT) {
       on: phoenixErrorHandler
     }));
 
-    app.use(createProxyMiddleware({
-      target: phoenixTarget,
-      changeOrigin: true,
-      pathFilter: ['/assets/**', '/v1/**', '/__generated/**'],
-      on: phoenixErrorHandler
-    }));
-
     logger.info(`Phoenix UI proxied at /phoenix/ → ${phoenixTarget}`);
   } catch (e) {
     logger.warn('Phoenix proxy not available, skipping', { error: e.message });

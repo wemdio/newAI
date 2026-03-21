@@ -99,4 +99,6 @@ services:
 
   phoenix:
     image: arizephoenix/phoenix:latest
+    environment:
+      PHOENIX_HOST_ROOT_PATH: /phoenix
     restart: always
