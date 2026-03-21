@@ -1,7 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import { createProxyMiddleware } from 'http-proxy-middleware';
 import { initializeDatabase, healthCheck as dbHealthCheck } from '../config/database.js';
 import { healthCheck as openrouterHealthCheck } from '../config/openrouter.js';
 import { healthCheck as telegramHealthCheck } from '../config/telegram.js';
@@ -63,22 +62,27 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Phoenix AI Observability proxy — serves UI at /phoenix/
 if (process.env.PHOENIX_COLLECTOR_ENDPOINT) {
-  const phoenixTarget = process.env.PHOENIX_COLLECTOR_ENDPOINT;
-  app.use('/phoenix', createProxyMiddleware({
-    target: phoenixTarget,
-    changeOrigin: true,
-    pathRewrite: { '^/phoenix': '' },
-    ws: true,
-    on: {
-      error: (err, req, res) => {
-        logger.warn('Phoenix proxy error (UI may be starting up)', { error: err.message });
-        if (res.writeHead) {
-          res.writeHead(502).end('Phoenix is not available yet. Try again in a few seconds.');
+  try {
+    const { createProxyMiddleware } = await import('http-proxy-middleware');
+    const phoenixTarget = process.env.PHOENIX_COLLECTOR_ENDPOINT;
+    app.use('/phoenix', createProxyMiddleware({
+      target: phoenixTarget,
+      changeOrigin: true,
+      pathRewrite: { '^/phoenix': '' },
+      ws: true,
+      on: {
+        error: (err, req, res) => {
+          logger.warn('Phoenix proxy error', { error: err.message });
+          if (res.writeHead) {
+            res.writeHead(502).end('Phoenix is not available yet.');
+          }
         }
       }
-    }
-  }));
-  logger.info(`Phoenix UI proxied at /phoenix/ → ${phoenixTarget}`);
+    }));
+    logger.info(`Phoenix UI proxied at /phoenix/ → ${phoenixTarget}`);
+  } catch (e) {
+    logger.warn('Phoenix proxy not available, skipping', { error: e.message });
+  }
 }
 
 // Request logging
