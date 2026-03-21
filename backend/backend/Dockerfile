@@ -23,4 +23,4 @@ EXPOSE 3000
 ENV NODE_ENV=production
 
 # Start the application
-CMD ["node", "src/index.js"]
+CMD ["node", "--import", "./src/tracing.js", "src/index.js"]

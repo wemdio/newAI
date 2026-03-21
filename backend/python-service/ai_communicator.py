@@ -5,6 +5,7 @@ import json
 import re
 from typing import List, Dict, Tuple
 from config import AI_MODEL
+from tracing import trace_llm_call
 
 
 class AICommunicator:
@@ -232,39 +233,43 @@ Username: @{username}
         
         url = os.getenv('OPENROUTER_BASE_URL', 'https://router.requesty.ai/v1') + '/chat/completions'
         
-        # Build messages array
         messages = [{'role': 'system', 'content': system_prompt}]
         messages.extend(conversation_history)
         
         headers = {
             'Authorization': f'Bearer {self.openrouter_api_key}',
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'https://github.com/your-repo',  # Optional
-            'X-Title': 'AI Lead Messenger'  # Optional
+            'HTTP-Referer': 'https://github.com/your-repo',
+            'X-Title': 'AI Lead Messenger'
         }
         
         payload = {
             'model': AI_MODEL,
             'messages': messages,
             'temperature': 0.7,
-            'max_tokens': 4000  # Increased to 4000 to accommodate deep reasoning + long history analysis
+            'max_tokens': 4000
         }
         
-        async with aiohttp.ClientSession() as session:
-            async with session.post(url, json=payload, headers=headers) as resp:
-                if resp.status == 200:
-                    data = await resp.json()
-                    response_text = data['choices'][0]['message']['content']
-                    
-                    # Filter out reasoning patterns before returning
-                    cleaned_response = self._filter_reasoning(response_text)
-                    
-                    # Log if reasoning was filtered
-                    if len(cleaned_response) < len(response_text):
-                        print(f"⚠️ Filtered out {len(response_text) - len(cleaned_response)} chars of reasoning")
-                    
-                    return cleaned_response
-                else:
-                    error_text = await resp.text()
-                    raise Exception(f"OpenRouter API error {resp.status}: {error_text}")
+        with trace_llm_call("ai_communicator", AI_MODEL, system_prompt) as set_output:
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json=payload, headers=headers) as resp:
+                    if resp.status == 200:
+                        data = await resp.json()
+                        response_text = data['choices'][0]['message']['content']
+                        cleaned_response = self._filter_reasoning(response_text)
+                        
+                        usage = data.get('usage', {})
+                        set_output(
+                            output=cleaned_response,
+                            token_total=usage.get('total_tokens', 0)
+                        )
+                        
+                        if len(cleaned_response) < len(response_text):
+                            print(f"⚠️ Filtered out {len(response_text) - len(cleaned_response)} chars of reasoning")
+                        
+                        return cleaned_response
+                    else:
+                        error_text = await resp.text()
+                        set_output(error=f"HTTP {resp.status}: {error_text[:200]}")
+                        raise Exception(f"OpenRouter API error {resp.status}: {error_text}")
 

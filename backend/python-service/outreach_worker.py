@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 import httpx
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
+from tracing import trace_llm_call
 
 from config import LOG_LEVEL, SUPABASE_URL, SUPABASE_KEY, setup_logger
 
@@ -548,40 +549,47 @@ class AIHandler:
         
         messages = [{"role": "system", "content": prompt}]
         
-        # Add conversation history
         for msg in conversation_history[-max(1, history_limit):]:
             role = 'assistant' if msg['sender'] == 'me' else 'user'
             messages.append({"role": role, "content": msg['content']})
         
-        # Add incoming message
         messages.append({"role": "user", "content": incoming_message})
         
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(
-                    self.base_url,
-                    headers={
-                        'Authorization': f'Bearer {self.api_key}',
-                        'Content-Type': 'application/json'
-                    },
-                    json={
-                        'model': self.model,
-                        'messages': messages,
-                        'max_tokens': 500,
-                        'temperature': 0.7
-                    }
-                )
-                
-                if response.status_code == 200:
-                    data = response.json()
-                    return data['choices'][0]['message']['content']
-                else:
-                    logger.error(f"OpenRouter error: {response.status_code} - {response.text}")
-                    return None
+        with trace_llm_call("outreach_ai", self.model, prompt) as set_output:
+            try:
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        self.base_url,
+                        headers={
+                            'Authorization': f'Bearer {self.api_key}',
+                            'Content-Type': 'application/json'
+                        },
+                        json={
+                            'model': self.model,
+                            'messages': messages,
+                            'max_tokens': 500,
+                            'temperature': 0.7
+                        }
+                    )
                     
-        except Exception as e:
-            logger.error(f"AI generation error: {e}")
-            return None
+                    if response.status_code == 200:
+                        data = response.json()
+                        content = data['choices'][0]['message']['content']
+                        usage = data.get('usage', {})
+                        set_output(
+                            output=content,
+                            token_total=usage.get('total_tokens', 0)
+                        )
+                        return content
+                    else:
+                        set_output(error=f"HTTP {response.status_code}")
+                        logger.error(f"OpenRouter error: {response.status_code} - {response.text}")
+                        return None
+                        
+            except Exception as e:
+                set_output(error=str(e))
+                logger.error(f"AI generation error: {e}")
+                return None
 
 
 class TelegramHandler:

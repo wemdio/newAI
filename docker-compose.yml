@@ -1,10 +1,22 @@
 services:
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    ports:
+      - "6006:6006"
+    environment:
+      PHOENIX_WORKING_DIR: /data
+    volumes:
+      - phoenix_data:/data
+    restart: always
+
   api:
     build:
       context: ./backend/backend
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
+    depends_on:
+      - phoenix
     environment:
       PORT: "3000"
       NODE_ENV: production
@@ -18,18 +30,20 @@ services:
       BATCH_SIZE:
       AI_CONCURRENCY: "5"
       OPENROUTER_BASE_URL: https://router.requesty.ai/v1
-      # OpenRouter headers
       YOUR_SITE_URL:
       YOUR_SITE_NAME: Telegram Lead Scanner
       AI_MODEL: policy/lead-analysis
       CATEGORY_API_KEY:
       CATEGORY_API_KEY_2:
+      PHOENIX_COLLECTOR_ENDPOINT: http://phoenix:6006
     restart: always
 
   worker:
     build:
       context: ./backend/python-service
       dockerfile: Dockerfile
+    depends_on:
+      - phoenix
     environment:
       PYTHONUTF8: "1"
       PYTHONIOENCODING: utf-8
@@ -40,6 +54,7 @@ services:
       SUPABASE_SERVICE_ROLE_KEY:
       TELEGRAM_BOT_TOKEN:
       OPENROUTER_BASE_URL: https://router.requesty.ai/v1
+      PHOENIX_COLLECTOR_ENDPOINT: http://phoenix:6006
     restart: always
 
   outreach-worker:
@@ -47,6 +62,8 @@ services:
       context: ./backend/python-service
       dockerfile: Dockerfile
     command: ["python", "-u", "outreach_worker.py"]
+    depends_on:
+      - phoenix
     environment:
       PYTHONUTF8: "1"
       PYTHONIOENCODING: utf-8
@@ -57,6 +74,7 @@ services:
       SUPABASE_SERVICE_ROLE_KEY:
       TELEGRAM_BOT_TOKEN:
       OPENROUTER_BASE_URL: https://router.requesty.ai/v1
+      PHOENIX_COLLECTOR_ENDPOINT: http://phoenix:6006
     restart: always
 
   leadbot:
@@ -88,3 +106,6 @@ services:
       LEADBOT_YOOKASSA_RECEIPT_TAX_SYSTEM_CODE:
       LEADBOT_LOG_LEVEL:
     restart: always
+
+volumes:
+  phoenix_data:
