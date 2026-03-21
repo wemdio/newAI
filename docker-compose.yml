@@ -3,10 +3,6 @@ services:
     image: arizephoenix/phoenix:latest
     ports:
       - "6006:6006"
-    environment:
-      PHOENIX_WORKING_DIR: /data
-    volumes:
-      - phoenix_data:/data
     restart: always
 
   api:
@@ -106,6 +102,3 @@ services:
       LEADBOT_YOOKASSA_RECEIPT_TAX_SYSTEM_CODE:
       LEADBOT_LOG_LEVEL:
     restart: always
-
-volumes:
-  phoenix_data:
