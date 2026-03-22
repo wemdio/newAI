@@ -90,7 +90,8 @@ const REQUEST_MARKER_PATTERNS = [
 ];
 
 let isRunning = false;
-let intervalHandle = null;
+let scheduledTimer = null;
+let isProcessingCycle = false;
 let lastProcessedId = null;
 let startedAt = null;
 let stats = { cycles: 0, messagesScanned: 0, leadsFound: 0, errors: 0 };
@@ -335,7 +336,19 @@ const saveClassifiedLeads = async (messages, results) => {
   return savedCount;
 };
 
+const scheduleNextCycle = () => {
+  if (!isRunning) return;
+  scheduledTimer = setTimeout(processCycle, BATCH_INTERVAL);
+};
+
 const processCycle = async () => {
+  if (isProcessingCycle) {
+    logger.warn('[CategoryClassifier] Previous cycle still running, skipping');
+    scheduleNextCycle();
+    return;
+  }
+
+  isProcessingCycle = true;
   try {
     const enabled = await isClassifierEnabled();
     if (!enabled) {
@@ -409,6 +422,9 @@ const processCycle = async () => {
   } catch (err) {
     logger.error('[CategoryClassifier] Cycle error', { error: err.message, stack: err.stack });
     stats.errors++;
+  } finally {
+    isProcessingCycle = false;
+    scheduleNextCycle();
   }
 };
 
@@ -421,22 +437,23 @@ export const startCategoryClassifier = async () => {
   isRunning = true;
   startedAt = new Date().toISOString();
   lastProcessedId = null;
+  isProcessingCycle = false;
   stats = { cycles: 0, messagesScanned: 0, leadsFound: 0, errors: 0 };
 
   logger.info('[CategoryClassifier] Starting', { interval: BATCH_INTERVAL });
 
-  intervalHandle = setInterval(processCycle, BATCH_INTERVAL);
+  scheduleNextCycle();
 
   return { success: true, message: 'Category classifier started' };
 };
 
 export const stopCategoryClassifier = () => {
   if (!isRunning) return;
-  if (intervalHandle) {
-    clearInterval(intervalHandle);
-    intervalHandle = null;
-  }
   isRunning = false;
+  if (scheduledTimer) {
+    clearTimeout(scheduledTimer);
+    scheduledTimer = null;
+  }
   startedAt = null;
   logger.info('[CategoryClassifier] Stopped');
   return { success: true, message: 'Category classifier stopped' };

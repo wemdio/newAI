@@ -119,6 +119,10 @@ export const retryWithBackoff = async (
         logger.warn('Rate limited (429) — not retrying, will wait for next cycle');
         throw error;
       }
+      if (status === 401 || status === 403) {
+        logger.warn(`Auth error (${status}) — not retrying (bad key or forbidden model)`);
+        throw error;
+      }
 
       if (i < maxRetries - 1) {
         const delay = Math.min(initialDelay * Math.pow(2, i), maxDelay);
