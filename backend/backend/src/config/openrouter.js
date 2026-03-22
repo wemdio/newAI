@@ -33,6 +33,21 @@ function _wrapClient(client) {
         span.setAttribute('llm.token_count.completion', res.usage.completion_tokens || 0);
         span.setAttribute('llm.token_count.total', res.usage.total_tokens || 0);
       }
+
+      if (params.response_format?.type === 'json_object' || content.trimStart().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(content);
+          span.setAttribute('eval.valid_json', true);
+          const required = ['is_lead', 'confidence', 'reasoning'];
+          const present = required.filter(f => parsed[f] !== undefined);
+          span.setAttribute('eval.has_required_fields', present.length === required.length);
+          span.setAttribute('eval.missing_fields', required.filter(f => parsed[f] === undefined).join(',') || '');
+        } catch {
+          span.setAttribute('eval.valid_json', false);
+          span.setAttribute('eval.has_required_fields', false);
+        }
+      }
+
       span.end();
       return res;
     } catch (e) {

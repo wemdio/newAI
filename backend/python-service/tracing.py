@@ -4,6 +4,7 @@ Gracefully degrades: if PHOENIX_COLLECTOR_ENDPOINT is not set
 or packages are missing, returns a no-op context manager.
 """
 
+import json
 import os
 from contextlib import contextmanager
 
@@ -43,6 +44,24 @@ def _init():
 
 _init()
 
+_REQUIRED_FIELDS = ("is_lead", "confidence", "reasoning")
+
+
+def _run_code_evals(span, output: str):
+    """Attach eval.valid_json and eval.has_required_fields to the span."""
+    text = output.strip()
+    if not text.startswith("{"):
+        return
+    try:
+        parsed = json.loads(text)
+        span.set_attribute("eval.valid_json", True)
+        missing = [f for f in _REQUIRED_FIELDS if f not in parsed]
+        span.set_attribute("eval.has_required_fields", len(missing) == 0)
+        span.set_attribute("eval.missing_fields", ",".join(missing))
+    except (json.JSONDecodeError, TypeError):
+        span.set_attribute("eval.valid_json", False)
+        span.set_attribute("eval.has_required_fields", False)
+
 
 @contextmanager
 def trace_llm_call(name: str, model: str, input_text: str = ""):
@@ -66,6 +85,7 @@ def trace_llm_call(name: str, model: str, input_text: str = ""):
         def set_output(output: str = "", token_total: int = 0, error: str = ""):
             if output:
                 span.set_attribute("output.value", output[:4000])
+                _run_code_evals(span, output)
             if token_total:
                 span.set_attribute("llm.token_count.total", token_total)
             if error:
