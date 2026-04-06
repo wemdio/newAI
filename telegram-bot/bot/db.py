@@ -118,6 +118,33 @@ class Database:
             user_id,
         )
 
+    async def save_referral(self, user_id: int, referrer_id: int) -> bool:
+        row = await self._pool().fetchrow(
+            f"""
+            UPDATE {SCHEMA}.users
+            SET referred_by = $1
+            WHERE id = $2 AND referred_by IS NULL AND id != $1
+            RETURNING id
+            """,
+            referrer_id,
+            user_id,
+        )
+        return row is not None
+
+    async def add_referral_bonus(self, referrer_id: int, bonus: int = 10) -> int:
+        result = await self._pool().fetchval(
+            f"""
+            UPDATE {SCHEMA}.user_category_state
+            SET free_leads_total = free_leads_total + $1, updated_at = $2
+            WHERE user_id = $3
+            RETURNING user_id
+            """,
+            bonus,
+            iso_now(),
+            referrer_id,
+        )
+        return bonus if result is not None else 0
+
     async def ensure_user_category_state(
         self, user_id: int, category_id: int, free_total: int
     ) -> asyncpg.Record:

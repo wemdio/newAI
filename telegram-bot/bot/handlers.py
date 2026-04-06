@@ -37,20 +37,49 @@ from .texts import (
     free_ended_text,
     grant_message,
     help_text,
+    invite_link_text,
     my_subscriptions_text,
     payment_link_text,
     payment_pending_text,
+    referral_bonus_text,
 )
 from .utils import extract_contact_url, is_contact_hidden, iso_now, now_utc, parse_iso
 
 router = Router()
 
 
+REFERRAL_BONUS_LEADS = 10
+
+
 @router.message(CommandStart())
 async def cmd_start(message: Message, db: Database, config: Config) -> None:
-    await db.ensure_user(message.from_user.id, message.from_user.username)
+    user_id = await db.ensure_user(message.from_user.id, message.from_user.username)
     await message.answer(START_TEXT, reply_markup=start_keyboard())
     await message.answer("Меню", reply_markup=main_menu_keyboard())
+
+    args = (message.text or "").split(maxsplit=1)
+    if len(args) > 1 and args[1].startswith("ref_"):
+        try:
+            referrer_telegram_id = int(args[1][4:])
+        except ValueError:
+            return
+        if referrer_telegram_id == message.from_user.id:
+            return
+        referrer_row = await db.get_user_by_telegram_id(referrer_telegram_id)
+        if not referrer_row:
+            return
+        referrer_id = int(referrer_row["id"])
+        saved = await db.save_referral(user_id, referrer_id)
+        if not saved:
+            return
+        await db.add_referral_bonus(referrer_id, REFERRAL_BONUS_LEADS)
+        try:
+            await message.bot.send_message(
+                referrer_telegram_id,
+                referral_bonus_text(message.from_user.username),
+            )
+        except Exception as exc:
+            logging.warning("Failed to notify referrer %s: %s", referrer_telegram_id, exc)
 
 
 @router.message(Command("categories"))
@@ -68,6 +97,14 @@ async def cb_categories(query: CallbackQuery, config: Config) -> None:
         categories_text(config.subscription_price_rub),
         reply_markup=categories_keyboard(),
     )
+    await query.answer()
+
+
+@router.callback_query(F.data == "invite_friend")
+async def cb_invite_friend(query: CallbackQuery) -> None:
+    bot_user = await query.bot.get_me()
+    link = f"https://t.me/{bot_user.username}?start=ref_{query.from_user.id}"
+    await query.message.answer(invite_link_text(link))
     await query.answer()
 
 

@@ -65,6 +65,7 @@ def pay_required_keyboard(category_id: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="Купить подписку", callback_data=f"buy:{category_id}")],
+            [InlineKeyboardButton(text="Позвать друга (+10 лидов)", callback_data="invite_friend")],
             [InlineKeyboardButton(text="Выбрать другую категорию", callback_data="categories")],
         ]
     )
