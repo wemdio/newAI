@@ -8,15 +8,15 @@ from aiogram.types import (
 from .constants import CATEGORIES
 
 
-def main_menu_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="Категории")],
-            [KeyboardButton(text="Мои подписки")],
-            [KeyboardButton(text="Помощь")],
-        ],
-        resize_keyboard=True,
-    )
+def main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
+    rows = [
+        [KeyboardButton(text="Категории")],
+        [KeyboardButton(text="Мои подписки")],
+        [KeyboardButton(text="Помощь")],
+    ]
+    if is_admin:
+        rows.append([KeyboardButton(text="Статистика")])
+    return ReplyKeyboardMarkup(keyboard=rows, resize_keyboard=True)
 
 
 def start_keyboard() -> InlineKeyboardMarkup:

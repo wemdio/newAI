@@ -696,6 +696,48 @@ class Database:
         )
         return int(lead_id) if lead_id is not None else None
 
+    async def get_admin_stats(self) -> dict:
+        pool = self._pool()
+        counts = await pool.fetchrow(f"""
+            SELECT
+                (SELECT COUNT(*) FROM {SCHEMA}.users) AS total_users,
+                (SELECT COUNT(DISTINCT user_id) FROM {SCHEMA}.user_category_state WHERE free_started = TRUE) AS activated_free,
+                (SELECT COUNT(DISTINCT s.user_id) FROM {SCHEMA}.subscriptions s WHERE s.status = 'active' AND s.end_date::timestamptz > NOW()) AS active_subs,
+                (SELECT COUNT(*) FROM {SCHEMA}.users WHERE referred_by IS NOT NULL) AS total_referrals
+        """)
+        active_users = await pool.fetch(f"""
+            SELECT u.username, u.telegram_id, s.grant_type
+            FROM {SCHEMA}.subscriptions s
+            JOIN {SCHEMA}.users u ON u.id = s.user_id
+            WHERE s.status = 'active' AND s.end_date::timestamptz > NOW()
+            GROUP BY u.username, u.telegram_id, s.grant_type
+            ORDER BY s.grant_type
+        """)
+        payments = await pool.fetch(f"""
+            SELECT p.status, u.username, p.amount_rub, p.kind, p.created_at
+            FROM {SCHEMA}.payments p
+            JOIN {SCHEMA}.users u ON u.id = p.user_id
+            ORDER BY p.created_at DESC
+            LIMIT 10
+        """)
+        top_referrers = await pool.fetch(f"""
+            SELECT r.telegram_id, r.username, COUNT(*) AS ref_count
+            FROM {SCHEMA}.users u
+            JOIN {SCHEMA}.users r ON r.id = u.referred_by
+            GROUP BY r.telegram_id, r.username
+            ORDER BY ref_count DESC
+            LIMIT 5
+        """)
+        return {
+            "total_users": counts["total_users"],
+            "activated_free": counts["activated_free"],
+            "active_subs": counts["active_subs"],
+            "total_referrals": counts["total_referrals"],
+            "active_users": [dict(r) for r in active_users],
+            "payments": [dict(r) for r in payments],
+            "top_referrers": [dict(r) for r in top_referrers],
+        }
+
     async def is_leadbot_enabled(self) -> bool:
         pool = self._pool()
         try:

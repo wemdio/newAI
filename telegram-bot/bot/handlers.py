@@ -30,6 +30,7 @@ from .subscriptions import activate_subscription
 from .leads import LeadService
 from .texts import (
     START_TEXT,
+    admin_stats_text,
     autorenew_disabled_text,
     autorenew_enabled_text,
     category_text,
@@ -54,8 +55,9 @@ REFERRAL_BONUS_LEADS = 10
 @router.message(CommandStart())
 async def cmd_start(message: Message, db: Database, config: Config) -> None:
     user_id = await db.ensure_user(message.from_user.id, message.from_user.username)
+    is_admin = message.from_user.id in config.admin_ids
     await message.answer(START_TEXT, reply_markup=start_keyboard())
-    await message.answer("Меню", reply_markup=main_menu_keyboard())
+    await message.answer("Меню", reply_markup=main_menu_keyboard(is_admin))
 
     args = (message.text or "").split(maxsplit=1)
     if len(args) > 1 and args[1].startswith("ref_"):
@@ -482,6 +484,15 @@ async def cmd_pay(message: Message, config: Config) -> None:
 @router.message(F.text == "Помощь")
 async def cmd_help(message: Message, config: Config) -> None:
     await message.answer(help_text(config.subscription_price_rub))
+
+
+@router.message(Command("stats"))
+@router.message(F.text == "Статистика")
+async def cmd_stats(message: Message, db: Database, config: Config) -> None:
+    if message.from_user.id not in config.admin_ids:
+        return
+    stats = await db.get_admin_stats()
+    await message.answer(admin_stats_text(stats))
 
 
 @router.message(Command("grant"))
