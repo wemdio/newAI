@@ -74,7 +74,7 @@ async def _deliver_lead_to_category(bot: Bot, db: Database, config: Config, lead
             continue
         show_contact = _should_show_contact(row, now)
         text = format_lead_text(lead, category, show_contact)
-        reply_markup = _build_lead_keyboard(lead, category_id=lead.category_id, show_contact=show_contact, price_rub=config.subscription_price_rub)
+        reply_markup = _build_lead_keyboard(lead, category_id=lead.category_id, show_contact=show_contact, price_rub=config.contact_price_rub)
         try:
             await bot.send_message(telegram_id, text, reply_markup=reply_markup)
         except Exception as exc:

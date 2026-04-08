@@ -48,6 +48,7 @@ class Config:
     leads_send_interval_seconds: int
     free_leads_total: int
     subscription_price_rub: int
+    contact_price_rub: int
     subscription_duration_days: int
     subscription_auto_renew_default: bool
     subscription_renew_before_days: int
@@ -119,6 +120,7 @@ def load_config() -> Config:
     )
     free_leads_total = _parse_int(_getenv("FREE_LEADS_TOTAL", "LEADBOT_FREE_LEADS", "10"), 10)
     subscription_price_rub = _parse_int(_getenv("SUBSCRIPTION_PRICE_RUB", "LEADBOT_PRICE_RUB", "990"), 990)
+    contact_price_rub = _parse_int(_getenv("CONTACT_PRICE_RUB", "LEADBOT_CONTACT_PRICE_RUB", "90"), 90)
     subscription_duration_days = _parse_int(
         _getenv("SUBSCRIPTION_DURATION_DAYS", "LEADBOT_DURATION_DAYS", "30"), 30
     )
@@ -160,6 +162,7 @@ def load_config() -> Config:
         leads_send_interval_seconds=leads_send_interval_seconds,
         free_leads_total=free_leads_total,
         subscription_price_rub=subscription_price_rub,
+        contact_price_rub=contact_price_rub,
         subscription_duration_days=subscription_duration_days,
         subscription_auto_renew_default=subscription_auto_renew_default,
         subscription_renew_before_days=subscription_renew_before_days,

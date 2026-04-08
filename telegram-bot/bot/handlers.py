@@ -234,7 +234,7 @@ async def cb_buy_contact(
             config=config,
             user_id=user_id,
             category_id=category_id,
-            amount_rub=config.subscription_price_rub,
+            amount_rub=config.contact_price_rub,
             kind="contact",
             lead_id=lead_id,
         )
@@ -627,7 +627,7 @@ async def _send_next_lead(
         contact_url = extract_contact_url(lead.contact)
         reply_markup = lead_actions_keyboard(category_id, contact_url)
     else:
-        reply_markup = pay_contact_keyboard(category_id, lead.lead_id, config.subscription_price_rub)
+        reply_markup = pay_contact_keyboard(category_id, lead.lead_id, config.contact_price_rub)
     await message.answer(text, reply_markup=reply_markup)
     inserted = await db.mark_sent_lead(user_id, category_id, lead.lead_id)
     if inserted and show_contact and not _subscription_active(subscription):
