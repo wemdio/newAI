@@ -110,6 +110,13 @@ async def cb_invite_friend(query: CallbackQuery) -> None:
     await query.answer()
 
 
+@router.message(F.text == "Позвать друга")
+async def msg_invite_friend(message: Message) -> None:
+    bot_user = await message.bot.get_me()
+    link = f"https://t.me/{bot_user.username}?start=ref_{message.from_user.id}"
+    await message.answer(invite_link_text(link))
+
+
 @router.callback_query(F.data.startswith("cat:"))
 async def cb_category(query: CallbackQuery, db: Database, config: Config) -> None:
     category_id = int(query.data.split(":", 1)[1])
