@@ -32,7 +32,7 @@ class Database:
         connect_args = {
             "dsn": dsn,
             "min_size": 1,
-            "max_size": 5,
+            "max_size": 2,
             "command_timeout": 60,
             "statement_cache_size": 0,
             "init": self._init_connection,
