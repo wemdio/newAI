@@ -19,11 +19,17 @@ MISSING_SCHEMA_ERROR = (
 )
 
 
+SINGLETON_LOCK_KEY = 0x1EAD_B07
+
+log = logging.getLogger(__name__)
+
+
 class Database:
     def __init__(self, dsn: str, ssl_insecure: bool = False) -> None:
         self.dsn = dsn
         self.ssl_insecure = ssl_insecure
         self.pool: Optional[asyncpg.Pool] = None
+        self._lock_conn: Optional[asyncpg.Connection] = None
 
     async def connect(self) -> None:
         if not self.dsn:
@@ -47,7 +53,42 @@ class Database:
                 connect_args["ssl"] = True
         self.pool = await asyncpg.create_pool(**connect_args)
 
+    async def try_acquire_singleton_lock(self) -> bool:
+        """Acquire a PostgreSQL advisory lock so only one bot instance polls.
+
+        Uses a dedicated connection (outside the pool) so the lock lives
+        for the entire process lifetime and is auto-released on crash.
+        """
+        dsn, ssl_mode = self._normalize_dsn(self.dsn)
+        connect_kw: dict = {"dsn": dsn, "timeout": 10}
+        if ssl_mode and ssl_mode != "disable":
+            if self.ssl_insecure or ssl_mode == "require":
+                connect_kw["ssl"] = self._build_ssl_context()
+            else:
+                connect_kw["ssl"] = True
+
+        try:
+            conn = await asyncpg.connect(**connect_kw)
+            acquired = await conn.fetchval(
+                "SELECT pg_try_advisory_lock($1)", SINGLETON_LOCK_KEY
+            )
+            if acquired:
+                self._lock_conn = conn
+                log.info("Singleton lock acquired — this instance will poll.")
+                return True
+            await conn.close()
+            return False
+        except Exception as exc:
+            log.warning("Failed to acquire singleton lock: %s", exc)
+            return False
+
     async def close(self) -> None:
+        if self._lock_conn:
+            try:
+                await self._lock_conn.close()
+            except Exception:
+                pass
+            self._lock_conn = None
         if self.pool:
             await self.pool.close()
             self.pool = None

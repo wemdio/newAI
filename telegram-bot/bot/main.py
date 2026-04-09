@@ -28,6 +28,7 @@ async def main() -> None:
     load_dotenv()
     config = load_config()
     _setup_logging(config.log_level)
+    logger = logging.getLogger(__name__)
 
     if not config.supabase_dsn:
         raise RuntimeError(
@@ -39,14 +40,21 @@ async def main() -> None:
     await db.connect()
     await db.init_db()
 
+    # ── singleton guard: only one bot instance may poll Telegram ──
+    while True:
+        if await db.try_acquire_singleton_lock():
+            break
+        logger.warning("Another bot instance holds the lock — retrying in 15 s …")
+        await asyncio.sleep(15)
+
     leads = LeadService(db, config)
     await leads.start()
     supabase = SupabaseImporter(db, config)
     payments = PaymentService(config)
 
     bot = Bot(token=config.bot_token, default=DefaultBotProperties())
-    dispatcher = Dispatcher()
-    dispatcher.include_router(router)
+    dp = Dispatcher()
+    dp.include_router(router)
 
     poller_task: asyncio.Task | None = None
     supabase_task: asyncio.Task | None = None
@@ -83,10 +91,10 @@ async def main() -> None:
         await payments.close()
         await db.close()
 
-    dispatcher.startup.register(on_startup)
-    dispatcher.shutdown.register(on_shutdown)
+    dp.startup.register(on_startup)
+    dp.shutdown.register(on_shutdown)
 
-    await dispatcher.start_polling(bot, db=db, config=config, leads=leads, payments=payments)
+    await dp.start_polling(bot, db=db, config=config, leads=leads, payments=payments)
 
 
 if __name__ == "__main__":
