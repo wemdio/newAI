@@ -9,7 +9,7 @@ from aiogram.client.default import DefaultBotProperties
 from dotenv import load_dotenv
 
 from .config import load_config
-from .db import Database
+from .db import Database, LOCK_REFRESH_SECONDS
 from .handlers import router
 from .leads import LeadService
 from .payments import PaymentService
@@ -56,36 +56,27 @@ async def main() -> None:
     dp = Dispatcher()
     dp.include_router(router)
 
-    poller_task: asyncio.Task | None = None
-    supabase_task: asyncio.Task | None = None
-    payments_task: asyncio.Task | None = None
-    renewal_task: asyncio.Task | None = None
+    async def _refresh_lock_loop() -> None:
+        while True:
+            await asyncio.sleep(LOCK_REFRESH_SECONDS)
+            if not await db.refresh_singleton_lock():
+                logger.error("Lost singleton lock! Another instance took over.")
+
+    bg_tasks: list[asyncio.Task] = []
 
     async def on_startup() -> None:
-        nonlocal poller_task, supabase_task, payments_task, renewal_task
-        poller_task = asyncio.create_task(start_lead_polling(bot, db, leads, config))
-        supabase_task = asyncio.create_task(supabase.run())
+        bg_tasks.append(asyncio.create_task(_refresh_lock_loop()))
+        bg_tasks.append(asyncio.create_task(start_lead_polling(bot, db, leads, config)))
+        bg_tasks.append(asyncio.create_task(supabase.run()))
         if payments.enabled:
-            payments_task = asyncio.create_task(start_payment_polling(bot, db, payments, config, leads))
-            renewal_task = asyncio.create_task(start_subscription_renewal(bot, db, payments, config))
+            bg_tasks.append(asyncio.create_task(start_payment_polling(bot, db, payments, config, leads)))
+            bg_tasks.append(asyncio.create_task(start_subscription_renewal(bot, db, payments, config)))
 
     async def on_shutdown() -> None:
-        if poller_task:
-            poller_task.cancel()
+        for t in bg_tasks:
+            t.cancel()
             with contextlib.suppress(asyncio.CancelledError):
-                await poller_task
-        if supabase_task:
-            supabase_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await supabase_task
-        if payments_task:
-            payments_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await payments_task
-        if renewal_task:
-            renewal_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await renewal_task
+                await t
         await supabase.close()
         await leads.close()
         await payments.close()

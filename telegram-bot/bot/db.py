@@ -5,6 +5,8 @@ import ssl
 from typing import Iterable, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+import uuid
+
 import asyncpg
 
 from .constants import CATEGORIES, Category
@@ -14,12 +16,12 @@ from .utils import iso_now, now_utc
 
 _UNSET = object()
 SCHEMA = "leadbot"
+LOCK_TABLE = f"{SCHEMA}.singleton_lock"
+LOCK_EXPIRY_SECONDS = 30
+LOCK_REFRESH_SECONDS = 10
 MISSING_SCHEMA_ERROR = (
     "Leadbot tables are missing in Supabase. Apply the leadbot Postgres migration before starting the bot."
 )
-
-
-SINGLETON_LOCK_KEY = 0x1EAD_B07
 
 log = logging.getLogger(__name__)
 
@@ -29,7 +31,7 @@ class Database:
         self.dsn = dsn
         self.ssl_insecure = ssl_insecure
         self.pool: Optional[asyncpg.Pool] = None
-        self._lock_conn: Optional[asyncpg.Connection] = None
+        self._lock_instance_id: str = uuid.uuid4().hex[:16]
 
     async def connect(self) -> None:
         if not self.dsn:
@@ -54,42 +56,71 @@ class Database:
         self.pool = await asyncpg.create_pool(**connect_args)
 
     async def try_acquire_singleton_lock(self) -> bool:
-        """Acquire a PostgreSQL advisory lock so only one bot instance polls.
+        """Claim a row-based lock so only one bot instance polls Telegram.
 
-        Uses a dedicated connection (outside the pool) so the lock lives
-        for the entire process lifetime and is auto-released on crash.
+        Works through PgBouncer/Supavisor in any pooling mode.
+        A new instance can take over only if the current holder hasn't
+        refreshed within LOCK_EXPIRY_SECONDS.
         """
-        dsn, ssl_mode = self._normalize_dsn(self.dsn)
-        connect_kw: dict = {"dsn": dsn, "timeout": 10}
-        if ssl_mode and ssl_mode != "disable":
-            if self.ssl_insecure or ssl_mode == "require":
-                connect_kw["ssl"] = self._build_ssl_context()
-            else:
-                connect_kw["ssl"] = True
-
+        pool = self._pool()
         try:
-            conn = await asyncpg.connect(**connect_kw)
-            acquired = await conn.fetchval(
-                "SELECT pg_try_advisory_lock($1)", SINGLETON_LOCK_KEY
+            row = await pool.fetchrow(
+                f"""
+                INSERT INTO {LOCK_TABLE} (id, instance_id, locked_at)
+                VALUES (1, $1, NOW())
+                ON CONFLICT (id) DO UPDATE
+                    SET instance_id = EXCLUDED.instance_id,
+                        locked_at   = NOW()
+                    WHERE {LOCK_TABLE}.locked_at < NOW() - INTERVAL '{LOCK_EXPIRY_SECONDS} seconds'
+                RETURNING id
+                """,
+                self._lock_instance_id,
             )
-            if acquired:
-                self._lock_conn = conn
-                log.info("Singleton lock acquired — this instance will poll.")
+            if row:
+                log.info("Singleton lock ACQUIRED (instance %s)", self._lock_instance_id)
                 return True
-            await conn.close()
+            owner = await pool.fetchrow(f"SELECT instance_id FROM {LOCK_TABLE} WHERE id = 1")
+            if owner and owner["instance_id"] == self._lock_instance_id:
+                log.info("Singleton lock already held by this instance.")
+                return True
             return False
         except Exception as exc:
             log.warning("Failed to acquire singleton lock: %s", exc)
             return False
 
+    async def refresh_singleton_lock(self) -> bool:
+        """Refresh the lock timestamp so other instances know we're alive."""
+        pool = self._pool()
+        try:
+            row = await pool.fetchrow(
+                f"""
+                UPDATE {LOCK_TABLE}
+                SET locked_at = NOW()
+                WHERE id = 1 AND instance_id = $1
+                RETURNING id
+                """,
+                self._lock_instance_id,
+            )
+            return row is not None
+        except Exception as exc:
+            log.warning("Failed to refresh singleton lock: %s", exc)
+            return False
+
+    async def release_singleton_lock(self) -> None:
+        """Release the lock on graceful shutdown."""
+        pool = self._pool()
+        try:
+            await pool.execute(
+                f"DELETE FROM {LOCK_TABLE} WHERE id = 1 AND instance_id = $1",
+                self._lock_instance_id,
+            )
+            log.info("Singleton lock released.")
+        except Exception:
+            pass
+
     async def close(self) -> None:
-        if self._lock_conn:
-            try:
-                await self._lock_conn.close()
-            except Exception:
-                pass
-            self._lock_conn = None
         if self.pool:
+            await self.release_singleton_lock()
             await self.pool.close()
             self.pool = None
 
