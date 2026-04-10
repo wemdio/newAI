@@ -40,12 +40,16 @@ async def main() -> None:
     await db.connect()
     await db.init_db()
 
-    # ── singleton guard: only one bot instance may poll Telegram ──
-    while True:
+    # ── singleton guard: prefer single instance, but don't block forever ──
+    lock_acquired = False
+    for attempt in range(4):
         if await db.try_acquire_singleton_lock():
+            lock_acquired = True
             break
-        logger.warning("Another bot instance holds the lock — retrying in 15 s …")
-        await asyncio.sleep(15)
+        logger.warning("Another instance holds the lock — retry %d/3 …", attempt + 1)
+        await asyncio.sleep(10)
+    if not lock_acquired:
+        logger.warning("Could not acquire lock after retries — starting anyway.")
 
     leads = LeadService(db, config)
     await leads.start()
