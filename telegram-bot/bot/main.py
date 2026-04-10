@@ -58,15 +58,26 @@ async def main() -> None:
 
     bot = Bot(token=config.bot_token, default=DefaultBotProperties())
 
-    # Verify token before holding the lock and entering the polling loop
-    try:
-        me = await bot.get_me()
-        logger.info("Bot authenticated: @%s (id=%s)", me.username, me.id)
-    except Exception as exc:
-        logger.critical("Bot token is invalid or Telegram unreachable: %s", exc)
-        await db.release_singleton_lock()
-        await db.close()
-        raise SystemExit(1)
+    from aiogram.exceptions import TelegramUnauthorizedError
+
+    for _try in range(5):
+        try:
+            me = await bot.get_me()
+            logger.info("Bot authenticated: @%s (id=%s)", me.username, me.id)
+            break
+        except TelegramUnauthorizedError:
+            logger.critical("Bot token is INVALID — releasing lock and exiting.")
+            await db.release_singleton_lock()
+            await db.close()
+            raise SystemExit(1)
+        except Exception as exc:
+            logger.warning("bot.get_me() failed (attempt %d/5): %s", _try + 1, exc)
+            if _try == 4:
+                logger.critical("Cannot reach Telegram after 5 attempts — exiting.")
+                await db.release_singleton_lock()
+                await db.close()
+                raise SystemExit(1)
+            await asyncio.sleep(5)
 
     dp = Dispatcher()
     dp.include_router(router)
