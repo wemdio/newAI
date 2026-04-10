@@ -53,6 +53,17 @@ async def main() -> None:
     payments = PaymentService(config)
 
     bot = Bot(token=config.bot_token, default=DefaultBotProperties())
+
+    # Verify token before holding the lock and entering the polling loop
+    try:
+        me = await bot.get_me()
+        logger.info("Bot authenticated: @%s (id=%s)", me.username, me.id)
+    except Exception as exc:
+        logger.critical("Bot token is invalid or Telegram unreachable: %s", exc)
+        await db.release_singleton_lock()
+        await db.close()
+        raise SystemExit(1)
+
     dp = Dispatcher()
     dp.include_router(router)
 
