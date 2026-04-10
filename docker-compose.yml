@@ -5,8 +5,6 @@ services:
       dockerfile: Dockerfile
     expose:
       - "3000"
-    depends_on:
-      - phoenix
     environment:
       PORT: "3000"
       NODE_ENV: production
@@ -25,15 +23,12 @@ services:
       AI_MODEL: policy/lead-analysis
       CATEGORY_API_KEY:
       CATEGORY_API_KEY_2:
-      PHOENIX_COLLECTOR_ENDPOINT: http://phoenix:6006
     restart: always
 
   worker:
     build:
       context: ./backend/python-service
       dockerfile: Dockerfile
-    depends_on:
-      - phoenix
     environment:
       PYTHONUTF8: "1"
       PYTHONIOENCODING: utf-8
@@ -44,7 +39,6 @@ services:
       SUPABASE_SERVICE_ROLE_KEY:
       TELEGRAM_BOT_TOKEN:
       OPENROUTER_BASE_URL: https://router.requesty.ai/v1
-      PHOENIX_COLLECTOR_ENDPOINT: http://phoenix:6006
     restart: always
 
   outreach-worker:
@@ -52,8 +46,6 @@ services:
       context: ./backend/python-service
       dockerfile: Dockerfile
     command: ["python", "-u", "outreach_worker.py"]
-    depends_on:
-      - phoenix
     environment:
       PYTHONUTF8: "1"
       PYTHONIOENCODING: utf-8
@@ -64,7 +56,6 @@ services:
       SUPABASE_SERVICE_ROLE_KEY:
       TELEGRAM_BOT_TOKEN:
       OPENROUTER_BASE_URL: https://router.requesty.ai/v1
-      PHOENIX_COLLECTOR_ENDPOINT: http://phoenix:6006
     restart: always
 
   leadbot:
@@ -97,10 +88,4 @@ services:
       LEADBOT_YOOKASSA_RECEIPT_VAT_CODE:
       LEADBOT_YOOKASSA_RECEIPT_TAX_SYSTEM_CODE:
       LEADBOT_LOG_LEVEL:
-    restart: always
-
-  phoenix:
-    image: arizephoenix/phoenix:latest
-    environment:
-      PHOENIX_HOST_ROOT_PATH: /phoenix
     restart: always
