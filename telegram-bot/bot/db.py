@@ -486,20 +486,32 @@ class Database:
         )
         return row is not None
 
-    async def list_pending_payments(self, limit: int = 200, max_age_seconds: int = 3600) -> list[asyncpg.Record]:
-        cutoff = (now_utc() - timedelta(seconds=max_age_seconds)).isoformat()
+    async def list_pending_payments(self, limit: int = 200) -> list[asyncpg.Record]:
         return await self._pool().fetch(
             f"""
             SELECT *
             FROM {SCHEMA}.payments
             WHERE status IN ('pending', 'waiting_for_capture')
-              AND created_at >= $1
             ORDER BY created_at ASC
-            LIMIT $2
+            LIMIT $1
             """,
-            cutoff,
             limit,
         )
+
+    async def cancel_expired_payments(self, max_age_seconds: int = 7200) -> int:
+        cutoff = (now_utc() - timedelta(seconds=max_age_seconds)).isoformat()
+        result = await self._pool().execute(
+            f"""
+            UPDATE {SCHEMA}.payments
+            SET status = 'canceled', cancellation_reason = 'expired_on_confirmation'
+            WHERE status IN ('pending', 'waiting_for_capture')
+              AND paid_at IS NULL
+              AND created_at::timestamptz < $1::timestamptz
+            """,
+            cutoff,
+        )
+        count = int(result.split()[-1])
+        return count
 
     async def get_latest_pending_payment(
         self,
