@@ -5,6 +5,7 @@ import { analyzeBatch, doubleCheckLead } from './messageAnalyzer.js';
 import { saveDetectedLead } from './leadDetector.js';
 import { postLeadToChannel, markLeadAsPosted } from './telegramPoster.js';
 import { generateMessageSuggestion } from './messageSuggestion.js';
+import { isSleepTime } from '../utils/sleepWindow.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -187,6 +188,25 @@ let batchTimer = null;
 // Track last processed message ID per user to ensure all users get all messages
 let userLastProcessedIds = new Map();
 
+// Track per-user sleep state so we only log transitions (asleep<->awake), not every 5s tick
+let userSleepState = new Map();
+
+/**
+ * Determine whether AI analysis should be skipped for a user right now,
+ * based on their analysis_sleep_enabled / analysis_sleep_periods / analysis_timezone_offset
+ * config columns. Tolerant of missing/unknown values (defaults to "not sleeping").
+ */
+const isUserInAnalysisSleepWindow = (userConfig, now = new Date()) => {
+  if (!userConfig) return false;
+  if (userConfig.analysis_sleep_enabled === false) return false;
+  const periods = userConfig.analysis_sleep_periods;
+  if (!periods || (Array.isArray(periods) && periods.length === 0)) return false;
+  const tzOffset = Number.isFinite(Number(userConfig.analysis_timezone_offset))
+    ? Number(userConfig.analysis_timezone_offset)
+    : 0;
+  return isSleepTime(periods, tzOffset, now);
+};
+
 /**
  * Process messages for all active users
  * Each user tracks their own lastProcessedId to ensure they get ALL new messages
@@ -274,17 +294,52 @@ const processBatch = async () => {
           logger.debug('No new messages for user', { userId, lastProcessedId: userLastId });
           continue; // No new messages for this user
         }
-        
+
+        // ============= ANALYSIS SLEEP WINDOW =============
+        // If user is in their configured night-mode window, drop messages without
+        // calling the AI: advance the pointer to the latest fetched id so we don't
+        // accumulate a backlog, but skip analyzeBatch / doubleCheckLead /
+        // generateMessageSuggestion entirely. Token cost during sleep: 0.
+        const inSleep = isUserInAnalysisSleepWindow(userConfig);
+        const wasSleeping = userSleepState.get(userId) === true;
+
+        if (inSleep) {
+          const latestId = messages[messages.length - 1].id;
+          userLastProcessedIds.set(userId, latestId);
+
+          if (!wasSleeping) {
+            logger.info('💤 User entered analysis sleep window — dropping incoming messages', {
+              userId,
+              dropped: messages.length,
+              advancedTo: latestId,
+              periods: userConfig.analysis_sleep_periods,
+              tzOffset: userConfig.analysis_timezone_offset
+            });
+            userSleepState.set(userId, true);
+          } else {
+            logger.debug('Sleep window active, dropping messages', {
+              userId,
+              dropped: messages.length
+            });
+          }
+          continue;
+        }
+
+        if (wasSleeping) {
+          logger.info('☀️ User exited analysis sleep window — resuming AI analysis', { userId });
+          userSleepState.set(userId, false);
+        }
+
         logger.info('Processing messages for user', {
           userId,
           count: messages.length,
           fromId: userLastId,
           toId: messages[messages.length - 1].id
         });
-        
+
         // Process messages for this user BEFORE advancing the pointer
         await processMessagesForUser(messages, userConfig);
-        
+
         // Only advance after successful processing so failed messages get retried
         userLastProcessedIds.set(userId, messages[messages.length - 1].id);
         
@@ -639,7 +694,8 @@ export const startRealtimeScanner = async () => {
     
     // Clear user tracking on restart
     userLastProcessedIds.clear();
-    
+    userSleepState.clear();
+
     logger.info('Scanner initialized - each user will track their own message position');
 
     // Start processing every 5 seconds
@@ -661,6 +717,11 @@ export const startRealtimeScanner = async () => {
         // Keep only last 50 users (most recently active will be re-added)
         const entries = Array.from(userLastProcessedIds.entries());
         userLastProcessedIds = new Map(entries.slice(-50));
+        // Drop sleep-state for users we no longer track
+        const keepIds = new Set(userLastProcessedIds.keys());
+        for (const uid of userSleepState.keys()) {
+          if (!keepIds.has(uid)) userSleepState.delete(uid);
+        }
         logger.info('User tracking map cleaned', {
           after: userLastProcessedIds.size
         });
@@ -709,6 +770,7 @@ export const stopRealtimeScanner = async () => {
     
     // Clear user tracking
     userLastProcessedIds.clear();
+    userSleepState.clear();
     isProcessingBatch = false;
 
     logger.info('✅ Realtime scanner stopped');

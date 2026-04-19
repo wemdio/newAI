@@ -4,6 +4,7 @@ import { validateCriteria, EXAMPLE_PROMPTS } from '../../prompts/promptBuilder.j
 import { testAnalysis } from '../../services/messageAnalyzer.js';
 import { testConnection as testOpenRouterConnection } from '../../config/openrouter.js';
 import { testChannelAccess } from '../../config/telegram.js';
+import { validateSleepPeriods } from '../../utils/sleepWindow.js';
 import { authenticateUser } from '../middleware/auth.js';
 import { strictLimiter } from '../middleware/rateLimiter.js';
 import { asyncHandler } from '../../utils/errorHandler.js';
@@ -56,6 +57,64 @@ const parseTelegramMinConfidence = (value) => {
   return parsed;
 };
 
+const parseTimezoneOffset = (value) => {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return 0;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) return NaN;
+  return parsed;
+};
+
+/**
+ * Apply analysis_sleep_* fields onto an updates object after validation.
+ * Returns null on success, or a `{ status, body }` error response object.
+ */
+const applyAnalysisSleepFields = (body, updates) => {
+  if (body.analysis_sleep_enabled !== undefined) {
+    if (typeof body.analysis_sleep_enabled !== 'boolean') {
+      return {
+        status: 400,
+        body: { error: 'Validation error', message: 'analysis_sleep_enabled must be a boolean' }
+      };
+    }
+    updates.analysis_sleep_enabled = body.analysis_sleep_enabled;
+  }
+
+  if (body.analysis_sleep_periods !== undefined) {
+    const result = validateSleepPeriods(body.analysis_sleep_periods);
+    if (!result.valid) {
+      return {
+        status: 400,
+        body: {
+          error: 'Validation error',
+          message: 'analysis_sleep_periods entries must be in "HH:MM-HH:MM" format',
+          invalid: result.invalid
+        }
+      };
+    }
+    updates.analysis_sleep_periods = result.periods;
+  }
+
+  if (body.analysis_timezone_offset !== undefined) {
+    const tz = parseTimezoneOffset(body.analysis_timezone_offset);
+    if (Number.isNaN(tz)) {
+      return {
+        status: 400,
+        body: { error: 'Validation error', message: 'analysis_timezone_offset must be an integer' }
+      };
+    }
+    if (tz < -12 || tz > 14) {
+      return {
+        status: 400,
+        body: { error: 'Validation error', message: 'analysis_timezone_offset must be between -12 and 14' }
+      };
+    }
+    updates.analysis_timezone_offset = tz;
+  }
+
+  return null;
+};
+
 router.post('/', authenticateUser, asyncHandler(async (req, res) => {
   const {
     openrouter_api_key,
@@ -104,6 +163,13 @@ router.post('/', authenticateUser, asyncHandler(async (req, res) => {
     });
   }
 
+  // Validate optional analysis-sleep fields
+  const sleepFields = {};
+  const sleepError = applyAnalysisSleepFields(req.body, sleepFields);
+  if (sleepError) {
+    return res.status(sleepError.status).json(sleepError.body);
+  }
+
   // Save configuration
   const config = await saveUserConfig(req.userId, {
     openrouter_api_key,
@@ -111,7 +177,8 @@ router.post('/', authenticateUser, asyncHandler(async (req, res) => {
     message_prompt: message_prompt || null,
     telegram_channel_id,
     is_active: is_active !== undefined ? is_active : true,
-    ...(parsedTelegramMinConfidence !== undefined && { telegram_min_confidence: parsedTelegramMinConfidence })
+    ...(parsedTelegramMinConfidence !== undefined && { telegram_min_confidence: parsedTelegramMinConfidence }),
+    ...sleepFields
   });
   
   logger.info('User configuration saved', { userId: req.userId });
@@ -188,7 +255,12 @@ router.put('/', authenticateUser, asyncHandler(async (req, res) => {
   if (req.body.is_active !== undefined) {
     updates.is_active = req.body.is_active;
   }
-  
+
+  const sleepError = applyAnalysisSleepFields(req.body, updates);
+  if (sleepError) {
+    return res.status(sleepError.status).json(sleepError.body);
+  }
+
   const updatedConfig = await saveUserConfig(req.userId, {
     ...existingConfig,
     ...updates
