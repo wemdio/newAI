@@ -498,20 +498,6 @@ class Database:
             limit,
         )
 
-    async def cancel_expired_payments(self, max_age_seconds: int = 7200) -> int:
-        cutoff = now_utc() - timedelta(seconds=max_age_seconds)
-        result = await self._pool().execute(
-            f"""
-            UPDATE {SCHEMA}.payments
-            SET status = 'canceled', cancellation_reason = 'expired_on_confirmation'
-            WHERE status IN ('pending', 'waiting_for_capture')
-              AND paid_at IS NULL
-              AND created_at::timestamptz < $1
-            """,
-            cutoff,
-        )
-        count = int(result.split()[-1])
-        return count
 
     async def get_latest_pending_payment(
         self,

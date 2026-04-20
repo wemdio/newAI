@@ -130,9 +130,6 @@ async def start_payment_polling(
             await asyncio.sleep(config.payments_poll_interval_seconds)
             continue
         try:
-            expired = await db.cancel_expired_payments(max_age_seconds=7200)
-            if expired:
-                logging.info("Auto-canceled %d expired pending payments", expired)
             pending = await db.list_pending_payments()
             for payment_row in pending:
                 try:
