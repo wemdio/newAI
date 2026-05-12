@@ -106,6 +106,21 @@ const getResponseMeta = (requestedModel, response) => ({
   finishReason: response?.choices?.[0]?.finish_reason || null
 });
 
+export const buildLeadAnalysisCompletionParams = ({
+  model,
+  messages,
+  response_format,
+  max_tokens,
+  ...rest
+}) => ({
+  model,
+  messages,
+  ...rest,
+  reasoning_effort: 'none',
+  ...(response_format ? { response_format } : {}),
+  max_tokens
+});
+
 /**
  * Core AI message analysis service
  * Handles communication with OpenRouter and validation
@@ -312,7 +327,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     
     // Make API call with retry logic
     const response = await retryWithBackoff(async () => {
-      return await client.chat.completions.create({
+      return await client.chat.completions.create(buildLeadAnalysisCompletionParams({
         model,
         messages: [
           { role: 'system', content: systemPrompt },
@@ -322,8 +337,8 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
         top_p: 1, // Disable nucleus sampling for consistency
         seed: 12345, // Fixed seed for reproducibility
         response_format: { type: 'json_object' },
-        max_tokens: 1000 // Increased to allow for reasoning
-      });
+        max_tokens: 1000 // Enough room for compact JSON output
+      }));
     }, 3, 1000);
     
     const duration = Date.now() - startTime;
@@ -538,7 +553,7 @@ ${JSON.stringify(messagesArray)}
     });
     
     const response = await retryWithBackoff(async () => {
-      return await client.chat.completions.create({
+      return await client.chat.completions.create(buildLeadAnalysisCompletionParams({
         model,
         messages: [
           { role: 'system', content: systemPrompt },
@@ -550,8 +565,8 @@ ${JSON.stringify(messagesArray)}
         presence_penalty: 0, 
         seed: 12345,
         // Don't use response_format for arrays - Gemini returns plain JSON array
-        max_tokens: 4000 // Increased for batch + reasoning
-      });
+        max_tokens: 4000 // Enough room for batch JSON output
+      }));
     }, 3, 1000);
     
     const duration = Date.now() - startTime;
