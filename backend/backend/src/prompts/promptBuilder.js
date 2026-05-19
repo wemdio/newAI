@@ -205,10 +205,10 @@ export const validateCriteria = (userCriteria) => {
     };
   }
   
-  if (trimmed.length > 5000) {
+  if (trimmed.length > 6000) {
     return {
       valid: false,
-      error: 'Criteria is too long. Please keep it under 5000 characters'
+      error: 'Criteria is too long. Please keep it under 6000 characters'
     };
   }
   
