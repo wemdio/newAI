@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { configApi, scannerApi, classifierApi, leadbotApi } from '../services/api';
 import './Configuration.css';
 
+const LEAD_PROMPT_MAX_LENGTH = 6000;
+const LEAD_PROMPT_WARNING_LENGTH = Math.floor(LEAD_PROMPT_MAX_LENGTH * 0.8);
+
 function Configuration() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -88,8 +91,8 @@ function Configuration() {
       setError('Критерии слишком короткие. Опишите подробнее (минимум 20 символов)');
       return;
     }
-    if (trimmedPrompt.length > 5000) {
-      setError(`Критерии слишком длинные (${trimmedPrompt.length}/5000 символов). Сократите текст`);
+    if (trimmedPrompt.length > LEAD_PROMPT_MAX_LENGTH) {
+      setError(`Критерии слишком длинные (${trimmedPrompt.length}/${LEAD_PROMPT_MAX_LENGTH} символов). Сократите текст`);
       return;
     }
     // Telegram Channel ID is now optional
@@ -383,8 +386,8 @@ function Configuration() {
           />
           <small className="form-hint" style={{ display: 'flex', justifyContent: 'space-between' }}>
             <span>Будьте конкретны! AI будет использовать это для определения лидов.</span>
-            <span style={{ color: config.leadPrompt.length > 5000 ? '#e74c3c' : config.leadPrompt.length > 4000 ? '#f39c12' : '#888' }}>
-              {config.leadPrompt.length}/5000
+            <span style={{ color: config.leadPrompt.length > LEAD_PROMPT_MAX_LENGTH ? '#e74c3c' : config.leadPrompt.length > LEAD_PROMPT_WARNING_LENGTH ? '#f39c12' : '#888' }}>
+              {config.leadPrompt.length}/{LEAD_PROMPT_MAX_LENGTH}
             </span>
           </small>
         </div>
@@ -577,7 +580,6 @@ function Configuration() {
 }
 
 export default Configuration;
-
 
 
 
