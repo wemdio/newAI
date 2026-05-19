@@ -2,7 +2,32 @@
  * Build user prompt for AI analysis
  */
 
-import { SYSTEM_PROMPT } from './systemPrompt.js';
+import { SYSTEM_PROMPT, SYSTEM_PROMPT_OFFER } from './systemPrompt.js';
+
+/**
+ * Detect the lead-search mode from the user's criteria text.
+ * A client whose criteria contain the marker [LEAD_MODE: OFFER] (or the Russian
+ * "РЕЖИМ: ОФФЕР") wants offers/ads to count as leads. Every other client gets
+ * the default 'request' behavior — no change.
+ * @param {string} userCriteria - User-defined lead criteria
+ * @returns {'offer'|'request'} Detected mode
+ */
+export const detectLeadMode = (userCriteria = '') => {
+  const text = String(userCriteria || '');
+  if (/lead[_\s-]?mode\s*:\s*offer/i.test(text)) return 'offer';
+  if (/режим[\s_-]*(?:поиска)?\s*:\s*оффер/i.test(text)) return 'offer';
+  return 'request';
+};
+
+/**
+ * Step-1 task instructions, mode-dependent.
+ */
+const REQUEST_TASK_STEP = `1. Определи тип сообщения: ЭТО ПОИСК/ПРОБЛЕМА (REQUEST) или ПРЕДЛОЖЕНИЕ (OFFER)?
+   - Если человек ПРЕДЛАГАЕТ услуги ("Предлагаю", "Помогу", "Занимаемся", "Вебинар", "Возьму на себя") -> is_match: false.
+   - Если человек ИЩЕТ решение, СПРАШИВАЕТ совет или ОПИСЫВАЕТ ПРОБЛЕМУ ("Ищу", "Нужно", "Не проходит", "Завис", "Подскажите", "Как оплатить") -> переходи к шагу 2.`;
+
+const OFFER_TASK_STEP = `1. РЕЖИМ ОФФЕР: объявления о продаже/сдаче объекта и описания сделок ДОПУСТИМЫ — не отсеивай их автоматически.
+   - Реклама посреднических услуг/сервиса по теме критериев ("оказываем", "наш сервис", "сопровождение под ключ", "помогу оформить") -> сверься со стоп-факторами пользователя.`;
 
 /**
  * Build cacheable system prompt with user criteria.
@@ -12,7 +37,8 @@ import { SYSTEM_PROMPT } from './systemPrompt.js';
  * @returns {string} System prompt + criteria (cacheable prefix)
  */
 export const buildSystemPromptWithCriteria = (userCriteria) => {
-  return `${SYSTEM_PROMPT}
+  const base = detectLeadMode(userCriteria) === 'offer' ? SYSTEM_PROMPT_OFFER : SYSTEM_PROMPT;
+  return `${base}
 
 КРИТЕРИИ ПОИСКА ПОЛЬЗОВАТЕЛЯ (следуй точно, ОСОБЕННО секцию "НЕ СЧИТАТЬ ЛИДОМ"):
 ${userCriteria}`;
@@ -24,12 +50,14 @@ ${userCriteria}`;
  * @param {object} message - Message data from database
  * @returns {string} User prompt with message data only
  */
-export const buildUserPromptForMessage = (message) => {
+export const buildUserPromptForMessage = (message, userCriteria = '') => {
   const {
     chat_name,
     bio,
     message: messageText
   } = message;
+
+  const taskStep = detectLeadMode(userCriteria) === 'offer' ? OFFER_TASK_STEP : REQUEST_TASK_STEP;
 
   return `СООБЩЕНИЕ:
 ${messageText}
@@ -37,9 +65,7 @@ ${bio ? `Био: ${bio}` : ''}
 ${chat_name ? `Канал: ${chat_name}` : ''}
 
 ЗАДАЧА:
-1. Определи тип сообщения: ЭТО ПОИСК/ПРОБЛЕМА (REQUEST) или ПРЕДЛОЖЕНИЕ (OFFER)?
-   - Если человек ПРЕДЛАГАЕТ услуги ("Предлагаю", "Помогу", "Занимаемся", "Вебинар", "Возьму на себя") -> is_match: false.
-   - Если человек ИЩЕТ решение, СПРАШИВАЕТ совет или ОПИСЫВАЕТ ПРОБЛЕМУ ("Ищу", "Нужно", "Не проходит", "Завис", "Подскажите", "Как оплатить") -> переходи к шагу 2.
+${taskStep}
 
 2. Проверь соответствие КРИТЕРИЯМ ПОИСКА.
    - Тема должна совпадать точно.
@@ -75,6 +101,8 @@ export const buildAnalysisPrompt = (message, userCriteria) => {
     message: messageText
   } = message;
   
+  const taskStep = detectLeadMode(userCriteria) === 'offer' ? OFFER_TASK_STEP : REQUEST_TASK_STEP;
+
   // Simplified, user-centric prompt
   const prompt = `КРИТЕРИИ ПОИСКА:
 ${userCriteria}
@@ -85,9 +113,7 @@ ${bio ? `Био: ${bio}` : ''}
 ${chat_name ? `Канал: ${chat_name}` : ''}
 
 ЗАДАЧА:
-1. Определи тип сообщения: ЭТО ПОИСК/ПРОБЛЕМА (REQUEST) или ПРЕДЛОЖЕНИЕ (OFFER)?
-   - Если человек ПРЕДЛАГАЕТ услуги ("Предлагаю", "Помогу", "Занимаемся", "Вебинар", "Возьму на себя") -> is_match: false.
-   - Если человек ИЩЕТ решение, СПРАШИВАЕТ совет или ОПИСЫВАЕТ ПРОБЛЕМУ ("Ищу", "Нужно", "Не проходит", "Завис", "Подскажите", "Как оплатить") -> переходи к шагу 2.
+${taskStep}
 
 2. Проверь соответствие КРИТЕРИЯМ ПОИСКА.
    - Тема должна совпадать точно.

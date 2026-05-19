@@ -1,5 +1,5 @@
 import { getOpenRouter } from '../config/openrouter.js';
-import { buildSystemPromptWithCriteria, buildUserPromptForMessage } from '../prompts/promptBuilder.js';
+import { buildSystemPromptWithCriteria, buildUserPromptForMessage, detectLeadMode } from '../prompts/promptBuilder.js';
 import { validateAIResponse, logValidationResult } from '../validators/aiResponseValidator.js';
 import { estimateTokens, calculateCost } from '../utils/tokenCounter.js';
 import logger from '../utils/logger.js';
@@ -147,17 +147,27 @@ export const doubleCheckLead = async (message, initialAnalysis, userCriteria, ap
     });
 
     const client = getOpenRouter(apiKey);
-    
+
+    // Mode-aware verification: 'offer' clients (marker [LEAD_MODE: OFFER]) must not
+    // have ads/offers rejected by the hardcoded verifier rules. Default unchanged.
+    const verificationRules = detectLeadMode(userCriteria) === 'offer'
+      ? `ПРАВИЛА ВЕРИФИКАЦИИ (РЕЖИМ ОФФЕР):
+- Лид = сообщение подходит под секцию "КОГО ИЩЕМ" критериев. Это МОЖЕТ быть объявление о продаже или сдаче в аренду объекта.
+- НЕ лид = сообщение попадает под стоп-факторы пользователя: реклама чужих услуг/сервиса, не та тема, не тот тип объекта, спам, вакансия.
+- Если сообщение ПОХОЖЕ на лид (даже частично) — верифицируй как true. Сомнения в пользу лида.
+- Отвергай ТОЛЬКО если сообщение явно НЕ подходит под критерии.`
+      : `ПРАВИЛА ВЕРИФИКАЦИИ:
+- Лид = человек ИЩЕТ услугу, ОПИСЫВАЕТ ПРОБЛЕМУ или ЗАДАЁТ ВОПРОС по теме критериев
+- НЕ лид = человек ПРЕДЛАГАЕТ свои услуги, рекламирует, ищет сотрудников
+- Если сообщение ПОХОЖЕ на лид (даже частично) — верифицируй как true. Сомнения в пользу лида.
+- Отвергай ТОЛЬКО если это явно НЕ лид (реклама, оффер, спам, не та тема)`;
+
     const systemContent = `Ты — верификатор лидов. Первичный AI уже нашёл потенциальный лид. Твоя задача — проверить, не ошибся ли он.
 
 КРИТЕРИИ ПОИСКА ПОЛЬЗОВАТЕЛЯ:
 ${userCriteria}
 
-ПРАВИЛА ВЕРИФИКАЦИИ:
-- Лид = человек ИЩЕТ услугу, ОПИСЫВАЕТ ПРОБЛЕМУ или ЗАДАЁТ ВОПРОС по теме критериев
-- НЕ лид = человек ПРЕДЛАГАЕТ свои услуги, рекламирует, ищет сотрудников
-- Если сообщение ПОХОЖЕ на лид (даже частично) — верифицируй как true. Сомнения в пользу лида.
-- Отвергай ТОЛЬКО если это явно НЕ лид (реклама, оффер, спам, не та тема)
+${verificationRules}
 
 Отвечай СТРОГО JSON: {"verified": true} или {"verified": false, "reason": "кратко почему"}`;
 
@@ -302,7 +312,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     // System prompt = SYSTEM_PROMPT + user criteria (STABLE prefix, cached across calls)
     // User prompt = only message data (VARIABLE part, changes each call)
     const systemPrompt = buildSystemPromptWithCriteria(userCriteria);
-    const userPrompt = buildUserPromptForMessage(message);
+    const userPrompt = buildUserPromptForMessage(message, userCriteria);
     
     // Estimate cost before making call
     const inputTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt);
@@ -498,15 +508,25 @@ export const analyzeMessageBatch = async (messages, userCriteria, apiKey) => {
       return payload;
     });
     
+    // Mode-aware task block: 'offer' clients (marker [LEAD_MODE: OFFER] in criteria)
+    // must NOT have offers/ads auto-rejected. Default 'request' behavior unchanged.
+    const leadMode = detectLeadMode(userCriteria);
+    const taskBlock = leadMode === 'offer'
+      ? `ЗАДАЧА ДЛЯ КАЖДОГО СООБЩЕНИЯ (РЕЖИМ ОФФЕР):
+1. Объявления о продаже/сдаче объекта и описания сделок ДОПУСТИМЫ — не отсеивай их автоматически.
+   - Реклама посреднических услуг/сервиса по теме критериев -> сверься со стоп-факторами пользователя.
+2. Проверь соответствие КРИТЕРИЯМ ПОИСКА (см. system message), особенно секции "КОГО ИЩЕМ" и "НЕ СЧИТАТЬ ЛИДОМ".`
+      : `ЗАДАЧА ДЛЯ КАЖДОГО СООБЩЕНИЯ:
+1. Определи тип: ПОИСК/ПРОБЛЕМА (REQUEST) или ПРЕДЛОЖЕНИЕ (OFFER)?
+   - ПРЕДЛАГАЕТ услуги -> is_match: false
+   - ИЩЕТ решение / описывает проблему -> переходи к шагу 2
+2. Проверь соответствие КРИТЕРИЯМ ПОИСКА (см. system message).`;
+
     // User prompt — only messages and format (variable part, NO criteria here)
     const userPrompt = `ПРОАНАЛИЗИРУЙ СЛЕДУЮЩИЕ ${batchSize} СООБЩЕНИЙ:
 ${JSON.stringify(messagesArray)}
 
-ЗАДАЧА ДЛЯ КАЖДОГО СООБЩЕНИЯ:
-1. Определи тип: ПОИСК/ПРОБЛЕМА (REQUEST) или ПРЕДЛОЖЕНИЕ (OFFER)?
-   - ПРЕДЛАГАЕТ услуги -> is_match: false
-   - ИЩЕТ решение / описывает проблему -> переходи к шагу 2
-2. Проверь соответствие КРИТЕРИЯМ ПОИСКА (см. system message).
+${taskBlock}
 
 ВАЖНО:
 1. Проанализируй КАЖДОЕ сообщение ОТДЕЛЬНО (не смешивай контекст!)

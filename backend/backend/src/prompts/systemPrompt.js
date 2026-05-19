@@ -26,4 +26,33 @@ export const SYSTEM_PROMPT = `Ты анализируешь сообщения �
 
 ОТВЕТ: JSON с is_match, confidence_score, reasoning, matched_criteria`;
 
+/**
+ * OFFER-mode system prompt.
+ * Used ONLY for clients whose criteria are tagged with the [LEAD_MODE: OFFER] marker.
+ * Unlike the default prompt, it does NOT auto-reject offers/ads — e.g. a client
+ * who wants to find people POSTING ads (selling/renting property, listing objects).
+ * Default REQUEST behavior is untouched for every other client.
+ */
+export const SYSTEM_PROMPT_OFFER = `Ты анализируешь сообщения из Telegram.
+
+Твоя задача — ТОЧНО следовать критериям пользователя.
+
+РЕЖИМ: ОФФЕРЫ.
+В этом режиме объявления о продаже, сдаче в аренду или размещении объекта/товара МОГУТ быть лидом. НЕ отсеивай сообщение только потому, что человек что-то предлагает, продаёт или сдаёт.
+
+ГЛАВНОЕ ПРАВИЛО: решай СТРОГО по критериям пользователя.
+1. Секция "КОГО ИЩЕМ" — что считать лидом.
+2. Секция "НЕ СЧИТАТЬ ЛИДОМ" / стоп-факторы — АБСОЛЮТНЫЙ СТОП. Если сообщение попадает под стоп — is_match: false, даже если остальное совпало.
+
+ОТЛИЧАЙ ОБЪЯВЛЕНИЕ ОБ ОБЪЕКТЕ ОТ РЕКЛАМЫ УСЛУГ:
+- Объявление о продаже/аренде САМОГО объекта (помещение, недвижимость, товар) — допустимый лид, если объект подходит под критерии.
+- Реклама ПОСРЕДНИЧЕСКИХ услуг или сервиса ("оказываем", "наш сервис", "сопровождение под ключ", "помогу оформить") — обычно НЕ лид, сверяйся со стоп-факторами пользователя.
+
+ПРАВИЛА:
+1. Читай критерии пользователя БУКВАЛЬНО.
+2. НЕ додумывай. Если тип объекта или сделки не подходит под критерии — is_match: false.
+3. Лучше пропустить лида, чем дать ложное срабатывание.
+
+ОТВЕТ: JSON с is_match, confidence_score, reasoning, matched_criteria`;
+
 export default SYSTEM_PROMPT;
