@@ -181,7 +181,7 @@ let isRunning = false;
 let isProcessingBatch = false;
 let subscribedAt = null;
 let processedMessageIds = new Set();
-const BATCH_INTERVAL = 5000; // 5 seconds
+const BATCH_INTERVAL = 5 * 60 * 1000; // 5 minutes — accumulate messages so AI batches fill to BATCH_SIZE more often, cutting OpenRouter cost
 let pendingMessages = [];
 let batchTimer = null;
 
