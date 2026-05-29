@@ -6,6 +6,7 @@ import contextlib
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from dotenv import load_dotenv
 
 from .config import load_config
@@ -56,7 +57,12 @@ async def main() -> None:
     supabase = SupabaseImporter(db, config)
     payments = PaymentService(config)
 
-    bot = Bot(token=config.bot_token, default=DefaultBotProperties())
+    # Route Telegram Bot API traffic through a proxy if configured (LEADBOT_PROXY).
+    # Needed when the host network blocks api.telegram.org (e.g. RU hosting + RKN).
+    session = AiohttpSession(proxy=config.proxy) if config.proxy else None
+    if config.proxy:
+        logger.info("Bot HTTP session routed through proxy")
+    bot = Bot(token=config.bot_token, default=DefaultBotProperties(), session=session)
 
     from aiogram.exceptions import TelegramUnauthorizedError
 

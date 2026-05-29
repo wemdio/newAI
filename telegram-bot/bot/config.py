@@ -61,6 +61,7 @@ class Config:
     yookassa_receipt_vat_code: int
     yookassa_receipt_tax_system_code: Optional[int]
     log_level: str
+    proxy: Optional[str]
 
 
 def load_config() -> Config:
@@ -147,6 +148,10 @@ def load_config() -> Config:
         _getenv("YOOKASSA_RECEIPT_TAX_SYSTEM_CODE", "LEADBOT_YOOKASSA_RECEIPT_TAX_SYSTEM_CODE")
     )
     log_level = _getenv("LOG_LEVEL", "LEADBOT_LOG_LEVEL", "INFO") or "INFO"
+    # Optional proxy for reaching api.telegram.org (e.g. when hosted on a
+    # network where Telegram Bot API is blocked). Format: socks5://user:pass@host:port
+    # or http://user:pass@host:port. Empty = direct connection (default).
+    proxy = (_getenv("PROXY", "LEADBOT_PROXY", "") or "").strip() or None
 
     return Config(
         bot_token=bot_token,
@@ -175,4 +180,5 @@ def load_config() -> Config:
         yookassa_receipt_vat_code=yookassa_receipt_vat_code,
         yookassa_receipt_tax_system_code=yookassa_receipt_tax_system_code,
         log_level=log_level,
+        proxy=proxy,
     )
