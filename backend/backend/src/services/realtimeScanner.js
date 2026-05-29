@@ -407,7 +407,8 @@ const processMessagesForUser = async (messages, userConfig) => {
           maxConcurrent: parseInt(process.env.AI_CONCURRENCY || '5', 10),
           stopOnError: false,
           useBatchApi: process.env.USE_BATCH_API !== 'false', // Enable by default
-          batchSize: parseInt(process.env.BATCH_SIZE || '5', 10) // 5 messages per API call
+          batchSize: parseInt(process.env.BATCH_SIZE || '5', 10), // 5 messages per API call
+          userId // for api_usage cost logging
         }
       );
       
@@ -462,7 +463,8 @@ const processMessagesForUser = async (messages, userConfig) => {
               match.message,
               match.analysis.aiResponse,
               userConfig.lead_prompt,
-              userConfig.openrouter_api_key
+              userConfig.openrouter_api_key,
+              userId
             );
 
             if (!verification.verified) {

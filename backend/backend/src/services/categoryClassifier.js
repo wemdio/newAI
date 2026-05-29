@@ -2,6 +2,7 @@ import { getSupabase } from '../config/database.js';
 import { getOpenRouter } from '../config/openrouter.js';
 import { buildCategoryBatchPrompt, parseCategoryBatchResponse } from './categoryPrompt.js';
 import { retryWithBackoff } from '../utils/errorHandler.js';
+import { logAiUsage } from './costOptimizer.js';
 import logger from '../utils/logger.js';
 import crypto from 'crypto';
 
@@ -258,6 +259,8 @@ const classifyBatch = async (messages) => {
 
   const content = response.choices[0]?.message?.content;
   if (!content) throw new Error('Empty response from classification AI');
+
+  await logAiUsage(response, { userId: null, stage: 'classifier', model });
 
   return parseCategoryBatchResponse(content, messages.length);
 };

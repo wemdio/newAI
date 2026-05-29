@@ -4,6 +4,7 @@ import { validateAIResponse, logValidationResult } from '../validators/aiRespons
 import { estimateTokens, calculateCost } from '../utils/tokenCounter.js';
 import logger from '../utils/logger.js';
 import { AIServiceError, retryWithBackoff } from '../utils/errorHandler.js';
+import { logAiUsage } from './costOptimizer.js';
 import PQueue from 'p-queue';
 
 /**
@@ -134,7 +135,7 @@ export const buildLeadAnalysisCompletionParams = ({
  * @param {string} apiKey - OpenRouter API key
  * @returns {object} Verification result
  */
-export const doubleCheckLead = async (message, initialAnalysis, userCriteria, apiKey) => {
+export const doubleCheckLead = async (message, initialAnalysis, userCriteria, apiKey, userId = null) => {
   const startTime = Date.now();
   const model = process.env.DOUBLE_CHECK_MODEL || 'policy/lead-doublecheck';
 
@@ -206,6 +207,8 @@ ${message.bio ? `БИО автора: ${message.bio.substring(0, 200)}` : ''}
     }, 3, 1000);
 
     const content = response.choices[0]?.message?.content;
+
+    await logAiUsage(response, { userId, stage: 'doublecheck', model });
 
     logger.info('Gemini Double Check response metadata', {
       messageId: message.id,
@@ -485,7 +488,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
  * @param {string} apiKey - OpenRouter API key
  * @returns {array} Array of analysis results (one per message)
  */
-export const analyzeMessageBatch = async (messages, userCriteria, apiKey) => {
+export const analyzeMessageBatch = async (messages, userCriteria, apiKey, options = {}) => {
   const startTime = Date.now();
   const batchSize = messages.length;
   
@@ -593,6 +596,8 @@ ${taskBlock}
     }, 3, 1000);
     
     const duration = Date.now() - startTime;
+
+    await logAiUsage(response, { userId: options.userId, stage: 'analysis', model });
 
     logger.info('Batch OpenRouter response metadata', {
       batchSize,
@@ -869,7 +874,8 @@ export const analyzeBatch = async (messages, userCriteria, apiKey, options = {})
     maxConcurrent = 20, // Increased concurrency for faster processing
     stopOnError = false, // Whether to stop on first error
     useBatchApi = true, // Use batch API (5 messages per call)
-    batchSize = 5 // Messages per API call
+    batchSize = 5, // Messages per API call
+    userId = null // for api_usage cost logging
   } = options;
   
   const startTime = Date.now();
@@ -911,7 +917,7 @@ export const analyzeBatch = async (messages, userCriteria, apiKey, options = {})
       tasks.push(async () => {
       try {
         // Single API call for all messages in chunk
-        const chunkResults = await analyzeMessageBatch(chunk, userCriteria, apiKey);
+        const chunkResults = await analyzeMessageBatch(chunk, userCriteria, apiKey, { userId });
         
         // Process results
         for (let j = 0; j < chunk.length; j++) {

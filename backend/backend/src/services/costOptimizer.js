@@ -49,6 +49,44 @@ export const recordUsage = async (userId, usageData) => {
 };
 
 /**
+ * Best-effort logging of a single AI API call to api_usage.
+ * Reads token counts, cost and cache-hit tokens straight from the provider response.
+ * NEVER throws — usage logging must not break the analysis pipeline.
+ * @param {object} response - Raw OpenAI/Requesty-style completion response (.usage, .model)
+ * @param {object} meta - { userId?, stage, model? }
+ */
+export const logAiUsage = async (response, meta = {}) => {
+  try {
+    const usage = response?.usage || {};
+    const inputTokens = Number(usage.prompt_tokens) || 0;
+    const outputTokens = Number(usage.completion_tokens) || 0;
+    // Cache-hit tokens across provider dialects: DeepSeek / OpenAI+Gemini / Anthropic
+    const cachedTokens =
+      Number(usage.prompt_cache_hit_tokens) ||
+      Number(usage.prompt_tokens_details?.cached_tokens) ||
+      Number(usage.cache_read_input_tokens) ||
+      0;
+    const cost = Number(usage.cost) || 0;
+
+    const supabase = getSupabase();
+    const { error } = await supabase.from('api_usage').insert({
+      user_id: meta.userId || null,
+      cost,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      cached_tokens: cachedTokens,
+      model_used: response?.model || meta.model || 'unknown',
+      stage: meta.stage || null
+    });
+    if (error) {
+      logger.warn('logAiUsage insert failed (non-fatal)', { stage: meta.stage, error: error.message });
+    }
+  } catch (e) {
+    logger.warn('logAiUsage failed (non-fatal)', { error: e.message });
+  }
+};
+
+/**
  * Get total usage for a user in current month
  * @param {string} userId - User ID
  * @returns {object} Usage summary
