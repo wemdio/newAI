@@ -292,7 +292,8 @@ export const saveDetectedLead = async (userId, message, analysis) => {
       posted_to_telegram: false,
       is_contacted: false,
       message_hash: messageHash,
-      sender_id: String(senderId)
+      sender_id: String(senderId),
+      from_rescue: !!(message && message._fromRescue)
     };
     
     const { data, error } = await supabase

@@ -500,6 +500,9 @@ export const preFilterMessages = async (messages, userCriteria, options = {}) =>
         // Add rescued messages to passed list
         const rescuedIds = new Set(rescueResult.rescued.map(m => m.id));
 
+        // Tag rescued messages so we can measure how many become leads (ROI of rescue)
+        rescueResult.rescued.forEach(m => { m._fromRescue = true; });
+
         results.passed.push(...rescueResult.rescued);
         results.stats.passed += rescueResult.rescued.length;
 

@@ -374,6 +374,21 @@ const processMessagesForUser = async (messages, userConfig) => {
       { userId, apiKey: userConfig.openrouter_api_key }
     );
 
+    // Best-effort: record rescue volume to measure embedding-rescue ROI. Never blocks analysis.
+    try {
+      const rescued = preFilterResult.stats?.reasons?.embedding_rescued || 0;
+      const keywordPassed = (preFilterResult.stats?.passed || 0) - rescued;
+      if (rescued > 0 || keywordPassed > 0) {
+        await getSupabase().from('rescue_stats').insert({
+          user_id: userId,
+          keyword_passed: keywordPassed,
+          rescued
+        });
+      }
+    } catch (e) {
+      logger.warn('rescue_stats insert failed (non-fatal)', { error: e.message });
+    }
+
     if (preFilterResult.passed.length === 0) {
       logger.info('No messages passed pre-filter', {
         userId,
