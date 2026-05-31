@@ -23,6 +23,11 @@ services:
       AI_MODEL: policy/lead-analysis
       CATEGORY_API_KEY:
       CATEGORY_API_KEY_2:
+      DOUBLECHECK_MODE:
+      DOUBLECHECK_MIN_CONFIDENCE:
+      EMBEDDING_RESCUE:
+      EMBEDDING_RESCUE_THRESHOLD:
+      EMBEDDING_MODEL:
     restart: always
 
   worker:
