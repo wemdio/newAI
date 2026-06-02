@@ -117,6 +117,12 @@ export const buildLeadAnalysisCompletionParams = ({
   model,
   messages,
   ...rest,
+  // Disable reasoning/thinking tokens. The flat `reasoning_effort` (OpenAI-style)
+  // is NOT honored by DeepSeek via the Requesty/OpenRouter gateway — the model kept
+  // emitting ~400+ reasoning tokens per call (≈half the per-call cost). The gateway
+  // honors the structured `reasoning` object instead. `enabled:false` turns thinking
+  // off; `effort:'none'` is kept as a belt-and-suspenders for providers that read it.
+  reasoning: { enabled: false, effort: 'none' },
   reasoning_effort: 'none',
   ...(response_format ? { response_format } : {}),
   max_tokens

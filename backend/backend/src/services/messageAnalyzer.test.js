@@ -15,5 +15,7 @@ describe('buildLeadAnalysisCompletionParams', () => {
     });
 
     assert.equal(params.reasoning_effort, 'none');
+    // The structured reasoning object is what the gateway actually honors
+    assert.deepEqual(params.reasoning, { enabled: false, effort: 'none' });
   });
 });
