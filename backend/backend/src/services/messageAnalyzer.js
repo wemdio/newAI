@@ -506,7 +506,7 @@ export const analyzeMessageBatch = async (messages, userCriteria, apiKey, option
     
     // Build batch prompt — criteria in system message for DeepSeek prefix caching
     // System prompt = SYSTEM_PROMPT + user criteria (STABLE prefix, cached across calls for same user)
-    const systemPrompt = buildSystemPromptWithCriteria(userCriteria);
+    const baseSystemPrompt = buildSystemPromptWithCriteria(userCriteria);
     
     // Cost optimization: omit empty optional fields (fewer prompt tokens, same semantics)
     const messagesArray = messages.map(msg => {
@@ -534,39 +534,29 @@ export const analyzeMessageBatch = async (messages, userCriteria, apiKey, option
    - ИЩЕТ решение / описывает проблему -> переходи к шагу 2
 2. Проверь соответствие КРИТЕРИЯМ ПОИСКА (см. system message).`;
 
-    // User prompt — only messages and format (variable part, NO criteria here)
-    const userPrompt = `ПРОАНАЛИЗИРУЙ СЛЕДУЮЩИЕ ${batchSize} СООБЩЕНИЙ:
-${JSON.stringify(messagesArray)}
+    // Stable instructions (task + output format) go into the CACHED system message, not the
+    // per-call user message. They are byte-identical across calls for the same client/mode, so the
+    // gateway serves them from cache (~10% of input price) instead of billing ~800 fresh input
+    // tokens on EVERY call. No batch count is hardcoded here, so the cached prefix stays identical
+    // even for partial (last-chunk) batches. Output behaviour is unchanged.
+    const systemPrompt = `${baseSystemPrompt}
 
 ${taskBlock}
 
 ВАЖНО:
-1. Проанализируй КАЖДОЕ сообщение ОТДЕЛЬНО (не смешивай контекст!)
-2. Верни ТОЛЬКО МАССИВ из ${batchSize} JSON объектов (без дополнительного текста!)
-3. Порядок результатов должен соответствовать порядку сообщений
-4. Каждый результат должен содержать: id, is_match, confidence_score, reasoning, matched_criteria
-5. Reasoning (причина) должна быть ОЧЕНЬ КРАТКОЙ (макс. 10 слов), чтобы избежать ошибок JSON.
+1. Проанализируй КАЖДОЕ сообщение ОТДЕЛЬНО (не смешивай контекст!).
+2. Верни ТОЛЬКО JSON-массив — РОВНО по одному объекту на КАЖДОЕ входящее сообщение, в том же порядке.
+3. Каждый объект содержит: id, is_match, confidence_score, reasoning, matched_criteria.
+4. Reasoning (причина) ОЧЕНЬ КРАТКО (макс. 10 слов), чтобы избежать ошибок JSON.
 
-КРИТИЧЕСКИ ВАЖНО: Ответ должен начинаться с [ и заканчиваться ] - это должен быть чистый JSON массив!
+КРИТИЧЕСКИ ВАЖНО: ответ начинается с [ и заканчивается ] — чистый JSON-массив без любого текста вокруг.
 
-ФОРМАТ ОТВЕТА (ТОЛЬКО ЭТОТ JSON МАССИВ, БЕЗ ТЕКСТА):
-[
-  {
-    "id": "message_id_1",
-    "is_match": boolean,
-    "confidence_score": 0-100,
-    "reasoning": "кратко 5-10 слов",
-    "matched_criteria": ["критерий1", "критерий2"]
-  },
-  {
-    "id": "message_id_2",
-    "is_match": boolean,
-    "confidence_score": 0-100,
-    "reasoning": "кратко 5-10 слов",
-    "matched_criteria": []
-  }
-  ... (всего ${batchSize} объектов)
-]`;
+ФОРМАТ ОТВЕТА (JSON-массив, ровно по одному объекту на каждое сообщение из входа):
+[{"id":"id_первого","is_match":true,"confidence_score":85,"reasoning":"кратко 5-10 слов","matched_criteria":["критерий1"]}, {"id":"id_второго","is_match":false,"confidence_score":0,"reasoning":"кратко","matched_criteria":[]}]`;
+
+    // User prompt — ONLY the variable messages, so nearly the entire input is cached every call.
+    const userPrompt = `ПРОАНАЛИЗИРУЙ СЛЕДУЮЩИЕ ${batchSize} СООБЩЕНИЙ:
+${JSON.stringify(messagesArray)}`;
 
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
