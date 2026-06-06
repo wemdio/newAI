@@ -526,26 +526,33 @@ class Database:
             *values,
         )
 
-    async def get_recent_pending_payment(
+    async def get_renewal_attempt_stats(
         self,
         user_id: int,
         category_id: int,
-        kind: str,
         since_iso: str,
     ) -> Optional[asyncpg.Record]:
+        """Aggregate recent auto-renewal attempts for one subscription.
+
+        Returns failed_count (declined charges), has_pending (a charge is still
+        in flight) and last_attempt_at (latest attempt timestamp) within the
+        given window. The renewal scheduler uses this to back off between
+        attempts and to stop after too many declines, instead of re-charging the
+        card on every poll cycle (declined charges are recorded as 'canceled',
+        which the previous pending-only guard ignored).
+        """
         return await self._pool().fetchrow(
             f"""
-            SELECT *
+            SELECT
+                COUNT(*) FILTER (WHERE status = 'canceled') AS failed_count,
+                BOOL_OR(status IN ('pending', 'waiting_for_capture')) AS has_pending,
+                MAX(created_at) AS last_attempt_at
             FROM {SCHEMA}.payments
-            WHERE user_id = $1 AND category_id = $2 AND kind = $3
-              AND status IN ('pending', 'waiting_for_capture')
-              AND created_at >= $4
-            ORDER BY created_at DESC
-            LIMIT 1
+            WHERE user_id = $1 AND category_id = $2 AND kind = 'renewal'
+              AND created_at >= $3
             """,
             user_id,
             category_id,
-            kind,
             since_iso,
         )
 

@@ -113,6 +113,17 @@ def autorenew_enabled_text(category: Category, end_date: datetime) -> str:
     )
 
 
+def renewal_failed_text(category: Category) -> str:
+    return (
+        "Не удалось продлить подписку.\n\n"
+        f"Категория:\n{category.title}\n\n"
+        "Банк отклонил автосписание (нехватка средств или лимит карты), "
+        "поэтому автопродление отключено.\n\n"
+        "Чтобы продолжить получать заявки, оформите подписку заново — "
+        "при оплате привяжется актуальная карта."
+    )
+
+
 def help_text(price_rub: int) -> str:
     return (
         "Бот присылает заявки из Telegram-чатов.\n\n"

@@ -10,10 +10,11 @@ from .config import Config
 from .constants import CATEGORY_BY_ID, CATEGORIES
 from .db import Database
 from .formatters import format_lead_text
-from .keyboards import lead_actions_keyboard, pay_contact_keyboard
+from .keyboards import lead_actions_keyboard, pay_contact_keyboard, pay_required_keyboard
 from .leads import Lead, LeadService
 from .payment_flow import refresh_and_process_payment, start_recurring_payment
 from .payments import PaymentService
+from .texts import renewal_failed_text
 from .utils import extract_contact_url, is_contact_hidden, parse_iso
 
 
@@ -179,16 +180,37 @@ async def _process_subscription_renewals(
     rows = await db.list_subscriptions_for_renewal(renew_before.isoformat())
     if not rows:
         return
-    recent_cutoff = (now - timedelta(hours=6)).isoformat()
+    # Window covering only the current renewal burst (prior billing cycles are
+    # ~30 days back, well outside this window).
+    stats_window = (now - timedelta(days=config.subscription_renew_before_days + 2)).isoformat()
+    retry_cutoff = now - timedelta(hours=config.subscription_renew_retry_hours)
     for row in rows:
         user_id = int(row["user_id"])
         category_id = int(row["category_id"])
         payment_method_id = row["payment_method_id"]
         if not payment_method_id:
             continue
-        recent = await db.get_recent_pending_payment(user_id, category_id, "renewal", recent_cutoff)
-        if recent:
+
+        stats = await db.get_renewal_attempt_stats(user_id, category_id, stats_window)
+        # A charge is already in flight — never create a duplicate.
+        if stats and stats["has_pending"]:
             continue
+        # Too many declines this cycle: stop hammering the card. Disable
+        # auto-renew and notify the user once (the subscription then drops out
+        # of list_subscriptions_for_renewal, so this fires exactly once).
+        failed_count = int(stats["failed_count"] or 0) if stats else 0
+        if failed_count >= config.subscription_renew_max_attempts:
+            await db.update_subscription_billing(user_id, category_id, auto_renew=0)
+            await _notify_renewal_failed(bot, row, category_id)
+            continue
+        # Back off between attempts instead of retrying on every poll cycle.
+        last_attempt_at = stats["last_attempt_at"] if stats else None
+        if last_attempt_at:
+            try:
+                if parse_iso(last_attempt_at) > retry_cutoff:
+                    continue
+            except Exception:
+                pass
         try:
             payment_row = await start_recurring_payment(
                 db=db,
@@ -215,3 +237,21 @@ async def _process_subscription_renewals(
                 )
             except Exception as exc:
                 logging.warning("Failed to process renewal payment %s: %s", payment_row["payment_id"], exc)
+
+
+async def _notify_renewal_failed(bot: Bot, row, category_id: int) -> None:
+    category = CATEGORY_BY_ID.get(category_id)
+    if not category:
+        return
+    try:
+        telegram_id = int(row["telegram_id"])
+    except (KeyError, TypeError, ValueError):
+        return
+    try:
+        await bot.send_message(
+            telegram_id,
+            renewal_failed_text(category),
+            reply_markup=pay_required_keyboard(category_id),
+        )
+    except Exception as exc:
+        logging.warning("Failed to notify renewal failure for user %s: %s", row["user_id"], exc)

@@ -53,6 +53,8 @@ class Config:
     subscription_auto_renew_default: bool
     subscription_renew_before_days: int
     subscription_renew_interval_seconds: int
+    subscription_renew_retry_hours: int
+    subscription_renew_max_attempts: int
     payments_poll_interval_seconds: int
     yookassa_shop_id: Optional[str]
     yookassa_secret_key: Optional[str]
@@ -134,6 +136,14 @@ def load_config() -> Config:
     subscription_renew_interval_seconds = _parse_int(
         _getenv("SUBSCRIPTION_RENEW_INTERVAL_SECONDS", "LEADBOT_SUBSCRIPTION_RENEW_INTERVAL_SECONDS", "3600"), 3600
     )
+    # Minimum hours between auto-renew charge attempts for the same subscription.
+    subscription_renew_retry_hours = _parse_int(
+        _getenv("SUBSCRIPTION_RENEW_RETRY_HOURS", "LEADBOT_SUBSCRIPTION_RENEW_RETRY_HOURS", "6"), 6
+    )
+    # Give up auto-renew (disable it + notify the user) after this many declines.
+    subscription_renew_max_attempts = _parse_int(
+        _getenv("SUBSCRIPTION_RENEW_MAX_ATTEMPTS", "LEADBOT_SUBSCRIPTION_RENEW_MAX_ATTEMPTS", "3"), 3
+    )
     payments_poll_interval_seconds = _parse_int(
         _getenv("PAYMENTS_POLL_INTERVAL_SECONDS", "LEADBOT_PAYMENTS_POLL_INTERVAL_SECONDS", "5"), 5
     )
@@ -172,6 +182,8 @@ def load_config() -> Config:
         subscription_auto_renew_default=subscription_auto_renew_default,
         subscription_renew_before_days=subscription_renew_before_days,
         subscription_renew_interval_seconds=subscription_renew_interval_seconds,
+        subscription_renew_retry_hours=subscription_renew_retry_hours,
+        subscription_renew_max_attempts=subscription_renew_max_attempts,
         payments_poll_interval_seconds=payments_poll_interval_seconds,
         yookassa_shop_id=yookassa_shop_id,
         yookassa_secret_key=yookassa_secret_key,
