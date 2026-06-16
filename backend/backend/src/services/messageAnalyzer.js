@@ -117,13 +117,14 @@ export const buildLeadAnalysisCompletionParams = ({
   model,
   messages,
   ...rest,
-  // Disable reasoning/thinking tokens. The flat `reasoning_effort` (OpenAI-style)
-  // is NOT honored by DeepSeek via the Requesty/OpenRouter gateway — the model kept
-  // emitting ~400+ reasoning tokens per call (≈half the per-call cost). The gateway
-  // honors the structured `reasoning` object instead. `enabled:false` turns thinking
-  // off; `effort:'none'` is kept as a belt-and-suspenders for providers that read it.
-  reasoning: { enabled: false, effort: 'none' },
-  reasoning_effort: 'none',
+  // NOTE: intentionally NO `reasoning` / `reasoning_effort` params here.
+  // They were added to suppress thinking tokens, but: (a) the gateway never
+  // honored them on deepseek-v4-flash (it kept emitting ~400+ reasoning tokens),
+  // and (b) the non-reasoning deepseek-chat — the PRIMARY model in the
+  // `lead-analysis` policy — rejects them, so every analysis call errored and the
+  // Fallback Chain dropped to the pricier reasoning model (deepseek-v4-flash
+  // served ~100% of traffic with full reasoning output). Dropping the params lets
+  // deepseek-chat actually serve; it doesn't reason, so they're unneeded anyway.
   ...(response_format ? { response_format } : {}),
   max_tokens
 });
