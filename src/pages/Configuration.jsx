@@ -27,6 +27,8 @@ function Configuration() {
   const [classifierStats, setClassifierStats] = useState(null);
   const [classifierRuntime, setClassifierRuntime] = useState(null);
   const [classifierLoading, setClassifierLoading] = useState(false);
+  const [analysisEnabled, setAnalysisEnabled] = useState(true);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
   const [leadbotEnabled, setLeadbotEnabled] = useState(false);
@@ -37,6 +39,7 @@ function Configuration() {
     loadConfiguration();
     loadScannerStatus();
     loadClassifierStatus();
+    loadAnalysisStatus();
     loadLeadbotStatus();
   }, []);
 
@@ -197,6 +200,32 @@ function Configuration() {
       setError(err.response?.data?.error || 'Не удалось переключить классификатор');
     } finally {
       setClassifierLoading(false);
+    }
+  };
+
+  const loadAnalysisStatus = async () => {
+    try {
+      const response = await scannerApi.status();
+      if (typeof response.data.analysisEnabled === 'boolean') {
+        setAnalysisEnabled(response.data.analysisEnabled);
+      }
+    } catch (err) {
+      console.error('Analysis status error:', err);
+    }
+  };
+
+  const handleToggleAnalysis = async () => {
+    try {
+      setAnalysisLoading(true);
+      const newState = !analysisEnabled;
+      await scannerApi.toggle(newState);
+      setAnalysisEnabled(newState);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 2000);
+    } catch (err) {
+      setError(err.response?.data?.error || 'Не удалось переключить анализ');
+    } finally {
+      setAnalysisLoading(false);
     }
   };
 
@@ -462,6 +491,38 @@ function Configuration() {
           )}
         </div>
       </div>
+
+      {/* Analysis Kill-Switch (Admin Only) */}
+      {isAdmin && (
+        <div className="classifier-panel">
+          <div className="panel-header">
+            <h3>⚙️ Анализ лидов — рубильник</h3>
+            <div className="classifier-toggle-row">
+              <label className="toggle-label">
+                <input
+                  type="checkbox"
+                  checked={analysisEnabled}
+                  onChange={handleToggleAnalysis}
+                  disabled={analysisLoading}
+                  className="toggle-input"
+                />
+                <span className="toggle-slider"></span>
+                <span className="toggle-text">
+                  {analysisLoading ? 'Переключение...' : analysisEnabled ? 'Включён' : 'Выключен'}
+                </span>
+              </label>
+            </div>
+          </div>
+          <div className="panel-content">
+            <p className="classifier-description">
+              Глобальный рубильник AI-анализа для всех клиентов. Когда выключен — ноль
+              обращений к нейросети и ноль расходов на API, при этом приложение
+              продолжает работать (переживает «зависшую» паузу Timeweb и рестарты).
+              Лиды на это время не находятся. Применяется в течение ~15 секунд.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Category Classifier (Admin Only) */}
       {isAdmin && (

@@ -102,6 +102,7 @@ export const scannerApi = {
   start: () => api.post('/scanner/start'),
   stop: () => api.post('/scanner/stop'),
   manualScan: () => api.post('/scanner/manual-scan'),
+  toggle: (enabled) => api.post('/scanner/toggle', { enabled }), // admin-only kill-switch
 };
 
 // Messaging API

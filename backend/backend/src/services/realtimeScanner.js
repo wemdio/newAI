@@ -211,7 +211,47 @@ const isUserInAnalysisSleepWindow = (userConfig, now = new Date()) => {
  * Process messages for all active users
  * Each user tracks their own lastProcessedId to ensure they get ALL new messages
  */
+// ── Global analysis kill-switch (admin toggle: POST /api/scanner/toggle) ──
+// Cached read of system_config['analysis_enabled'] so we don't query the DB on
+// every 5s cycle. Defaults to ENABLED: only an explicit stored `false` pauses
+// analysis; transient read errors keep the last known value (never silently halt).
+let analysisEnabledCache = { value: true, ts: 0 };
+const ANALYSIS_FLAG_TTL_MS = 15000;
+
+const isAnalysisEnabled = async () => {
+  const now = Date.now();
+  if (now - analysisEnabledCache.ts < ANALYSIS_FLAG_TTL_MS) {
+    return analysisEnabledCache.value;
+  }
+  try {
+    const supabase = getSupabase();
+    const { data, error } = await supabase
+      .from('system_config')
+      .select('value')
+      .eq('key', 'analysis_enabled')
+      .single();
+    const value = error || !data ? true : data.value !== false;
+    const prev = analysisEnabledCache.value;
+    analysisEnabledCache = { value, ts: now };
+    if (value !== prev) {
+      logger.info(`Analysis ${value ? 'RESUMED' : 'PAUSED'} via admin toggle (analysis_enabled=${value})`);
+    }
+    return value;
+  } catch (err) {
+    logger.warn('Failed to read analysis_enabled flag, keeping last known value', {
+      lastKnown: analysisEnabledCache.value,
+      error: err.message
+    });
+    return analysisEnabledCache.value;
+  }
+};
+
 const processBatch = async () => {
+  // Global admin kill-switch: skip ALL AI analysis (zero API cost) while paused.
+  if (!(await isAnalysisEnabled())) {
+    return;
+  }
+
   if (isProcessingBatch) {
     logger.warn('Previous realtime batch is still running, skipping overlapping cycle');
     return;
