@@ -1,10 +1,38 @@
 import TelegramBot from 'node-telegram-bot-api';
+import { SocksProxyAgent } from 'socks-proxy-agent';
+import { HttpsProxyAgent } from 'https-proxy-agent';
 import logger from '../utils/logger.js';
 import { TelegramError } from '../utils/errorHandler.js';
 
 /**
  * Telegram Bot configuration
  */
+
+// ── Outbound proxy for api.telegram.org ──────────────────────────────────────
+// The production API container runs in RU (Timeweb spb-3), where RKN blocks the
+// Telegram Bot API directly — so lead posting silently fails without a proxy.
+// Route every bot request through TELEGRAM_BOT_PROXY, falling back to the
+// leadbot's already-configured LEADBOT_PROXY so no new env var is needed.
+// Supports socks5:// and http(s)://. Neither set ⇒ direct connection (legacy).
+const buildTelegramProxyAgent = () => {
+  const url = process.env.TELEGRAM_BOT_PROXY || process.env.LEADBOT_PROXY;
+  if (!url || !url.trim()) return null;
+  try {
+    const scheme = (url.split('://')[0] || '').toLowerCase();
+    const agent = scheme.startsWith('socks')
+      ? new SocksProxyAgent(url)
+      : new HttpsProxyAgent(url);
+    logger.info('Telegram bot proxy enabled', { scheme });
+    return agent;
+  } catch (error) {
+    logger.error('Invalid TELEGRAM_BOT_PROXY — falling back to direct connection', {
+      error: error.message
+    });
+    return null;
+  }
+};
+
+const telegramProxyAgent = buildTelegramProxyAgent();
 
 let botInstance = null;
 
@@ -23,10 +51,14 @@ export const initializeTelegramBot = (token = null) => {
     // Create bot instance (polling disabled for production)
     botInstance = new TelegramBot(botToken, {
       polling: false,
-      filepath: false
+      filepath: false,
+      // Route through proxy when configured (RU servers can't reach Telegram directly)
+      ...(telegramProxyAgent ? { request: { agent: telegramProxyAgent } } : {})
     });
 
-    logger.info('Telegram bot initialized successfully');
+    logger.info('Telegram bot initialized successfully', {
+      viaProxy: !!telegramProxyAgent
+    });
     return botInstance;
   } catch (error) {
     logger.error('Failed to initialize Telegram bot', { error: error.message });
