@@ -19,13 +19,25 @@ const buildTelegramProxyAgent = () => {
   if (!url || !url.trim()) return null;
   try {
     const scheme = (url.split('://')[0] || '').toLowerCase();
-    const agent = scheme.startsWith('socks')
-      ? new SocksProxyAgent(url)
-      : new HttpsProxyAgent(url);
-    logger.info('Telegram bot proxy enabled', { scheme });
+    if (scheme.startsWith('socks')) {
+      // Force REMOTE DNS (socks5h). On RU hosts RKN poisons DNS for
+      // api.telegram.org, so the PROXY must resolve the hostname, not the
+      // client. With socks5:// (local DNS) socks-proxy-agent resolves locally
+      // to a dead IP and every send times out ("Proxy connection timed out");
+      // socks5h:// sends the hostname to the proxy. getMe happens to work but
+      // sendMessage to channels does not — this is the actual fix.
+      const remoteDnsUrl = (scheme === 'socks5' || scheme === 'socks')
+        ? url.replace(/^socks5?:\/\//i, 'socks5h://')
+        : url;
+      const agent = new SocksProxyAgent(remoteDnsUrl, { timeout: 25000 });
+      logger.info('Telegram bot proxy enabled', { scheme, remoteDns: true });
+      return agent;
+    }
+    const agent = new HttpsProxyAgent(url, { timeout: 25000 });
+    logger.info('Telegram bot proxy enabled', { scheme, remoteDns: false });
     return agent;
   } catch (error) {
-    logger.error('Invalid TELEGRAM_BOT_PROXY — falling back to direct connection', {
+    logger.error('Invalid proxy URL — falling back to direct connection', {
       error: error.message
     });
     return null;
