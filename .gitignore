@@ -40,7 +40,13 @@ imports/
 processed_*.txt
 proxies.txt
 
+# Credential files (Timeweb API token etc. — never commit; rotate after use)
+timeweb_creds.txt
+*creds*.txt
+*_token.txt
+
 # Telegram lead bot
 telegram-bot/data/
 telegram-bot/certs/*.crt
 telegram-bot/certs/*.pem
+.gstack/
