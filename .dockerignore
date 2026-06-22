@@ -1,5 +1,10 @@
-# Node dependencies
+# Node dependencies (top-level AND nested — the fullstack build pulls backend/ too,
+# so host (Windows) node_modules must never leak into the alpine image)
 node_modules
+**/node_modules
+
+# Stale embedded frontend copy (root src/ is the canonical/deployed one)
+backend/backend/frontend
 
 # Git metadata
 .git

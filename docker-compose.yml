@@ -1,8 +1,10 @@
 services:
   api:
     build:
-      context: ./backend/backend
-      dockerfile: Dockerfile
+      # Root context so the build can bundle BOTH the React frontend (repo root)
+      # and the Node backend (backend/backend) into one image. See Dockerfile.fullstack.
+      context: .
+      dockerfile: Dockerfile.fullstack
     ports:
       - "3001:3000"
     environment:
