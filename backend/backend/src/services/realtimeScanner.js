@@ -5,6 +5,7 @@ import { analyzeBatch, doubleCheckLead } from './messageAnalyzer.js';
 import { saveDetectedLead } from './leadDetector.js';
 import { postLeadToChannel, markLeadAsPosted } from './telegramPoster.js';
 import { generateMessageSuggestion } from './messageSuggestion.js';
+import { retryUnpostedLeads } from './leadRedelivery.js';
 import { isSleepTime } from '../utils/sleepWindow.js';
 import logger from '../utils/logger.js';
 
@@ -182,8 +183,10 @@ let isProcessingBatch = false;
 let subscribedAt = null;
 let processedMessageIds = new Set();
 const BATCH_INTERVAL = 5 * 60 * 1000; // 5 minutes — accumulate messages so AI batches fill to BATCH_SIZE more often, cutting OpenRouter cost
+const REDELIVERY_INTERVAL = 5 * 60 * 1000; // 5 minutes — re-post recent leads that failed to deliver (transient proxy/Telegram errors)
 let pendingMessages = [];
 let batchTimer = null;
+let redeliveryTimer = null;
 
 // Track last processed message ID per user to ensure all users get all messages
 let userLastProcessedIds = new Map();
@@ -764,6 +767,15 @@ export const startRealtimeScanner = async () => {
       interval: `${BATCH_INTERVAL / 1000} seconds`
     });
 
+    // Redelivery safety net: re-post recent leads that failed to deliver (e.g. a
+    // transient proxy timeout) so a momentary failure never permanently loses a lead.
+    redeliveryTimer = setInterval(() => {
+      retryUnpostedLeads().catch((e) => logger.error('Lead redelivery interval error', { error: e.message }));
+    }, REDELIVERY_INTERVAL);
+    logger.info('✅ Lead redelivery safety net started', {
+      interval: `${REDELIVERY_INTERVAL / 1000} seconds`
+    });
+
     // Clean up inactive users from tracking every hour
     setInterval(() => {
       // Keep tracking map clean - will be repopulated when users become active
@@ -815,6 +827,11 @@ export const stopRealtimeScanner = async () => {
       // Clear interval (polling mode)
       clearInterval(realtimeChannel);
       realtimeChannel = null;
+    }
+
+    if (redeliveryTimer) {
+      clearInterval(redeliveryTimer);
+      redeliveryTimer = null;
     }
 
     if (batchTimer) {
