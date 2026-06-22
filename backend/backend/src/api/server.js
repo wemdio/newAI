@@ -1,8 +1,6 @@
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import path from 'path';
-import { fileURLToPath } from 'url';
 import { initializeDatabase, healthCheck as dbHealthCheck } from '../config/database.js';
 import { healthCheck as openrouterHealthCheck } from '../config/openrouter.js';
 import { healthCheck as telegramHealthCheck } from '../config/telegram.js';
@@ -29,10 +27,6 @@ import leadbotRoutes from './routes/leadbot.js';
 /**
  * Express server setup
  */
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Built frontend SPA lives here in the combined image (Dockerfile.fullstack copies dist -> ./public)
-const FRONTEND_DIR = path.join(__dirname, '../../public');
 
 const app = express();
 
@@ -126,8 +120,8 @@ app.get('/health', async (req, res) => {
   });
 });
 
-// API info (moved off '/' so the SPA can be served at the root)
-app.get('/api', (req, res) => {
+// Root endpoint
+app.get('/', (req, res) => {
   res.json({
     name: 'Telegram Lead Scanner API',
     version: '1.0.0',
@@ -158,20 +152,6 @@ app.use('/api/outreach', outreachRoutes);
 app.use('/api/contacts', contactsRoutes);
 app.use('/api/classifier', classifierRoutes);
 app.use('/api/leadbot', leadbotRoutes);
-
-// ============= FRONTEND (single-app deploy) =============
-// Serve the built React SPA from the same Express app. Static assets first, then
-// an SPA fallback so client-side (React Router) routes resolve to index.html.
-// API/health requests are excluded so they still hit the 404/JSON handler below.
-app.use(express.static(FRONTEND_DIR));
-app.get('*', (req, res, next) => {
-  if (req.path.startsWith('/api') || req.path === '/health') {
-    return next();
-  }
-  res.sendFile(path.join(FRONTEND_DIR, 'index.html'), (err) => {
-    if (err) next(); // no build present (e.g. API-only dev) -> fall through to 404
-  });
-});
 
 // 404 handler
 app.use((req, res) => {
