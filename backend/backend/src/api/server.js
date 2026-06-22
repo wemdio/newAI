@@ -79,8 +79,13 @@ if (process.env.PHOENIX_COLLECTOR_ENDPOINT) {
   }
 }
 
-// Security headers — after Phoenix proxy so CSP doesn't break Phoenix UI
+// Security headers — after Phoenix proxy so CSP doesn't break Phoenix UI.
+// CSP is disabled because this app now also serves the React SPA, and helmet's
+// default `default-src 'self'` (no connect-src) would block the SPA's
+// cross-origin calls to Supabase (auth + realtime wss). The standalone frontend
+// (nginx/serve) shipped without CSP, so this restores that behavior.
 app.use(helmet({
+  contentSecurityPolicy: false,
   crossOriginResourcePolicy: false,
   crossOriginOpenerPolicy: false,
   crossOriginEmbedderPolicy: false
