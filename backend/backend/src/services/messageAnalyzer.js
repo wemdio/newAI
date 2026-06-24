@@ -746,22 +746,45 @@ ${JSON.stringify(messagesArray)}`;
     const costPerMessage = totalCost / batchSize;
     
     // Process and validate each result
+    // Match results to messages BY ID, not by array position. The model is told to
+    // echo each message's id; trusting position silently misattributes a verdict to
+    // the wrong message whenever the model reorders or merges entries — that is the
+    // root cause of "lead" cards whose reasoning belongs to a different message.
+    const resultById = new Map();
+    let anyResultHadId = false;
+    for (const r of batchResults) {
+      const rid = r && r.id != null ? String(r.id).trim() : '';
+      if (rid) { resultById.set(rid, r); anyResultHadId = true; }
+    }
+
     const results = [];
     for (let i = 0; i < messages.length; i++) {
       const message = messages[i];
-      const aiResultRaw = batchResults[i];
-      
-      // Check if result exists
-      if (!aiResultRaw) {
-        logger.error('Missing batch result', {
-          messageId: message.id,
-          position: i,
-          totalResults: batchResults.length
-        });
-        throw new AIServiceError(`Missing result for message at position ${i}`);
+      const expectedId = message.id.toString();
+
+      let aiResultRaw = resultById.get(expectedId);
+      // Positional fallback ONLY when the model returned no ids at all (then the
+      // ordered array is the only signal; the count already equals batchSize above).
+      if (!aiResultRaw && !anyResultHadId) {
+        aiResultRaw = batchResults[i];
       }
 
-      const expectedId = message.id.toString();
+      // No trustworthy verdict for THIS message -> do not guess (guessing is exactly
+      // what caused the misattribution). Mark not-a-lead; if still new it is re-checked.
+      if (!aiResultRaw) {
+        logger.warn('No id-matched batch result for message — skipping to avoid misattribution', {
+          messageId: message.id,
+          position: i,
+          hadIds: anyResultHadId
+        });
+        results.push({
+          isMatch: false,
+          aiResponse: { id: expectedId, is_match: false, confidence_score: 0, reasoning: 'no id-matched result', matched_criteria: [] },
+          metadata: { duration: duration / batchSize, cost: costPerMessage, model, validationPassed: false }
+        });
+        continue;
+      }
+
       const aiResult = normalizeBatchAIResult(aiResultRaw, expectedId);
       
       // Validate result has correct ID
