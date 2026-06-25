@@ -1,12 +1,24 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Optional
 from datetime import datetime, timezone
 
 from aiogram import F, Router
+from aiogram.exceptions import (
+    TelegramAPIError,
+    TelegramBadRequest,
+    TelegramForbiddenError,
+    TelegramRetryAfter,
+)
 from aiogram.filters import Command, CommandStart
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    Message,
+)
 
 from .config import Config
 from .constants import CATEGORY_BY_CODE, CATEGORY_BY_ID, CATEGORIES, Category
@@ -47,6 +59,7 @@ from .texts import (
 from .utils import extract_contact_url, is_contact_hidden, iso_now, now_utc, parse_iso
 
 router = Router()
+log = logging.getLogger(__name__)
 
 
 REFERRAL_BONUS_LEADS = 10
@@ -500,6 +513,121 @@ async def cmd_stats(message: Message, db: Database, config: Config) -> None:
         return
     stats = await db.get_admin_stats()
     await message.answer(admin_stats_text(stats))
+
+
+# ── Broadcast (admin) ────────────────────────────────────────────────────────
+# Reply /broadcast to a message → bot copies that exact message (text, links,
+# formatting, emoji preserved 1:1 via copy_message) to every bot user.
+BROADCAST_DELAY = 0.05  # ~20 msgs/sec — safely under Telegram limits
+
+
+@router.message(Command("broadcast"))
+async def cmd_broadcast(message: Message, db: Database, config: Config) -> None:
+    if message.from_user.id not in config.admin_ids:
+        return
+    target = message.reply_to_message
+    if target is None:
+        await message.answer(
+            "Рассылка: ответь (reply) командой /broadcast на сообщение, которое нужно "
+            "разослать всем пользователям бота. Я пришлю тестовую копию и спрошу подтверждение."
+        )
+        return
+    ids = await db.get_all_telegram_ids()
+    total = len(ids)
+    # Test copy to the admin so they see exactly how it will look.
+    try:
+        await message.bot.copy_message(
+            chat_id=message.chat.id,
+            from_chat_id=target.chat.id,
+            message_id=target.message_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        await message.answer(f"Не удалось скопировать сообщение: {exc}")
+        return
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=f"✅ Разослать всем ({total})",
+                    callback_data=f"bcast:{target.chat.id}:{target.message_id}",
+                ),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="bcast_cancel"),
+            ]
+        ]
+    )
+    await message.answer(
+        f"☝️ Так выглядит рассылка. Получателей в базе: <b>{total}</b>. "
+        "Кто заблокировал бота — тем не дойдёт. Разослать?",
+        reply_markup=keyboard,
+        parse_mode="HTML",
+    )
+
+
+@router.callback_query(F.data == "bcast_cancel")
+async def cb_broadcast_cancel(callback: CallbackQuery, config: Config) -> None:
+    if callback.from_user.id not in config.admin_ids:
+        await callback.answer()
+        return
+    await callback.message.edit_text("Рассылка отменена.")
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("bcast:"))
+async def cb_broadcast_run(callback: CallbackQuery, db: Database, config: Config) -> None:
+    if callback.from_user.id not in config.admin_ids:
+        await callback.answer("Недостаточно прав.", show_alert=True)
+        return
+    try:
+        _, from_chat_id_s, message_id_s = callback.data.split(":")
+        from_chat_id = int(from_chat_id_s)
+        message_id = int(message_id_s)
+    except (ValueError, AttributeError):
+        await callback.answer("Битые данные рассылки.", show_alert=True)
+        return
+    await callback.answer()
+    bot = callback.bot
+    ids = await db.get_all_telegram_ids()
+    total = len(ids)
+    await callback.message.edit_text(f"📤 Рассылка запущена… 0/{total}")
+
+    sent = blocked = errors = 0
+    for index, telegram_id in enumerate(ids, start=1):
+        try:
+            await bot.copy_message(
+                chat_id=telegram_id, from_chat_id=from_chat_id, message_id=message_id
+            )
+            sent += 1
+        except TelegramForbiddenError:
+            blocked += 1
+        except TelegramRetryAfter as exc:
+            await asyncio.sleep(exc.retry_after + 1)
+            try:
+                await bot.copy_message(
+                    chat_id=telegram_id, from_chat_id=from_chat_id, message_id=message_id
+                )
+                sent += 1
+            except Exception:  # noqa: BLE001
+                errors += 1
+        except (TelegramBadRequest, TelegramAPIError):
+            errors += 1
+        except Exception:  # noqa: BLE001
+            errors += 1
+        if index % 100 == 0:
+            try:
+                await callback.message.edit_text(f"📤 Рассылка… {index}/{total}")
+            except Exception:  # noqa: BLE001
+                pass
+        await asyncio.sleep(BROADCAST_DELAY)
+
+    log.info("Broadcast done: sent=%s blocked=%s errors=%s total=%s", sent, blocked, errors, total)
+    await callback.message.answer(
+        "✅ Рассылка завершена.\n"
+        f"Доставлено: <b>{sent}</b>\n"
+        f"Заблокировали бота: <b>{blocked}</b>\n"
+        f"Ошибок: <b>{errors}</b>\n"
+        f"Всего в базе: {total}",
+        parse_mode="HTML",
+    )
 
 
 @router.message(Command("grant"))

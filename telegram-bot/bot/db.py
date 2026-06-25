@@ -773,6 +773,14 @@ class Database:
         )
         return int(lead_id) if lead_id is not None else None
 
+    async def get_all_telegram_ids(self) -> list[int]:
+        """Every telegram_id that has ever started the bot — the broadcast audience."""
+        pool = self._pool()
+        rows = await pool.fetch(
+            f"SELECT telegram_id FROM {SCHEMA}.users WHERE telegram_id IS NOT NULL"
+        )
+        return [int(r["telegram_id"]) for r in rows]
+
     async def get_admin_stats(self) -> dict:
         pool = self._pool()
         counts = await pool.fetchrow(f"""
