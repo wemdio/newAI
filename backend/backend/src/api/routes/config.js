@@ -393,7 +393,30 @@ router.get('/proxy-debug', asyncHandler(async (req, res) => {
       sendTest = 'ERROR: ' + (e?.message || String(e));
     }
   }
-  res.json({ configuredProxy: masked, source, hasProxy: !!raw, sendTest });
+
+  // ?proxy=ip:port:user:pass (or a full socks URL) — test whether THIS server
+  // can reach that proxy, without a redeploy. Uses getMe (no message sent).
+  let candidateTest = 'not-run (add ?proxy=ip:port:user:pass)';
+  if (req.query.proxy) {
+    try {
+      let purl = String(req.query.proxy);
+      if (!purl.includes('://')) {
+        const [ip, port, user, pass] = purl.split(':');
+        purl = `socks5h://${user}:${pass}@${ip}:${port}`;
+      } else {
+        purl = purl.replace(/^socks5:\/\//i, 'socks5h://');
+      }
+      const { SocksProxyAgent } = await import('socks-proxy-agent');
+      const TelegramBot = (await import('node-telegram-bot-api')).default;
+      const agent = new SocksProxyAgent(purl, { timeout: 20000 });
+      const b = new TelegramBot(process.env.TELEGRAM_BOT_TOKEN, { polling: false, request: { agent } });
+      const me = await b.getMe();
+      candidateTest = 'REACHABLE ✓ (@' + me.username + ')';
+    } catch (e) {
+      candidateTest = 'FAIL: ' + (e?.message || String(e));
+    }
+  }
+  res.json({ configuredProxy: masked, source, hasProxy: !!raw, sendTest, candidateTest });
 }));
 
 /**
