@@ -371,6 +371,32 @@ router.post('/test-telegram', authenticateUser, strictLimiter, asyncHandler(asyn
 }));
 
 /**
+ * GET /api/config/proxy-debug
+ * Reveal the proxy the RUNNING container actually sees + optional live send test.
+ * Public (no auth) so it can be opened in a browser. Creds are masked.
+ * ?test=1 also performs a real sendMessage through the container's proxy and
+ * returns the RAW error (the true failure reason), unlike the wrapped 500s.
+ */
+router.get('/proxy-debug', asyncHandler(async (req, res) => {
+  const raw = process.env.TELEGRAM_BOT_PROXY || process.env.LEADBOT_PROXY || '';
+  const masked = raw ? raw.replace(/\/\/[^@]*@/, '//***:***@') : '(none)';
+  const source = process.env.TELEGRAM_BOT_PROXY ? 'TELEGRAM_BOT_PROXY'
+    : (process.env.LEADBOT_PROXY ? 'LEADBOT_PROXY' : 'none');
+  let sendTest = 'not-run (add ?test=1)';
+  if (req.query.test) {
+    const chat = (process.env.TELEGRAM_NOTIFICATIONS_CHAT_ID || '').split('_')[0];
+    try {
+      const { getTelegramBot } = await import('../../config/telegram.js');
+      const m = await getTelegramBot().sendMessage(chat, '🔧 proxy-debug');
+      sendTest = 'OK message_id=' + m.message_id;
+    } catch (e) {
+      sendTest = 'ERROR: ' + (e?.message || String(e));
+    }
+  }
+  res.json({ configuredProxy: masked, source, hasProxy: !!raw, sendTest });
+}));
+
+/**
  * GET /api/config/example-prompts
  * Get example prompts for users
  */
