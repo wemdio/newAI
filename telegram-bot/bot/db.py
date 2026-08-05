@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import logging
 import ssl
-from typing import Iterable, Optional
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-
 import uuid
+from datetime import datetime, timedelta
+from typing import Iterable, Optional, Sequence
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import asyncpg
 
 from .constants import CATEGORIES, Category
-from datetime import timedelta
-
+from .promocodes import calculate_access_until
 from .utils import iso_now, now_utc
 
 _UNSET = object()
@@ -341,6 +340,98 @@ class Database:
             """,
             user_id,
         )
+
+    async def redeem_promo_for_categories(
+        self,
+        *,
+        user_id: int,
+        code: str,
+        category_ids: Sequence[int],
+        free_leads_total: int,
+        duration_days: int,
+        now: datetime,
+    ) -> Optional[datetime]:
+        if not category_ids:
+            raise ValueError("At least one category is required for promo activation")
+        if duration_days <= 0:
+            raise ValueError("Promo duration must be positive")
+
+        pool = self._pool()
+        now_iso = now.isoformat()
+        promo_payment_id = f"promo:{code}:{user_id}"
+        async with pool.acquire() as conn:
+            async with conn.transaction():
+                claimed = await conn.fetchrow(
+                    f"""
+                    INSERT INTO {SCHEMA}.payments
+                        (user_id, category_id, provider, payment_id, status,
+                         amount_rub, currency, idempotence_key, kind,
+                         created_at, updated_at, paid_at, applied_at)
+                    VALUES ($1, $2, 'promo', $3, 'succeeded',
+                            0, 'RUB', $3, 'promo', $4, $4, $4, $4)
+                    ON CONFLICT(payment_id) DO NOTHING
+                    RETURNING id
+                    """,
+                    user_id,
+                    category_ids[0],
+                    promo_payment_id,
+                    now_iso,
+                )
+                if not claimed:
+                    return None
+
+                await conn.executemany(
+                    f"""
+                    INSERT INTO {SCHEMA}.user_category_state
+                        (user_id, category_id, free_leads_total, free_leads_used,
+                         free_started, created_at, updated_at)
+                    VALUES ($1, $2, $3, 0, FALSE, $4, $4)
+                    ON CONFLICT(user_id, category_id) DO NOTHING
+                    """,
+                    [
+                        (user_id, category_id, free_leads_total, now_iso)
+                        for category_id in category_ids
+                    ],
+                )
+
+                end_dates = []
+                for category_id in category_ids:
+                    existing = await conn.fetchrow(
+                        f"""
+                        SELECT end_date
+                        FROM {SCHEMA}.subscriptions
+                        WHERE user_id = $1 AND category_id = $2
+                        FOR UPDATE
+                        """,
+                        user_id,
+                        category_id,
+                    )
+                    end_date = calculate_access_until(
+                        existing["end_date"] if existing else None,
+                        now,
+                        duration_days,
+                    )
+                    await conn.execute(
+                        f"""
+                        INSERT INTO {SCHEMA}.subscriptions
+                            (user_id, category_id, status, start_date, end_date,
+                             grant_type, created_at, updated_at)
+                        VALUES ($1, $2, 'active', $3, $4, 'promo', $3, $3)
+                        ON CONFLICT(user_id, category_id) DO UPDATE SET
+                            status = EXCLUDED.status,
+                            start_date = EXCLUDED.start_date,
+                            end_date = EXCLUDED.end_date,
+                            grant_type = EXCLUDED.grant_type,
+                            updated_at = EXCLUDED.updated_at
+                        """,
+                        user_id,
+                        category_id,
+                        now_iso,
+                        end_date.isoformat(),
+                    )
+                    end_dates.append(end_date)
+
+        return min(end_dates)
 
     async def update_subscription_billing(
         self,

@@ -12,6 +12,7 @@ def main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
     rows = [
         [KeyboardButton(text="Категории")],
         [KeyboardButton(text="Мои подписки")],
+        [KeyboardButton(text="Активировать промокод")],
         [KeyboardButton(text="Позвать друга")],
         [KeyboardButton(text="Помощь")],
     ]

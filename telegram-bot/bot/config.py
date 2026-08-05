@@ -50,6 +50,8 @@ class Config:
     subscription_price_rub: int
     contact_price_rub: int
     subscription_duration_days: int
+    promo_code: Optional[str]
+    promo_duration_days: int
     subscription_auto_renew_default: bool
     subscription_renew_before_days: int
     subscription_renew_interval_seconds: int
@@ -127,6 +129,10 @@ def load_config() -> Config:
     subscription_duration_days = _parse_int(
         _getenv("SUBSCRIPTION_DURATION_DAYS", "LEADBOT_DURATION_DAYS", "30"), 30
     )
+    promo_code = (_getenv("PROMO_CODE", "LEADBOT_PROMO_CODE", "") or "").strip() or None
+    promo_duration_days = _parse_int(
+        _getenv("PROMO_DURATION_DAYS", "LEADBOT_PROMO_DURATION_DAYS", "30"), 30
+    )
     subscription_auto_renew_default = _parse_bool(
         _getenv("SUBSCRIPTION_AUTO_RENEW_DEFAULT", "LEADBOT_SUBSCRIPTION_AUTO_RENEW_DEFAULT", "1")
     )
@@ -179,6 +185,8 @@ def load_config() -> Config:
         subscription_price_rub=subscription_price_rub,
         contact_price_rub=contact_price_rub,
         subscription_duration_days=subscription_duration_days,
+        promo_code=promo_code,
+        promo_duration_days=promo_duration_days,
         subscription_auto_renew_default=subscription_auto_renew_default,
         subscription_renew_before_days=subscription_renew_before_days,
         subscription_renew_interval_seconds=subscription_renew_interval_seconds,

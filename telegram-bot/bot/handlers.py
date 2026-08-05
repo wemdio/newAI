@@ -13,6 +13,8 @@ from aiogram.exceptions import (
     TelegramRetryAfter,
 )
 from aiogram.filters import Command, CommandStart
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (
     CallbackQuery,
     InlineKeyboardButton,
@@ -38,6 +40,7 @@ from .keyboards import (
 )
 from .payment_flow import refresh_and_process_payment, start_user_payment
 from .payments import PaymentService
+from .promocodes import PromoRedemptionStatus, redeem_promo_code
 from .subscriptions import activate_subscription
 from .leads import LeadService
 from .texts import (
@@ -63,6 +66,10 @@ log = logging.getLogger(__name__)
 
 
 REFERRAL_BONUS_LEADS = 10
+
+
+class PromoActivation(StatesGroup):
+    waiting_for_code = State()
 
 
 @router.message(CommandStart())
@@ -95,6 +102,66 @@ async def cmd_start(message: Message, db: Database, config: Config) -> None:
             )
         except Exception as exc:
             logging.warning("Failed to notify referrer %s: %s", referrer_telegram_id, exc)
+
+
+async def _activate_promo(message: Message, db: Database, config: Config, code: str) -> None:
+    user_id = await db.ensure_user(message.from_user.id, message.from_user.username)
+    result = await redeem_promo_code(
+        db,
+        config,
+        user_id=user_id,
+        entered_code=code,
+    )
+    if result.status == PromoRedemptionStatus.ACTIVATED:
+        await message.answer(
+            "✅ Промокод активирован.\n\n"
+            f"Доступ ко всем {result.category_count} нишам открыт до "
+            f"{result.access_until.strftime('%d.%m.%Y')}.",
+            reply_markup=post_activation_keyboard(),
+        )
+    elif result.status == PromoRedemptionStatus.ALREADY_USED:
+        await message.answer("Этот промокод уже был активирован вашим аккаунтом.")
+    elif result.status == PromoRedemptionStatus.DISABLED:
+        await message.answer("Активация промокодов временно недоступна.")
+    else:
+        await message.answer("Промокод не найден. Проверьте код и попробуйте ещё раз.")
+
+
+@router.message(Command("promo"))
+async def cmd_promo(
+    message: Message,
+    db: Database,
+    config: Config,
+    state: FSMContext,
+) -> None:
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) == 1:
+        await state.set_state(PromoActivation.waiting_for_code)
+        await message.answer("Введите промокод одним сообщением.")
+        return
+
+    await state.clear()
+    await _activate_promo(message, db, config, parts[1])
+
+
+@router.message(F.text == "Активировать промокод")
+async def prompt_promo_code(message: Message, state: FSMContext) -> None:
+    await state.set_state(PromoActivation.waiting_for_code)
+    await message.answer("Введите промокод одним сообщением.")
+
+
+@router.message(PromoActivation.waiting_for_code)
+async def receive_promo_code(
+    message: Message,
+    db: Database,
+    config: Config,
+    state: FSMContext,
+) -> None:
+    if not message.text:
+        await message.answer("Промокод должен быть текстом.")
+        return
+    await state.clear()
+    await _activate_promo(message, db, config, message.text)
 
 
 @router.message(Command("categories"))

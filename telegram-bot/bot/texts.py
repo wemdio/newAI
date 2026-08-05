@@ -129,6 +129,7 @@ def help_text(price_rub: int) -> str:
         "Бот присылает заявки из Telegram-чатов.\n\n"
         "Подписка:\n"
         f"{price_rub} ₽ / месяц за категорию.\n\n"
+        "Промокод можно активировать командой /promo КОД.\n\n"
         "Вы получаете новые лиды сразу после их появления.\n\n"
         "Если есть вопросы: @sorichev\n\n"
         f"{BONUS_ACCESS_TEXT}\n\n"
@@ -169,7 +170,11 @@ def admin_stats_text(stats: dict) -> str:
         lines.append("\nАктивные подписчики:")
         for u in stats["active_users"]:
             gt = u["grant_type"]
-            label = "/grant" if gt in ("admin", "bonus") else "оплатил"
+            label = {
+                "admin": "/grant",
+                "bonus": "/grant",
+                "promo": "промокод",
+            }.get(gt, "оплатил")
             lines.append(f"  @{u['username'] or u['telegram_id']} — {gt} ({label})")
 
     if stats.get("payments"):
