@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from collections.abc import Iterable
+
 from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -5,7 +9,7 @@ from aiogram.types import (
     ReplyKeyboardMarkup,
 )
 
-from .constants import CATEGORIES
+from .constants import CATEGORIES, Category
 
 
 def main_menu_keyboard(is_admin: bool = False) -> ReplyKeyboardMarkup:
@@ -73,13 +77,23 @@ def pay_required_keyboard(category_id: int) -> InlineKeyboardMarkup:
     )
 
 
-def my_actions_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+def my_actions_keyboard(cancel_categories: Iterable[Category] = ()) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"Отменить автопродление: {category.title}",
+                callback_data=f"autorenew_off:{category.id}",
+            )
+        ]
+        for category in cancel_categories
+    ]
+    rows.extend(
+        [
             [InlineKeyboardButton(text="Продлить", callback_data="categories")],
             [InlineKeyboardButton(text="Категории", callback_data="categories")],
         ]
     )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def lead_actions_keyboard(category_id: int, contact_url: str | None) -> InlineKeyboardMarkup | None:

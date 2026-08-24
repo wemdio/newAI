@@ -439,7 +439,7 @@ class Database:
         category_id: int,
         auto_renew: Optional[int] = None,
         provider: Optional[str] = None,
-        payment_method_id: Optional[str] = None,
+        payment_method_id: object = _UNSET,
         last_payment_id: Optional[str] = None,
         canceled_at: object = _UNSET,
     ) -> None:
@@ -452,7 +452,7 @@ class Database:
         if provider is not None:
             values.append(provider)
             fields.append(f"provider = ${len(values)}")
-        if payment_method_id is not None:
+        if payment_method_id is not _UNSET:
             values.append(payment_method_id)
             fields.append(f"payment_method_id = ${len(values)}")
         if last_payment_id is not None:

@@ -98,10 +98,15 @@ def payment_canceled_text(category: Category) -> str:
 
 
 def autorenew_disabled_text(category: Category, end_date: datetime) -> str:
+    if end_date >= datetime.now(end_date.tzinfo):
+        access_text = f"Доступ действует до:\n{end_date.strftime('%d.%m.%Y')}"
+    else:
+        access_text = f"Доступ закончился:\n{end_date.strftime('%d.%m.%Y')}"
     return (
         "Автопродление отключено.\n\n"
         f"Категория:\n{category.title}\n\n"
-        f"Доступ действует до:\n{end_date.strftime('%d.%m.%Y')}"
+        f"{access_text}\n\n"
+        "Сохраненный способ оплаты удален. Новых автоматических списаний не будет."
     )
 
 

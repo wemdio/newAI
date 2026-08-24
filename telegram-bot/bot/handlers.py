@@ -453,13 +453,14 @@ async def cb_autorenew_off(query: CallbackQuery, db: Database, config: Config) -
         return
     user_id = await db.ensure_user(query.from_user.id, query.from_user.username)
     subscription = await db.get_subscription(user_id, category_id)
-    if not _subscription_active(subscription):
-        await query.answer("Нет активной подписки", show_alert=True)
+    if not subscription:
+        await query.answer("Подписка не найдена", show_alert=True)
         return
     await db.update_subscription_billing(
         user_id,
         category_id,
         auto_renew=0,
+        payment_method_id=None,
         canceled_at=iso_now(),
     )
     end_date = parse_iso(subscription["end_date"])
@@ -516,6 +517,7 @@ async def _build_my_subscriptions(db: Database, user_id: int):
     state_ids = set(await db.list_user_category_state_ids(user_id))
     relevant_ids = state_ids | set(by_category.keys())
     lines: list[str] = []
+    cancel_categories: list[Category] = []
     now = datetime.now(timezone.utc)
     for category in CATEGORIES:
         if category.id not in relevant_ids:
@@ -530,17 +532,21 @@ async def _build_my_subscriptions(db: Database, user_id: int):
             active = parse_iso(end_date) >= now and sub["status"] == "active"
         except Exception:
             active = False
+        auto_renew = int(sub["auto_renew"] or 0)
         if active:
             line = f"{category.title}\nАктивна до: {parse_iso(end_date).strftime('%d.%m.%Y')}"
-            auto_renew = int(sub["auto_renew"] or 0)
             line += f"\nАвтопродление: {'включено' if auto_renew else 'выключено'}"
         else:
             line = f"{category.title}\nНет подписки"
+            if auto_renew:
+                line += "\nАвтопродление: включено"
+        if auto_renew:
+            cancel_categories.append(category)
         grant_type = sub["grant_type"]
         if grant_type in ("bonus", "admin") and active:
             line += "\nТип: бонусный доступ"
         lines.append(line)
-    return my_subscriptions_text(lines), my_actions_keyboard()
+    return my_subscriptions_text(lines), my_actions_keyboard(cancel_categories)
 
 
 @router.message(Command("my"))
