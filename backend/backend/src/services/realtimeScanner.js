@@ -2,11 +2,14 @@ import { getSupabase } from '../config/database.js';
 import { getActiveUserConfigs, getActiveConfidenceFilter } from '../database/queries.js';
 import { preFilterMessages } from '../validators/messagePreFilter.js';
 import { analyzeBatch, doubleCheckLead } from './messageAnalyzer.js';
+import { resolveAnalysisBatchSize } from './analysisBatchSize.js';
 import { saveDetectedLead } from './leadDetector.js';
 import { postLeadToChannel, markLeadAsPosted } from './telegramPoster.js';
 import { generateMessageSuggestion } from './messageSuggestion.js';
 import { retryUnpostedLeads } from './leadRedelivery.js';
 import { isSleepTime } from '../utils/sleepWindow.js';
+import { processScanPage } from './scanProgress.js';
+import { createVerificationGate } from './verificationGate.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -190,6 +193,8 @@ let redeliveryTimer = null;
 
 // Track last processed message ID per user to ensure all users get all messages
 let userLastProcessedIds = new Map();
+const userCompletedIds = new Map();
+const verificationGate = createVerificationGate(doubleCheckLead);
 
 // Track per-user sleep state so we only log transitions (asleep<->awake), not every 5s tick
 let userSleepState = new Map();
@@ -349,6 +354,8 @@ const processBatch = async () => {
         if (inSleep) {
           const latestId = messages[messages.length - 1].id;
           userLastProcessedIds.set(userId, latestId);
+          userCompletedIds.delete(userId);
+          verificationGate.retryAt.delete(userId);
 
           if (!wasSleeping) {
             logger.info('💤 User entered analysis sleep window — dropping incoming messages', {
@@ -373,6 +380,9 @@ const processBatch = async () => {
           userSleepState.set(userId, false);
         }
 
+        // Sleep handling above still advances the cursor without any AI calls.
+        if (Date.now() < (verificationGate.retryAt.get(userId) || 0)) continue;
+
         logger.info('Processing messages for user', {
           userId,
           count: messages.length,
@@ -381,10 +391,17 @@ const processBatch = async () => {
         });
 
         // Process messages for this user BEFORE advancing the pointer
-        await processMessagesForUser(messages, userConfig);
-
-        // Only advance after successful processing so failed messages get retried
-        userLastProcessedIds.set(userId, messages[messages.length - 1].id);
+        const completedIds = userCompletedIds.get(userId) || new Set();
+        userCompletedIds.set(userId, completedIds);
+        const progress = await processScanPage(messages, userLastId, completedIds,
+          pending => processMessagesForUser(pending, userConfig));
+        userLastProcessedIds.set(userId, progress.lastProcessedId);
+        if (progress.failedIds.length > 0) {
+          logger.warn('Analysis failures retained for next cycle', {
+            userId, failedMessageIds: progress.failedIds,
+            lastProcessedId: progress.lastProcessedId
+          });
+        }
         
       } catch (error) {
         logger.error('Failed to process messages for user', {
@@ -408,6 +425,7 @@ const processBatch = async () => {
  */
 const processMessagesForUser = async (messages, userConfig) => {
   const userId = userConfig.user_id;
+  if (messages.length === 0) return [];
 
   try {
     // Pre-filter messages (with optional embedding rescue for keyword-rejected)
@@ -437,7 +455,7 @@ const processMessagesForUser = async (messages, userConfig) => {
         userId,
         total: messages.length
       });
-      return;
+      return [];
     }
 
     logger.info('Messages passed pre-filter', {
@@ -465,7 +483,7 @@ const processMessagesForUser = async (messages, userConfig) => {
           maxConcurrent: parseInt(process.env.AI_CONCURRENCY || '5', 10),
           stopOnError: false,
           useBatchApi: process.env.USE_BATCH_API !== 'false', // Enable by default
-          batchSize: parseInt(process.env.BATCH_SIZE || '5', 10), // 5 messages per API call
+          batchSize: resolveAnalysisBatchSize(userConfig.id, parseInt(process.env.BATCH_SIZE || '5', 10)),
           userId // for api_usage cost logging
         }
       );
@@ -499,6 +517,7 @@ const processMessagesForUser = async (messages, userConfig) => {
         `All ${analysisResults.stats.failed} messages failed AI analysis — likely rate limited, will retry next cycle`
       );
     }
+    const failedIds = analysisResults.failed.map(result => result.message.id);
 
     // Process matches (leads found)
     if (analysisResults.matches.length === 0) {
@@ -506,7 +525,7 @@ const processMessagesForUser = async (messages, userConfig) => {
         userId,
         messagesAnalyzed: analysisResults.stats.analyzed
       });
-      return;
+      return failedIds;
     }
 
     // Process each matched lead
@@ -516,35 +535,34 @@ const processMessagesForUser = async (messages, userConfig) => {
         const shouldDoubleCheck = shouldRunGeminiDoubleCheck(match.message, match.analysis.aiResponse);
         
         if (shouldDoubleCheck) {
-          try {
-            const verification = await doubleCheckLead(
-              match.message,
-              match.analysis.aiResponse,
-              userConfig.lead_prompt,
-              userConfig.openrouter_api_key,
-              userId
-            );
+          const verification = await verificationGate.check(
+            match.message,
+            match.analysis.aiResponse,
+            userConfig.lead_prompt,
+            userConfig.openrouter_api_key,
+            userId
+          );
 
-            if (!verification.verified) {
-              logger.info('Lead rejected by Gemini Double Check', {
-                userId,
-                messageId: match.message.id,
-                reason: verification.reasoning
-              });
-              continue; // Skip saving this lead
-            }
+          if (verification.retryable) {
+            failedIds.push(match.message.id);
+            logger.warn('Lead verification unavailable; retained for retry', {
+              userId, messageId: match.message.id, retryAfterMs: verification.retryAfterMs
+            });
+            continue;
+          }
 
-            // PRESERVE original reasoning, just add verification prefix
-            const originalReasoning = match.analysis.aiResponse.reasoning || '';
-            match.analysis.aiResponse.reasoning = `[Gemini ✓] ${originalReasoning}`;
-          } catch (dcError) {
-            logger.warn('Double check failed, proceeding with original analysis', {
+          if (!verification.verified) {
+            logger.info('Lead rejected by AI Double Check', {
               userId,
               messageId: match.message.id,
-              error: dcError.message
+              model: verification.model,
+              reason: verification.reasoning
             });
-            // Continue with original analysis if double check fails
+            continue; // Skip saving this lead
           }
+
+          const originalReasoning = match.analysis.aiResponse.reasoning || '';
+          match.analysis.aiResponse.reasoning = `[AI ✓] ${originalReasoning}`;
         } else {
           logger.debug('Skipping Gemini Double Check (smart mode)', {
             userId,
@@ -701,6 +719,7 @@ const processMessagesForUser = async (messages, userConfig) => {
           });
         }
       } catch (saveError) {
+        failedIds.push(match.message.id);
         logger.error('Failed to save lead', {
           userId,
           messageId: match.message.id,
@@ -708,6 +727,7 @@ const processMessagesForUser = async (messages, userConfig) => {
         });
       }
     }
+    return failedIds;
   } catch (error) {
     logger.error('Failed to process messages for user', {
       userId,
@@ -754,6 +774,8 @@ export const startRealtimeScanner = async () => {
     
     // Clear user tracking on restart
     userLastProcessedIds.clear();
+    userCompletedIds.clear();
+    verificationGate.retryAt.clear();
     userSleepState.clear();
 
     logger.info('Scanner initialized - each user will track their own message position');
@@ -788,6 +810,12 @@ export const startRealtimeScanner = async () => {
         userLastProcessedIds = new Map(entries.slice(-50));
         // Drop sleep-state for users we no longer track
         const keepIds = new Set(userLastProcessedIds.keys());
+        for (const uid of userCompletedIds.keys()) {
+          if (!keepIds.has(uid)) userCompletedIds.delete(uid);
+        }
+        for (const uid of verificationGate.retryAt.keys()) {
+          if (!keepIds.has(uid)) verificationGate.retryAt.delete(uid);
+        }
         for (const uid of userSleepState.keys()) {
           if (!keepIds.has(uid)) userSleepState.delete(uid);
         }
@@ -844,6 +872,8 @@ export const stopRealtimeScanner = async () => {
     
     // Clear user tracking
     userLastProcessedIds.clear();
+    userCompletedIds.clear();
+    verificationGate.retryAt.clear();
     userSleepState.clear();
     isProcessingBatch = false;
 

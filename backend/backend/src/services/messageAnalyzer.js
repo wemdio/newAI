@@ -1,10 +1,11 @@
 import { getOpenRouter } from '../config/openrouter.js';
-import { buildSystemPromptWithCriteria, buildUserPromptForMessage, detectLeadMode } from '../prompts/promptBuilder.js';
+import { buildSystemPromptWithCriteria, buildUserPromptForMessage, buildBatchAnalysisPrompts, buildVerificationPrompts } from '../prompts/promptBuilder.js';
 import { validateAIResponse, logValidationResult } from '../validators/aiResponseValidator.js';
 import { estimateTokens, calculateCost } from '../utils/tokenCounter.js';
 import logger from '../utils/logger.js';
 import { AIServiceError, retryWithBackoff } from '../utils/errorHandler.js';
 import { logAiUsage } from './costOptimizer.js';
+import { mapBatchResults } from './batchResultMapping.js';
 import PQueue from 'p-queue';
 
 /**
@@ -156,41 +157,8 @@ export const doubleCheckLead = async (message, initialAnalysis, userCriteria, ap
 
     const client = getOpenRouter(apiKey);
 
-    // Mode-aware verification: 'offer' clients (marker [LEAD_MODE: OFFER]) must not
-    // have ads/offers rejected by the hardcoded verifier rules. Default unchanged.
-    const verificationRules = detectLeadMode(userCriteria) === 'offer'
-      ? `ПРАВИЛА ВЕРИФИКАЦИИ (РЕЖИМ ОФФЕР):
-- Лид = сообщение подходит под секцию "КОГО ИЩЕМ". Это МОЖЕТ быть объявление о продаже/сдаче самого объекта по теме критериев.
-- НЕ лид: реклама чужих посреднических услуг/сервиса; не та тема или не тот тип объекта; спам; вакансия; обрывок диалога или реплика конкретному человеку без самостоятельного смысла.
-- ПРИ СОМНЕНИИ в соответствии критериям — отвергай (verified: false).`
-      : `ПРАВИЛА ВЕРИФИКАЦИИ (будь СТРОГИМ — это финальный фильтр качества):
-- Лид = человек ЯВНО ищет исполнителя/услугу/решение или описывает конкретную бизнес-задачу по теме критериев.
-- НЕ лид:
-  • предлагает свои услуги / рекламирует / ищет сотрудников (вакансия);
-  • спрашивает ЧУЖОЙ опыт или мнение ("кто пользовался", "поделитесь опытом", "выхлоп есть?", "как у вас", "что посоветуете по опыту") — это опрос, не заказ;
-  • бытовой трёп или жалоба без запроса ("клиентов нет", "мало заявок", "тяжело идёт");
-  • обрывок диалога или реплика конкретному человеку без самостоятельного смысла ("Нужно! напишите в ЛС", "да, интересно", "отправьте КП");
-  • не та тема.
-- ПРИ СОМНЕНИИ — отвергай (verified: false). Подтверждай true ТОЛЬКО когда намерение нанять/купить/решить задачу очевидно из САМОГО сообщения, без додумывания.`;
-
-    const systemContent = `Ты — верификатор лидов. Первичный AI уже нашёл потенциальный лид. Твоя задача — проверить, не ошибся ли он.
-
-КРИТЕРИИ ПОИСКА ПОЛЬЗОВАТЕЛЯ:
-${userCriteria}
-
-${verificationRules}
-
-Отвечай СТРОГО JSON: {"verified": true} или {"verified": false, "reason": "кратко почему"}`;
-
-    const userContent = `ПЕРВИЧНЫЙ AI НАШЁЛ ЛИД (confidence: ${initialAnalysis.confidence_score}%):
-Причина: "${initialAnalysis.reasoning || 'не указана'}"
-
-СООБЩЕНИЕ:
-"${(message.message || '').substring(0, 800)}"
-${message.chat_name ? `Канал: ${message.chat_name}` : ''}
-${message.bio ? `БИО автора: ${message.bio.substring(0, 200)}` : ''}
-
-Верифицируй: это действительно лид по указанным критериям?`;
+    const { systemPrompt: systemContent, userPrompt: userContent } =
+      buildVerificationPrompts(message, initialAnalysis, userCriteria);
 
     const response = await retryWithBackoff(async () => {
       try {
@@ -203,11 +171,11 @@ ${message.bio ? `БИО автора: ${message.bio.substring(0, 200)}` : ''}
           response_format: { type: 'json_object' },
           temperature: 0,
           max_tokens: 2000
-        });
+        }, { maxRetries: 0 });
       } catch (e) {
         if (e.status === 403 || (e.response && e.response.status === 403)) {
            logger.error(`Model ${model} returned 403 Forbidden`, { error: e.message });
-           throw new Error(`Model ${model} is restricted (403)`);
+           throw e;
         }
         throw e;
       }
@@ -217,12 +185,12 @@ ${message.bio ? `БИО автора: ${message.bio.substring(0, 200)}` : ''}
 
     await logAiUsage(response, { userId, stage: 'doublecheck', model });
 
-    logger.info('Gemini Double Check response metadata', {
+    logger.info('AI Double Check response metadata', {
       messageId: message.id,
       ...getResponseMeta(model, response)
     });
 
-    logger.info('Gemini Double Check raw response', {
+    logger.info('AI Double Check raw response', {
       messageId: message.id,
       content: content ? content.substring(0, 300) : 'EMPTY',
       finishReason: response.choices[0]?.finish_reason
@@ -261,15 +229,22 @@ ${message.bio ? `БИО автора: ${message.bio.substring(0, 200)}` : ''}
         }
       }
       
-      const verified = parsed.verified === true;
+      if (parsed?.verified === 'true') parsed.verified = true;
+      if (parsed?.verified === 'false') parsed.verified = false;
+      if (typeof parsed?.verified !== 'boolean') {
+        throw new Error('Invalid verified status in double-check response');
+      }
+      const verified = parsed.verified;
       result = {
+        retryable: false,
         verified,
-        reasoning: parsed.reason || parsed.reasoning || (verified ? 'Verified by Gemini' : 'Rejected by Gemini'),
-        confidence: verified ? initialAnalysis.confidence_score : 0
+        reasoning: parsed.reason || parsed.reasoning || (verified ? 'Verified by AI' : 'Rejected by AI'),
+        confidence: verified ? initialAnalysis.confidence_score : 0,
+        model: response.model || model
       };
       
     } catch (e) {
-      logger.warn('Failed to parse Gemini response', { 
+      logger.warn('Failed to parse verification response', {
         content: content.substring(0, 300),
         error: e.message 
       });
@@ -279,15 +254,15 @@ ${message.bio ? `БИО автора: ${message.bio.substring(0, 200)}` : ''}
     const duration = Date.now() - startTime;
 
     if (!result.verified) {
-      logger.info('Lead rejected by Gemini Double Check', {
+      logger.info('Lead rejected by AI Double Check', {
         userId: 'see-caller',
         messageId: message.id,
         reason: result.reasoning,
-        geminiRaw: content.substring(0, 200)
+        verificationRaw: content.substring(0, 200)
       });
     }
     
-    logger.info('Gemini Double Check complete', {
+    logger.info('AI Double Check complete', {
         messageId: message.id,
         ...getResponseMeta(model, response),
         verified: result.verified,
@@ -299,13 +274,19 @@ ${message.bio ? `БИО автора: ${message.bio.substring(0, 200)}` : ''}
 
   } catch (error) {
     logger.error('Double check failed', { error: error.message, messageId: message.id });
-    // FAIL OPEN: if double-check itself fails, trust the initial DeepSeek analysis.
-    // DeepSeek already validated with confidence >= 70. Network/API failures
-    // should not silently kill all leads.
+    // Unavailable verification is neither a positive verdict nor a rejection.
+    // The scanner retains this message and backs off before trying again.
+    const retryAfter = error.headers?.get?.('retry-after') ?? error.headers?.['retry-after'];
+    const seconds = retryAfter == null || retryAfter === '' ? NaN : Number(retryAfter);
+    const requestedDelay = Number.isFinite(seconds)
+      ? seconds * 1000 : Date.parse(retryAfter || '') - Date.now();
     return { 
-      verified: true, 
-      reasoning: "Double check unavailable - trusting initial analysis", 
-      confidence: initialAnalysis.confidence_score 
+      verified: false,
+      retryable: true,
+      retryAfterMs: Math.max(60000, Number.isFinite(requestedDelay) ? requestedDelay : 0),
+      reasoning: 'Double check unavailable - retry required',
+      confidence: 0,
+      model
     }; 
   }
 };
@@ -423,6 +404,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     // SIMPLIFIED VALIDATION: Only check basic structure and confidence
     const validation = validateAIResponse(aiResponse, message);
     logValidationResult(validation, message);
+    if (!validation.valid) throw new AIServiceError('Invalid individual AI response structure');
     
     // Simple validation: trust AI if confidence >= 70 (practical threshold)
     const isValidMatch = 
@@ -505,59 +487,8 @@ export const analyzeMessageBatch = async (messages, userCriteria, apiKey, option
       messageIds: messages.map(m => m.id)
     });
     
-    // Build batch prompt — criteria in system message for DeepSeek prefix caching
-    // System prompt = SYSTEM_PROMPT + user criteria (STABLE prefix, cached across calls for same user)
-    const baseSystemPrompt = buildSystemPromptWithCriteria(userCriteria);
-    
-    // Cost optimization: omit empty optional fields (fewer prompt tokens, same semantics)
-    const messagesArray = messages.map(msg => {
-      const payload = {
-        id: msg.id.toString(),
-        message: msg.message || ''
-      };
-      if (msg.chat_name) payload.chat_name = msg.chat_name;
-      if (msg.username) payload.username = msg.username;
-      if (msg.bio) payload.bio = msg.bio;
-      return payload;
-    });
-    
-    // Mode-aware task block: 'offer' clients (marker [LEAD_MODE: OFFER] in criteria)
-    // must NOT have offers/ads auto-rejected. Default 'request' behavior unchanged.
-    const leadMode = detectLeadMode(userCriteria);
-    const taskBlock = leadMode === 'offer'
-      ? `ЗАДАЧА ДЛЯ КАЖДОГО СООБЩЕНИЯ (РЕЖИМ ОФФЕР):
-1. Объявления о продаже/сдаче объекта и описания сделок ДОПУСТИМЫ — не отсеивай их автоматически.
-   - Реклама посреднических услуг/сервиса по теме критериев -> сверься со стоп-факторами пользователя.
-2. Проверь соответствие КРИТЕРИЯМ ПОИСКА (см. system message), особенно секции "КОГО ИЩЕМ" и "НЕ СЧИТАТЬ ЛИДОМ".`
-      : `ЗАДАЧА ДЛЯ КАЖДОГО СООБЩЕНИЯ:
-1. Определи тип: ПОИСК/ПРОБЛЕМА (REQUEST) или ПРЕДЛОЖЕНИЕ (OFFER)?
-   - ПРЕДЛАГАЕТ услуги -> is_match: false
-   - ИЩЕТ решение / описывает проблему -> переходи к шагу 2
-2. Проверь соответствие КРИТЕРИЯМ ПОИСКА (см. system message).`;
-
-    // Stable instructions (task + output format) go into the CACHED system message, not the
-    // per-call user message. They are byte-identical across calls for the same client/mode, so the
-    // gateway serves them from cache (~10% of input price) instead of billing ~800 fresh input
-    // tokens on EVERY call. No batch count is hardcoded here, so the cached prefix stays identical
-    // even for partial (last-chunk) batches. Output behaviour is unchanged.
-    const systemPrompt = `${baseSystemPrompt}
-
-${taskBlock}
-
-ВАЖНО:
-1. Проанализируй КАЖДОЕ сообщение ОТДЕЛЬНО (не смешивай контекст!).
-2. Верни ТОЛЬКО JSON-массив — РОВНО по одному объекту на КАЖДОЕ входящее сообщение, в том же порядке.
-3. Каждый объект содержит: id, is_match, confidence_score, reasoning, matched_criteria.
-4. Reasoning (причина) ОЧЕНЬ КРАТКО (макс. 10 слов), чтобы избежать ошибок JSON.
-
-КРИТИЧЕСКИ ВАЖНО: ответ начинается с [ и заканчивается ] — чистый JSON-массив без любого текста вокруг.
-
-ФОРМАТ ОТВЕТА (JSON-массив, ровно по одному объекту на каждое сообщение из входа):
-[{"id":"id_первого","is_match":true,"confidence_score":85,"reasoning":"кратко 5-10 слов","matched_criteria":["критерий1"]}, {"id":"id_второго","is_match":false,"confidence_score":0,"reasoning":"кратко","matched_criteria":[]}]`;
-
-    // User prompt — ONLY the variable messages, so nearly the entire input is cached every call.
-    const userPrompt = `ПРОАНАЛИЗИРУЙ СЛЕДУЮЩИЕ ${batchSize} СООБЩЕНИЙ:
-${JSON.stringify(messagesArray)}`;
+    // Stable criteria/instructions stay in the cacheable system message.
+    const { systemPrompt, userPrompt } = buildBatchAnalysisPrompts(messages, userCriteria);
 
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
@@ -729,9 +660,7 @@ ${JSON.stringify(messagesArray)}`;
         received: batchResults.length,
         results: batchResults
       });
-      throw new AIServiceError(
-        `Expected ${batchSize} results, got ${batchResults.length}`
-      );
+      // Keep valid ID-matched verdicts; missing ones remain retryable failures.
     }
     
     // Calculate cost
@@ -750,38 +679,24 @@ ${JSON.stringify(messagesArray)}`;
     // echo each message's id; trusting position silently misattributes a verdict to
     // the wrong message whenever the model reorders or merges entries — that is the
     // root cause of "lead" cards whose reasoning belongs to a different message.
-    const resultById = new Map();
-    let anyResultHadId = false;
-    for (const r of batchResults) {
-      const rid = r && r.id != null ? String(r.id).trim() : '';
-      if (rid) { resultById.set(rid, r); anyResultHadId = true; }
-    }
+    const mappedResults = mapBatchResults(messages, batchResults);
 
     const results = [];
     for (let i = 0; i < messages.length; i++) {
       const message = messages[i];
       const expectedId = message.id.toString();
 
-      let aiResultRaw = resultById.get(expectedId);
-      // Positional fallback ONLY when the model returned no ids at all (then the
-      // ordered array is the only signal; the count already equals batchSize above).
-      if (!aiResultRaw && !anyResultHadId) {
-        aiResultRaw = batchResults[i];
-      }
+      const aiResultRaw = mappedResults[i];
 
       // No trustworthy verdict for THIS message -> do not guess (guessing is exactly
-      // what caused the misattribution). Mark not-a-lead; if still new it is re-checked.
+      // what caused the misattribution). A null result is retried, not rejected.
       if (!aiResultRaw) {
         logger.warn('No id-matched batch result for message — skipping to avoid misattribution', {
           messageId: message.id,
           position: i,
-          hadIds: anyResultHadId
+          responseCount: batchResults.length
         });
-        results.push({
-          isMatch: false,
-          aiResponse: { id: expectedId, is_match: false, confidence_score: 0, reasoning: 'no id-matched result', matched_criteria: [] },
-          metadata: { duration: duration / batchSize, cost: costPerMessage, model, validationPassed: false }
-        });
+        results.push(null);
         continue;
       }
 
@@ -800,6 +715,10 @@ ${JSON.stringify(messagesArray)}`;
       // Validate AI response structure
       const validation = validateAIResponse(aiResult, message);
       logValidationResult(validation, message);
+      if (!validation.valid || !idMatch) {
+        results.push(null);
+        continue;
+      }
       
       // FIXED: validateAIResponse returns { valid, reason, validations }, NOT { isValid, data }!
       const result = {
@@ -839,7 +758,7 @@ ${JSON.stringify(messagesArray)}`;
       totalDuration: duration,
       totalCost: typeof totalCost === 'number' ? totalCost.toFixed(6) : '0.000000',
       avgCostPerMessage: typeof costPerMessage === 'number' ? costPerMessage.toFixed(6) : '0.000000',
-      matches: results.filter(r => r.isMatch).length
+      matches: results.filter(r => r?.isMatch).length
     });
     
     return results;

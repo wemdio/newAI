@@ -1,6 +1,7 @@
 import { getSupabase } from '../config/database.js';
 import { preFilterMessages } from '../validators/messagePreFilter.js';
 import { analyzeBatch, doubleCheckLead } from './messageAnalyzer.js';
+import { resolveAnalysisBatchSize } from './analysisBatchSize.js';
 import { optimizeBatchSize, recordUsage } from './costOptimizer.js';
 import logger from '../utils/logger.js';
 import { DatabaseError } from '../utils/errorHandler.js';
@@ -431,7 +432,8 @@ export const detectLeads = async (userId, userConfig, options = {}) => {
       userConfig.lead_prompt,
       userConfig.openrouter_api_key,
       { 
-        maxConcurrent: parseInt(process.env.AI_CONCURRENCY || '20', 10) 
+        maxConcurrent: parseInt(process.env.AI_CONCURRENCY || '20', 10),
+        batchSize: resolveAnalysisBatchSize(userConfig.id)
       }
     );
     

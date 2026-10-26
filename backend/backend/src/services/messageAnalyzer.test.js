@@ -1,6 +1,9 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildLeadAnalysisCompletionParams } from './messageAnalyzer.js';
+import { analyzeBatch, analyzeMessage, analyzeMessageBatch, doubleCheckLead, buildLeadAnalysisCompletionParams } from './messageAnalyzer.js';
+import { initializeOpenRouter } from '../config/openrouter.js';
+import { buildBatchAnalysisPrompts, buildVerificationPrompts } from '../prompts/promptBuilder.js';
+import { resolveAnalysisBatchSize } from './analysisBatchSize.js';
 
 describe('buildLeadAnalysisCompletionParams', () => {
   test('does NOT send reasoning params (they break non-reasoning deepseek-chat and force fallback to the pricey reasoning model)', () => {
@@ -23,4 +26,175 @@ describe('buildLeadAnalysisCompletionParams', () => {
     assert.equal(params.temperature, 0.1);
     assert.equal(params.max_tokens, 4000);
   });
+});
+
+test('batch pipeline retains valid verdicts and exposes incomplete responses as failures', async (t) => {
+  // No real provider calls or usage writes are allowed in this test.
+  const oldUrl = process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_URL;
+  t.after(() => {
+    if (oldUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = oldUrl;
+  });
+  t.mock.method(globalThis, 'fetch', async () => { throw new Error('Unexpected network call'); });
+  const client = initializeOpenRouter('test-only-key');
+  const verdict = id => ({ id, is_match: false, confidence_score: 90, reasoning: '', matched_criteria: [] });
+  let payload;
+  const completion = t.mock.method(client.chat.completions, 'create', async () => ({
+    choices: [{ message: { content: JSON.stringify(payload) } }],
+    usage: { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 }
+  }));
+  const messages = [10, 20, 30].map(id => ({ id, message: 'Ordinary discussion without a purchase request' }));
+  for (const [response, failed] of [
+    [[verdict(30), verdict(10)], [20]],
+    [[verdict(10), verdict(20), verdict(20), verdict(30)], [20]],
+    [[{ ...verdict(10), is_match: 'broken' }, verdict(20), verdict(30)], [10]],
+    [[{ ...verdict(10), id: undefined }], [10, 20, 30]]
+  ]) {
+    payload = response;
+    const result = await analyzeBatch(messages, 'Find business requests', null, { maxConcurrent: 1 });
+    assert.deepEqual(result.failed.map(item => item.message.id), failed);
+    assert.equal(result.stats.analyzed, messages.length - failed.length);
+    assert.equal(result.stats.matches, 0);
+  }
+  assert.equal(completion.mock.callCount(), 4);
+  for (const [response, expected] of [[{}, false], [{ verified: 'false' }, false], [{ verified: false }, false]]) {
+    payload = response;
+    const checked = await doubleCheckLead(messages[0], { confidence_score: 85 }, 'Find requests', null);
+    assert.equal(checked.verified, expected);
+    assert.equal(checked.retryable, !('verified' in response));
+    if (!('verified' in response)) {
+      assert.match(checked.reasoning, /unavailable/);
+      assert.equal(checked.confidence, 0);
+    }
+  }
+  assert.equal(globalThis.fetch.mock.callCount(), 0);
+});
+
+test('production calls use shared prompts without changing confidence or verifier decisions', async (t) => {
+  const oldUrl = process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_URL;
+  t.after(() => {
+    if (oldUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = oldUrl;
+  });
+  t.mock.method(globalThis, 'fetch', async () => { throw new Error('Unexpected network call'); });
+  const client = initializeOpenRouter('test-only-key');
+  let payload;
+  const completion = t.mock.method(client.chat.completions, 'create', async () => ({
+    choices: [{ message: { content: JSON.stringify(payload) } }],
+    model: 'fallback-model',
+    usage: { prompt_tokens: 10, completion_tokens: 10 }
+  }));
+  const message = { id: 1, message: `${'Business details. '.repeat(80)}Need a warehouse system.`, bio: 'Owner' };
+  const criteria = 'Find warehouse software selection requests; reject advertisements.';
+  for (const score of [69, 70, 75, 80, 85]) {
+    const verdict = { id: '1', is_match: true, confidence_score: score, reasoning: 'Selecting a warehouse solution', matched_criteria: ['software selection'] };
+    payload = verdict;
+    const single = await analyzeMessage(message, criteria, null);
+    assert.equal(single.aiResponse.confidence_score, score);
+    assert.equal(single.isMatch, score >= 70);
+    payload = [verdict];
+    const batch = await analyzeMessageBatch([message], criteria, null);
+    assert.equal(batch[0].aiResponse.confidence_score, score);
+    assert.equal(batch[0].isMatch, score >= 70);
+    const prompts = buildBatchAnalysisPrompts([message], criteria);
+    assert.deepEqual(completion.mock.calls.at(-1).arguments[0].messages, [
+      { role: 'system', content: prompts.systemPrompt }, { role: 'user', content: prompts.userPrompt }
+    ]);
+  }
+  const initial = { confidence_score: 85, reasoning: 'Selection request' };
+  for (const verified of [true, false]) {
+    payload = { verified, reason: verified ? 'Fits criteria' : 'Explicit exclusion' };
+    const result = await doubleCheckLead(message, initial, criteria, null);
+    assert.equal(result.verified, verified);
+    assert.equal(result.retryable, false);
+    assert.equal(result.confidence, verified ? 85 : 0);
+    assert.equal(result.model, 'fallback-model');
+    const prompts = buildVerificationPrompts(message, initial, criteria);
+    assert.deepEqual(completion.mock.calls.at(-1).arguments[0].messages, [
+      { role: 'system', content: prompts.systemPrompt }, { role: 'user', content: prompts.userPrompt }
+    ]);
+  }
+  assert.equal(globalThis.fetch.mock.callCount(), 0);
+});
+
+test('verifier quota failures do not become approvals or multiply SDK retries', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => { throw new Error('Unexpected network call'); });
+  const client = initializeOpenRouter('test-only-key');
+  const completion = t.mock.method(client.chat.completions, 'create', async (_params, options) => {
+    assert.equal(options.maxRetries, 0);
+    throw Object.assign(new Error('Provider quota exhausted'), {
+      status: 429, headers: new Headers({ 'retry-after': '120' })
+    });
+  });
+  const result = await doubleCheckLead({ id: 42, message: 'Target request' }, { confidence_score: 95 }, 'Criteria', null);
+  assert.equal(result.verified, false);
+  assert.equal(result.retryable, true);
+  assert.equal(result.retryAfterMs, 120000);
+  assert.equal(result.confidence, 0);
+  assert.equal(completion.mock.callCount(), 1);
+  assert.equal(globalThis.fetch.mock.callCount(), 0);
+});
+
+test('extra verifier scores cannot raise confidence or override an explicit rejection', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => { throw new Error('Unexpected network call'); });
+  const client = initializeOpenRouter('test-only-key');
+  let payload;
+  t.mock.method(client.chat.completions, 'create', async () => ({
+    choices: [{ message: { content: JSON.stringify(payload) } }]
+  }));
+  for (const score of [70, 79, 80, 84, 85, 99]) {
+    for (const verified of [true, false]) {
+      payload = { verified, confidence_score: 100, reason: 'Verifier verdict' };
+      const result = await doubleCheckLead({ id: 42, message: 'Request' },
+        { confidence_score: score }, 'Criteria', null);
+      assert.equal(result.verified, verified);
+      assert.equal(result.retryable, false);
+      assert.equal(result.confidence, verified ? score : 0);
+    }
+  }
+  assert.equal(globalThis.fetch.mock.callCount(), 0);
+});
+
+test('verifier forbidden responses preserve status and do not get retried', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => { throw new Error('Unexpected network call'); });
+  const client = initializeOpenRouter('test-only-key');
+  const completion = t.mock.method(client.chat.completions, 'create', async () => {
+    throw Object.assign(new Error('Forbidden model'), { status: 403 });
+  });
+  const result = await doubleCheckLead({ id: 42, message: 'Target request' }, { confidence_score: 95 }, 'Criteria', null);
+  assert.equal(result.verified, false);
+  assert.equal(result.retryable, true);
+  assert.equal(result.retryAfterMs, 60000);
+  assert.equal(completion.mock.callCount(), 1);
+  assert.equal(globalThis.fetch.mock.callCount(), 0);
+});
+
+test('per-client isolation sends one message per request without raising scores', async t => {
+  const oldUrl = process.env.SUPABASE_URL;
+  delete process.env.SUPABASE_URL;
+  t.after(() => {
+    if (oldUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = oldUrl;
+  });
+  t.mock.method(globalThis, 'fetch', async () => { throw new Error('Unexpected network call'); });
+  const client = initializeOpenRouter('test-only-key');
+  const scores = new Map([['1', 69], ['2', 80], ['3', 90]]);
+  const completion = t.mock.method(client.chat.completions, 'create', async params => {
+    const text = params.messages[1].content;
+    const messages = JSON.parse(text.slice(text.indexOf('\n') + 1));
+    assert.equal(messages.length, 1);
+    return { choices: [{ message: { content: JSON.stringify(messages.map(message => ({
+      id: message.id, is_match: true, confidence_score: scores.get(message.id),
+      reasoning: 'Target service request', matched_criteria: ['service request']
+    }))) } }], usage: { prompt_tokens: 1, completion_tokens: 1 } };
+  });
+  const result = await analyzeBatch([1, 2, 3].map(id => ({ id, message: 'A service request' })),
+    'Find requests', null, { maxConcurrent: 1, batchSize: resolveAnalysisBatchSize(58, 5, '{"58":1}') });
+  assert.equal(completion.mock.callCount(), 3);
+  assert.equal(result.stats.analyzed, 3);
+  assert.equal(result.failed.length, 0);
+  assert.deepEqual(result.matches.map(row => row.analysis.aiResponse.confidence_score), [80, 90]);
+  assert.equal(globalThis.fetch.mock.callCount(), 0);
 });

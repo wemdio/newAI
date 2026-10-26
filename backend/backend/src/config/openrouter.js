@@ -12,7 +12,7 @@ function _wrapClient(client) {
   if (!_tracer) return client;
 
   const origChat = client.chat.completions.create.bind(client.chat.completions);
-  client.chat.completions.create = async function tracedCreate(params) {
+  client.chat.completions.create = async function tracedCreate(params, options) {
     const span = _tracer.startSpan('llm_call', {
       attributes: {
         'openinference.span.kind': 'LLM',
@@ -25,7 +25,7 @@ function _wrapClient(client) {
       },
     });
     try {
-      const res = await origChat(params);
+      const res = await origChat(params, options);
       const content = res.choices?.[0]?.message?.content || '';
       span.setAttribute('output.value', content.substring(0, 4000));
       if (res.usage) {

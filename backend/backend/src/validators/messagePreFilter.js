@@ -2,6 +2,14 @@ import logger from '../utils/logger.js';
 import { extractCriteria } from '../prompts/promptBuilder.js';
 import { getCriteriaEmbedding, generateEmbeddings, cosineSimilarity, isApiKeyBlocked, markApiKeyFailed } from '../services/embeddingService.js';
 
+// Explicit domain abbreviations need token boundaries, unlike long keyword stems.
+const SHORT_DOMAIN_KEYWORDS = new Set([
+  'soc', 'сиб', 'пдн', 'кии', 'орд', 'гис', 'иб', 'pim', 'mdm', 'sku',
+  'erp', 'crm', 'bpm', 'dmn', 'api', '1с', '1c',
+  'фф', 'fbs', 'фбс', 'fbo', 'фбо', 'fbw', 'wb', 'вб'
+]);
+const keywordTokens = (text) => text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) || [];
+
 /**
  * Pre-filter messages before sending to AI
  * This reduces AI costs by filtering out obvious non-matches
@@ -144,6 +152,16 @@ export const extractKeywords = (userCriteria) => {
     .filter(word => !commonWords.has(word));
   
   words.forEach(word => keywords.add(word));
+  // Only enable abbreviations explicitly present in the positive criteria.
+  keywordTokens(positiveCriteria).forEach(word => {
+    if (SHORT_DOMAIN_KEYWORDS.has(word)) keywords.add(word);
+  });
+  // Sellers commonly abbreviate fulfillment; do not enable it for unrelated clients.
+  if (keywordTokens(positiveCriteria).some(word =>
+    /^фулфил{1,2}мент/.test(word) || /^fulfil{1,2}ment$/.test(word)
+  )) {
+    keywords.add('фф');
+  }
   
   return Array.from(keywords);
 };
@@ -174,8 +192,11 @@ export const hasKeywordMatch = (message, keywords) => {
   const expandedSearchText = addTransliterations(searchableText);
   
   // Find matching keywords
-  const matchedKeywords = keywords.filter(keyword => 
-    expandedSearchText.includes(keyword.toLowerCase())
+  const tokens = new Set(keywordTokens(searchableText));
+  const matchedKeywords = keywords.filter(keyword =>
+    SHORT_DOMAIN_KEYWORDS.has(keyword.toLowerCase())
+      ? tokens.has(keyword.toLowerCase())
+      : expandedSearchText.includes(keyword.toLowerCase())
   );
   
   const matches = matchedKeywords.length > 0;
@@ -198,6 +219,10 @@ export const hasKeywordMatch = (message, keywords) => {
  */
 export const checkMessageQuality = (message) => {
   const issues = [];
+
+  if (/^Привет[^\n]+,?\s+для общения в чате необходимо пройти верификацию и согласиться с правилами обработки и использования персональных данных\s+https:\/\/umatg\.ru\/UMA_privacy_policy[!.]?\s*$/iu.test(message.message || '')) {
+    issues.push('Known moderation welcome message');
+  }
   
   // Check if message text exists
   if (!message.message || typeof message.message !== 'string') {

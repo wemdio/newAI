@@ -20,6 +20,7 @@ services:
       FRONTEND_URL:
       USE_BATCH_API:
       BATCH_SIZE:
+      AI_BATCH_SIZE_OVERRIDES:
       AI_CONCURRENCY: "5"
       OPENROUTER_BASE_URL: https://router.requesty.ai/v1
       YOUR_SITE_URL:
