@@ -26,6 +26,7 @@ services:
       YOUR_SITE_URL:
       YOUR_SITE_NAME: Telegram Lead Scanner
       AI_MODEL: policy/lead-analysis
+      AI_MODEL_OVERRIDES:
       CATEGORY_API_KEY:
       CATEGORY_API_KEY_2:
       DOUBLECHECK_MODE:

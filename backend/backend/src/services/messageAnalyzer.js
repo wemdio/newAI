@@ -6,6 +6,8 @@ import logger from '../utils/logger.js';
 import { AIServiceError, retryWithBackoff } from '../utils/errorHandler.js';
 import { logAiUsage } from './costOptimizer.js';
 import { mapBatchResults } from './batchResultMapping.js';
+import { resolveAnalysisModel } from './analysisModel.js';
+import { buildBatchResponseFormat } from './batchResponseFormat.js';
 import PQueue from 'p-queue';
 
 /**
@@ -296,9 +298,10 @@ export const doubleCheckLead = async (message, initialAnalysis, userCriteria, ap
  * @param {object} message - Message data from database
  * @param {string} userCriteria - User-defined lead criteria
  * @param {string} apiKey - OpenRouter API key
+ * @param {object} options - Optional configId for per-client model routing
  * @returns {object} Analysis result
  */
-export const analyzeMessage = async (message, userCriteria, apiKey) => {
+export const analyzeMessage = async (message, userCriteria, apiKey, options = {}) => {
   const startTime = Date.now();
   
   try {
@@ -320,8 +323,7 @@ export const analyzeMessage = async (message, userCriteria, apiKey) => {
     
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    // Use configured model or fallback to OpenAI gpt-oss-120b (open-weight MoE model)
-    const model = process.env.AI_MODEL || 'qwen/qwen-2.5-72b-instruct';
+    const model = resolveAnalysisModel(options.configId);
     
     logger.info('Making OpenRouter API call', {
       messageId: message.id,
@@ -488,12 +490,13 @@ export const analyzeMessageBatch = async (messages, userCriteria, apiKey, option
     });
     
     // Stable criteria/instructions stay in the cacheable system message.
-    const { systemPrompt, userPrompt } = buildBatchAnalysisPrompts(messages, userCriteria);
+    const model = resolveAnalysisModel(options.configId);
+    const responseFormat = buildBatchResponseFormat(model);
+    const { systemPrompt, userPrompt } = buildBatchAnalysisPrompts(messages, userCriteria,
+      { structuredOutput: Boolean(responseFormat) });
 
     // Get OpenRouter client and model
     const client = getOpenRouter(apiKey);
-    // Use configured model or fallback to OpenAI gpt-oss-120b (open-weight MoE model)
-    const model = process.env.AI_MODEL || 'qwen/qwen-2.5-72b-instruct';
     
     // Estimate tokens
     const estimatedInputTokens = estimateTokens(systemPrompt) + estimateTokens(userPrompt);
@@ -518,7 +521,7 @@ export const analyzeMessageBatch = async (messages, userCriteria, apiKey, option
         frequency_penalty: 0.1, // Standard low penalty
         presence_penalty: 0, 
         seed: 12345,
-        // Don't use response_format for arrays - Gemini returns plain JSON array
+        response_format: responseFormat,
         max_tokens: 4000 // Enough room for batch JSON output
       }));
     }, 3, 1000);
@@ -785,7 +788,7 @@ export const analyzeMessageBatch = async (messages, userCriteria, apiKey, option
     const results = [];
     for (const message of messages) {
       try {
-        const result = await analyzeMessage(message, userCriteria, apiKey);
+        const result = await analyzeMessage(message, userCriteria, apiKey, options);
         results.push(result);
       } catch (individualError) {
         logger.error('Individual analysis also failed', {
@@ -814,7 +817,8 @@ export const analyzeBatch = async (messages, userCriteria, apiKey, options = {})
     stopOnError = false, // Whether to stop on first error
     useBatchApi = true, // Use batch API (5 messages per call)
     batchSize = 5, // Messages per API call
-    userId = null // for api_usage cost logging
+    userId = null, // for api_usage cost logging
+    configId = null
   } = options;
   
   const startTime = Date.now();
@@ -856,7 +860,7 @@ export const analyzeBatch = async (messages, userCriteria, apiKey, options = {})
       tasks.push(async () => {
       try {
         // Single API call for all messages in chunk
-        const chunkResults = await analyzeMessageBatch(chunk, userCriteria, apiKey, { userId });
+        const chunkResults = await analyzeMessageBatch(chunk, userCriteria, apiKey, { userId, configId });
         
         // Process results
         for (let j = 0; j < chunk.length; j++) {
@@ -914,7 +918,7 @@ export const analyzeBatch = async (messages, userCriteria, apiKey, options = {})
     // Also using queue for consistency
     const tasks = messages.map(message => async () => {
         try {
-          const result = await analyzeMessage(message, userCriteria, apiKey);
+          const result = await analyzeMessage(message, userCriteria, apiKey, { configId });
           
           results.analyzed.push(result);
           results.stats.analyzed++;
@@ -981,9 +985,10 @@ export const analyzeBatch = async (messages, userCriteria, apiKey, options = {})
  * @param {string} userCriteria - Criteria to test
  * @param {object} testMessage - Optional test message
  * @param {string} apiKey - OpenRouter API key
+ * @param {object} options - Optional configId for the same model as production
  * @returns {object} Test result
  */
-export const testAnalysis = async (userCriteria, testMessage, apiKey) => {
+export const testAnalysis = async (userCriteria, testMessage, apiKey, options = {}) => {
   const defaultTestMessage = {
     id: 0,
     chat_name: 'Test Channel',
@@ -1002,7 +1007,7 @@ export const testAnalysis = async (userCriteria, testMessage, apiKey) => {
   });
   
   try {
-    const result = await analyzeMessage(message, userCriteria, apiKey);
+    const result = await analyzeMessage(message, userCriteria, apiKey, options);
     
     return {
       success: true,

@@ -314,7 +314,9 @@ router.post('/test-prompt', authenticateUser, strictLimiter, asyncHandler(async 
   logger.info('Testing prompt', { userId: req.userId });
   
   // Run test analysis
-  const result = await testAnalysis(lead_prompt, test_message, openrouter_api_key);
+  const config = await getUserConfig(req.userId);
+  const result = await testAnalysis(lead_prompt, test_message, openrouter_api_key,
+    { configId: config?.id });
   
   res.json({
     success: result.success,

@@ -52,7 +52,7 @@ const messageData = (message) => ({
   ...(message.bio ? { bio: message.bio } : {})
 });
 
-export const buildBatchAnalysisPrompts = (messages, userCriteria) => ({
+export const buildBatchAnalysisPrompts = (messages, userCriteria, { structuredOutput = false } = {}) => ({
   systemPrompt: `${buildSystemPromptWithCriteria(userCriteria)}
 
 ЗАДАЧА ДЛЯ КАЖДОГО СООБЩЕНИЯ:
@@ -61,13 +61,13 @@ ${detectLeadMode(userCriteria) === 'offer' ? OFFER_TASK_STEP : REQUEST_TASK_STEP
 
 ВАЖНО:
 1. Проанализируй КАЖДОЕ сообщение ОТДЕЛЬНО (не смешивай контекст!).
-2. Верни ТОЛЬКО JSON-массив — РОВНО по одному объекту на КАЖДОЕ входящее сообщение, в том же порядке.
+2. Верни ТОЛЬКО ${structuredOutput ? 'JSON-объект с массивом results' : 'JSON-массив'} — РОВНО по одному объекту на КАЖДОЕ входящее сообщение, в том же порядке.
 3. Скопируй id без изменений. Каждый объект содержит: id, is_match, confidence_score, reasoning, matched_criteria.
 4. confidence_score: целое число 0..100. matched_criteria: массив строк. reasoning: макс. 10 слов.
 
-КРИТИЧЕСКИ ВАЖНО: ответ начинается с [ и заканчивается ] — чистый JSON-массив без любого текста вокруг.
+КРИТИЧЕСКИ ВАЖНО: ${structuredOutput ? 'ответ начинается с { и заканчивается } — чистый JSON-объект с единственным полем results, без любого текста вокруг.' : 'ответ начинается с [ и заканчивается ] — чистый JSON-массив без любого текста вокруг.'}
 ФОРМАТ ОТВЕТА:
-[{"id":"id_первого","is_match":true,"confidence_score":85,"reasoning":"кратко","matched_criteria":["критерий1"]}]`,
+${structuredOutput ? '{"results":' : ''}[{"id":"id_первого","is_match":true,"confidence_score":85,"reasoning":"кратко","matched_criteria":["критерий1"]}]${structuredOutput ? '}' : ''}`,
   userPrompt: `ПРОАНАЛИЗИРУЙ СЛЕДУЮЩИЕ ${messages.length} СООБЩЕНИЙ (JSON-данные):\n${JSON.stringify(messages.map(messageData))}`
 });
 

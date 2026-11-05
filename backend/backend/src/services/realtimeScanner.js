@@ -484,7 +484,8 @@ const processMessagesForUser = async (messages, userConfig) => {
           stopOnError: false,
           useBatchApi: process.env.USE_BATCH_API !== 'false', // Enable by default
           batchSize: resolveAnalysisBatchSize(userConfig.id, parseInt(process.env.BATCH_SIZE || '5', 10)),
-          userId // for api_usage cost logging
+          userId, // for api_usage cost logging
+          configId: userConfig.id
         }
       );
       

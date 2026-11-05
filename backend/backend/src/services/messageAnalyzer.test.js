@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { analyzeBatch, analyzeMessage, analyzeMessageBatch, doubleCheckLead, buildLeadAnalysisCompletionParams } from './messageAnalyzer.js';
+import { analyzeBatch, analyzeMessage, analyzeMessageBatch, doubleCheckLead, testAnalysis, buildLeadAnalysisCompletionParams } from './messageAnalyzer.js';
 import { initializeOpenRouter } from '../config/openrouter.js';
 import { buildBatchAnalysisPrompts, buildVerificationPrompts } from '../prompts/promptBuilder.js';
 import { resolveAnalysisBatchSize } from './analysisBatchSize.js';
@@ -115,6 +115,56 @@ test('production calls use shared prompts without changing confidence or verifie
     assert.deepEqual(completion.mock.calls.at(-1).arguments[0].messages, [
       { role: 'system', content: prompts.systemPrompt }, { role: 'user', content: prompts.userPrompt }
     ]);
+  }
+  assert.equal(globalThis.fetch.mock.callCount(), 0);
+});
+
+test('per-config model routing survives batch, single and batch-to-single fallback without changing scores', async t => {
+  const oldUrl = process.env.SUPABASE_URL;
+  const oldModel = process.env.AI_MODEL;
+  const oldOverrides = process.env.AI_MODEL_OVERRIDES;
+  delete process.env.SUPABASE_URL;
+  process.env.AI_MODEL = 'policy/lead-analysis';
+  process.env.AI_MODEL_OVERRIDES = '{"2":"openai/gpt-6-luna"}';
+  t.after(() => {
+    for (const [name, value] of [['SUPABASE_URL', oldUrl], ['AI_MODEL', oldModel], ['AI_MODEL_OVERRIDES', oldOverrides]]) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  });
+  t.mock.method(globalThis, 'fetch', async () => { throw new Error('Unexpected network call'); });
+  const client = initializeOpenRouter('test-only-key');
+  const verdict = { id: '42', is_match: true, confidence_score: 88, reasoning: 'Service request', matched_criteria: ['request'] };
+  let brokenBatch = false;
+  const completion = t.mock.method(client.chat.completions, 'create', async params => {
+    const batch = params.messages[1].content.startsWith('ПРОАНАЛИЗИРУЙ СЛЕДУЮЩИЕ');
+    const batchPayload = params.response_format?.type === 'json_schema' ? { results: [verdict] } : [verdict];
+    const payload = batch ? (brokenBatch ? { unexpected: true } : batchPayload) : verdict;
+    return { choices: [{ message: { content: JSON.stringify(payload) } }], usage: { prompt_tokens: 10, completion_tokens: 10 } };
+  });
+  const message = { id: 42, message: 'A direct service request' };
+  for (const configId of [2, 54, 57, 58, undefined]) {
+    const expected = configId === 2 ? 'openai/gpt-6-luna' : 'policy/lead-analysis';
+    const testResult = await testAnalysis('Find service requests', message, null, { configId });
+    assert.equal(testResult.success, true);
+    assert.equal(completion.mock.calls.at(-1).arguments[0].model, expected);
+    assert.equal(testResult.result.aiResponse.confidence_score, 88);
+    for (const useBatchApi of [true, false]) {
+      const result = await analyzeBatch([message], 'Find service requests', null,
+        { configId, useBatchApi, maxConcurrent: 1 });
+      assert.equal(completion.mock.calls.at(-1).arguments[0].model, expected);
+      assert.equal(completion.mock.calls.at(-1).arguments[0].response_format?.type,
+        useBatchApi ? (configId === 2 ? 'json_schema' : undefined) : 'json_object');
+      assert.equal(result.matches[0].analysis.aiResponse.confidence_score, 88);
+    }
+  }
+  brokenBatch = true;
+  const fallback = await analyzeBatch([message], 'Find service requests', null,
+    { configId: 2, maxConcurrent: 1 });
+  assert.equal(fallback.stats.analyzed, 1);
+  assert.equal(fallback.matches[0].analysis.aiResponse.confidence_score, 88);
+  for (const call of completion.mock.calls.slice(-2)) {
+    assert.equal(call.arguments[0].model, 'openai/gpt-6-luna');
   }
   assert.equal(globalThis.fetch.mock.callCount(), 0);
 });

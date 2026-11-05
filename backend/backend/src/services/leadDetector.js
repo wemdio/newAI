@@ -433,7 +433,8 @@ export const detectLeads = async (userId, userConfig, options = {}) => {
       userConfig.openrouter_api_key,
       { 
         maxConcurrent: parseInt(process.env.AI_CONCURRENCY || '20', 10),
-        batchSize: resolveAnalysisBatchSize(userConfig.id)
+        batchSize: resolveAnalysisBatchSize(userConfig.id),
+        configId: userConfig.id
       }
     );
     
