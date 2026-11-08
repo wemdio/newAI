@@ -21,6 +21,30 @@ test('short ordinary words do not become keywords', () => {
   const keys = extractKeywords('как для кто ООО ищу');
   assert.equal(keys.length, 0);
 });
+test('explicit Bitrix24 abbreviations admit short requests without chat or bio', () => {
+  const criteria = 'КЛЮЧЕВЫЕ СЛОВА: Битрикс24, Bitrix24, Б24, B24';
+  for (const [message, keyword] of [
+    ['Кто допилит Б24? Оплачу.', 'б24'],
+    ['Кто починит интеграцию в B24?', 'b24']
+  ]) {
+    const result = preFilterMessage({ message }, criteria);
+    assert.equal(result.passes, true, message);
+    assert.deepEqual(result.checks.keywords.matchedKeywords, [keyword]);
+  }
+});
+
+test('Bitrix24 abbreviations match only whole tokens and require positive criteria', () => {
+  const keys = extractKeywords('Б24 B24');
+  for (const message of ['Б240', 'AB24', 'B24_help', 'сб24']) {
+    assert.equal(hasKeywordMatch({ message }, keys).matches, false, message);
+  }
+  for (const criteria of ['Налоговый аудит', 'Налоговый аудит\nНЕ СЧИТАТЬ ЛИДОМ: Б24 B24']) {
+    for (const message of ['Кто допилит Б24?', 'Кто допилит B24?']) {
+      assert.equal(preFilterMessage({ message }, criteria).passes, false, criteria);
+    }
+  }
+});
+
 test('long keyword stems still match word forms', () => {
   assert.equal(hasKeywordMatch({ message: 'Нужна аттестация системы' }, ['аттестац']).matches, true);
 });

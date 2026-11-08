@@ -5,7 +5,7 @@ import { getCriteriaEmbedding, generateEmbeddings, cosineSimilarity, isApiKeyBlo
 // Explicit domain abbreviations need token boundaries, unlike long keyword stems.
 const SHORT_DOMAIN_KEYWORDS = new Set([
   'soc', 'сиб', 'пдн', 'кии', 'орд', 'гис', 'иб', 'pim', 'mdm', 'sku',
-  'erp', 'crm', 'bpm', 'dmn', 'api', '1с', '1c',
+  'erp', 'crm', 'bpm', 'dmn', 'api', '1с', '1c', 'б24', 'b24',
   'фф', 'fbs', 'фбс', 'fbo', 'фбо', 'fbw', 'wb', 'вб'
 ]);
 const keywordTokens = (text) => text.toLowerCase().match(/[\p{L}\p{N}_]+/gu) || [];
