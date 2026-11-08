@@ -44,7 +44,7 @@ function Contacts() {
   const [contactMessages, setContactMessages] = useState([]);
   
   // Admin state
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(null);
   
   // Pagination
   const [page, setPage] = useState(1);
@@ -107,39 +107,44 @@ function Contacts() {
   }, [page, filters]);
 
   // Load stats
-  const loadStats = async () => {
+  const loadStats = useCallback(async () => {
     try {
       const response = await contactsApi.getStats();
       setStats(response.data.stats);
     } catch (err) {
       console.error('Error loading stats:', err);
     }
-  };
+  }, []);
 
   // Check admin status
-  const checkAdminStatus = async () => {
-    try {
-      const response = await contactsApi.checkAdmin();
-      setIsAdmin(response.data.isAdmin);
-    } catch (err) {
-      console.error('Error checking admin status:', err);
-      setIsAdmin(false);
-    }
-  };
-
-  // Initial load
   useEffect(() => {
-    loadStats();
-    checkAdminStatus();
+    let cancelled = false;
+    contactsApi.checkAdmin()
+      .then(response => {
+        if (!cancelled) setIsAdmin(response.data.isAdmin === true);
+      })
+      .catch(err => {
+        if (cancelled) return;
+        if (![401, 403].includes(err.response?.status)) {
+          setError('Не удалось проверить доступ к базе контактов.');
+        }
+        setIsAdmin(false);
+      });
+    return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (isAdmin) loadStats();
+  }, [isAdmin, loadStats]);
 
   // Load contacts when filters/page change
   useEffect(() => {
+    if (!isAdmin) return;
     const timer = setTimeout(() => {
       loadContacts();
     }, 300);
     return () => clearTimeout(timer);
-  }, [loadContacts]);
+  }, [isAdmin, loadContacts]);
 
   // Aggregate contacts
   const handleAggregate = async () => {
@@ -299,13 +304,19 @@ function Contacts() {
   };
 
   // Export CSV
-  const handleExport = () => {
-    const params = new URLSearchParams(
-      Object.fromEntries(
-        Object.entries(filters).filter(([_, value]) => value !== '')
-      )
-    );
-    window.open(`/api/contacts/export/csv?${params}`, '_blank');
+  const handleExport = async () => {
+    const params = Object.fromEntries(Object.entries(filters).filter(([_, value]) => value !== ''));
+    try {
+      const { data } = await contactsApi.exportCsv(params);
+      const url = URL.createObjectURL(data);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `contacts_${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      setError('Не удалось экспортировать контакты.');
+    }
   };
 
   // View contact detail
@@ -352,7 +363,11 @@ function Contacts() {
     return label || contact.industry || '—';
   };
 
-  if (loading && contacts.length === 0) {
+  if (isAdmin === false) {
+    return <div className="contacts-page"><p>{error || 'База контактов доступна только администраторам.'}</p></div>;
+  }
+
+  if (isAdmin === null || (loading && contacts.length === 0)) {
     return (
       <div className="contacts-page">
         <div className="loading-container">
@@ -420,7 +435,6 @@ function Contacts() {
               </button>
             </>
           )}
-          {/* Экспорт доступен всем */}
           <button className="btn btn-primary" onClick={handleExport}>
             Экспорт CSV
           </button>

@@ -46,6 +46,9 @@ api.interceptors.request.use(async (config) => {
       // Use user ID and email from Supabase Auth
       config.headers['x-user-id'] = session.user.id;
       config.headers['x-user-email'] = session.user.email;
+      if (/^\/contacts(?:\/|$)/.test(config.url || '') && session.access_token) {
+        config.headers.Authorization = `Bearer ${session.access_token}`;
+      }
     }
   } catch (e) {
     console.error('Error getting session for API request:', e);
@@ -126,6 +129,7 @@ export const auditApi = {
 // Contacts API
 export const contactsApi = {
   getAll: (params) => api.get('/contacts', { params }),
+  exportCsv: (params) => api.get('/contacts/export/csv', { params, responseType: 'blob' }),
   getOne: (id) => api.get(`/contacts/${id}`),
   getStats: () => api.get('/contacts/stats'),
   aggregate: (data) => api.post('/contacts/aggregate', data),

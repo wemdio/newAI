@@ -9,21 +9,10 @@ import { aggregateContacts, enrichContacts, getContactStats } from '../../servic
 import { recalculateIndustryCategories } from '../../services/contactIndustry.js';
 import logger from '../../utils/logger.js';
 import { normalizeCompanyName, normalizePositionTitle, normalizePositionType } from '../../utils/contactNormalization.js';
+import { requireContactsAdmin } from '../middleware/contactsAccess.js';
 
 const router = express.Router();
-
-// ============= ADMIN CONFIG =============
-// Список email администраторов
-const ADMIN_EMAILS = [
-  'egorkanigin@polzaagency.ru',
-  'admin@leadparser.app'
-];
-
-// Проверка админа по email
-function isAdmin(userEmail) {
-  if (!userEmail) return false;
-  return ADMIN_EMAILS.includes(userEmail.toLowerCase());
-}
+router.use(requireContactsAdmin);
 
 const VALID_SORT_FIELDS = ['messages_count', 'lead_score', 'last_seen_at', 'created_at', 'first_name'];
 
@@ -348,20 +337,7 @@ router.get('/stats', async (req, res) => {
 // ============= GET /api/contacts/admin/check =============
 // Проверка прав администратора (должен быть ПЕРЕД /:id !)
 router.get('/admin/check', async (req, res) => {
-  try {
-    // Используем email из заголовка (добавляется в api.js интерцепторе)
-    const userEmail = req.headers['x-user-email'];
-    
-    logger.info('Admin check', { userEmail });
-    
-    res.json({
-      success: true,
-      isAdmin: isAdmin(userEmail)
-    });
-  } catch (error) {
-    logger.error('Error checking admin status', { error: error.message });
-    res.json({ success: true, isAdmin: false });
-  }
+  res.json({ success: true, isAdmin: true });
 });
 
 // ============= GET /api/contacts/:id =============
@@ -405,11 +381,6 @@ router.get('/:id', async (req, res) => {
 // Запустить агрегацию контактов
 router.post('/aggregate', async (req, res) => {
   try {
-    const userEmail = req.headers['x-user-email'];
-    if (!isAdmin(userEmail)) {
-      return res.status(403).json({ success: false, error: 'Admin only' });
-    }
-
     const { maxContacts = 5000 } = req.body;
     
     logger.info('Starting contact aggregation via API', { maxContacts });
@@ -440,11 +411,6 @@ router.post('/aggregate', async (req, res) => {
 // Обновить данные контактов (bio, имена) из messages
 router.post('/update-data', async (req, res) => {
   try {
-    const userEmail = req.headers['x-user-email'];
-    if (!isAdmin(userEmail)) {
-      return res.status(403).json({ success: false, error: 'Admin only' });
-    }
-
     const { batchSize = 500 } = req.body;
     const supabase = getSupabase();
     
@@ -527,11 +493,6 @@ router.post('/update-data', async (req, res) => {
 // Нормализовать компании/должности/типы ролей (без AI, только чистка) — только для админа
 router.post('/normalize', async (req, res) => {
   try {
-    const userEmail = req.headers['x-user-email'];
-    if (!isAdmin(userEmail)) {
-      return res.status(403).json({ success: false, error: 'Admin only' });
-    }
-
     const {
       batchSize = 1000,
       maxContacts = null,
@@ -631,11 +592,6 @@ router.post('/normalize', async (req, res) => {
 // Пересчитать сферы деятельности (без AI) — только для админа
 router.post('/recalculate-industry', async (req, res) => {
   try {
-    const userEmail = req.headers['x-user-email'];
-    if (!isAdmin(userEmail)) {
-      return res.status(403).json({ success: false, error: 'Admin only' });
-    }
-
     const {
       batchSize = 500,
       onlyEnriched = true,
@@ -668,11 +624,6 @@ router.post('/recalculate-industry', async (req, res) => {
 // Запустить обогащение контактов
 router.post('/enrich', async (req, res) => {
   try {
-    const userEmail = req.headers['x-user-email'];
-    if (!isAdmin(userEmail)) {
-      return res.status(403).json({ success: false, error: 'Admin only' });
-    }
-
     const {
       apiKey,  // API ключ передаётся в запросе
       maxContacts = 50000,  // По умолчанию до 50k, можно обогатить все
@@ -882,11 +833,6 @@ router.get('/export/csv', async (req, res) => {
 // Удалить контакт
 router.delete('/:id', async (req, res) => {
   try {
-    const userEmail = req.headers['x-user-email'];
-    if (!isAdmin(userEmail)) {
-      return res.status(403).json({ success: false, error: 'Admin only' });
-    }
-
     const { id } = req.params;
     const supabase = getSupabase();
     
@@ -908,11 +854,6 @@ router.delete('/:id', async (req, res) => {
 // Сбросить обогащение для повторной обработки (только для админа)
 router.post('/reset-enrichment', async (req, res) => {
   try {
-    const userEmail = req.headers['x-user-email'];
-    if (!isAdmin(userEmail)) {
-      return res.status(403).json({ success: false, error: 'Admin only' });
-    }
-
     const supabase = getSupabase();
     
     logger.info('Resetting enrichment status for all contacts');
