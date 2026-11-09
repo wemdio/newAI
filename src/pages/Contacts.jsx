@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { contactsApi } from '../services/api';
+import ContactRegistry from './ContactRegistry';
 import './Contacts.css';
 
 // Position type labels
@@ -45,6 +46,7 @@ function Contacts() {
   
   // Admin state
   const [isAdmin, setIsAdmin] = useState(null);
+  const [showLegacy, setShowLegacy] = useState(false);
   
   // Pagination
   const [page, setPage] = useState(1);
@@ -134,17 +136,17 @@ function Contacts() {
   }, []);
 
   useEffect(() => {
-    if (isAdmin) loadStats();
-  }, [isAdmin, loadStats]);
+    if (isAdmin && showLegacy) loadStats();
+  }, [isAdmin, showLegacy, loadStats]);
 
   // Load contacts when filters/page change
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!isAdmin || !showLegacy) return;
     const timer = setTimeout(() => {
       loadContacts();
     }, 300);
     return () => clearTimeout(timer);
-  }, [isAdmin, loadContacts]);
+  }, [isAdmin, showLegacy, loadContacts]);
 
   // Aggregate contacts
   const handleAggregate = async () => {
@@ -367,6 +369,10 @@ function Contacts() {
     return <div className="contacts-page"><p>{error || 'База контактов доступна только администраторам.'}</p></div>;
   }
 
+  if (isAdmin && !showLegacy) {
+    return <ContactRegistry onLegacy={() => setShowLegacy(true)} />;
+  }
+
   if (isAdmin === null || (loading && contacts.length === 0)) {
     return (
       <div className="contacts-page">
@@ -382,8 +388,9 @@ function Contacts() {
     <div className="contacts-page">
       {/* Header */}
       <div className="contacts-header">
-        <h1>База контактов</h1>
+        <h1>Старая база контактов</h1>
         <div className="header-actions">
+          <button className="btn btn-secondary" onClick={() => setShowLegacy(false)}>К реестру</button>
           {/* Кнопки админа - только для администраторов */}
           {isAdmin && (
             <>

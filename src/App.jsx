@@ -49,10 +49,12 @@ const MetrikaTracker = () => {
 // Component for the authenticated application layout
 const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setActiveTab }) => {
   const userId = session?.user?.id;
+  const { pathname } = useLocation();
+  const isContactsPage = pathname === '/contacts';
   
   return (
     <NotificationProvider userId={userId}>
-      <div className={`app ${isTelegram ? 'telegram-mode' : 'browser-mode'}`}>
+      <div className={`app ${isTelegram ? 'telegram-mode' : 'browser-mode'}${isContactsPage ? ' app-contacts' : ''}`}>
         {/* Navigation - hidden in Telegram */}
         {!isTelegram && (
           <nav className="app-nav">
@@ -60,7 +62,7 @@ const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setAc
               <div className="nav-links">
                 <Link 
                   to="/leads" 
-                  className={`nav-link ${activeTab === 'leads' ? 'active' : ''}`}
+                  className={`nav-link ${!isContactsPage && activeTab === 'leads' ? 'active' : ''}`}
                   onClick={() => setActiveTab('leads')}
                 >
                   Лиды
@@ -81,7 +83,7 @@ const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setAc
                 </Link>
                 <Link 
                   to="/contacts" 
-                  className={`nav-link ${activeTab === 'contacts' ? 'active' : ''}`}
+                  className={`nav-link ${isContactsPage ? 'active' : ''}`}
                   onClick={() => setActiveTab('contacts')}
                 >
                   Контакты
@@ -111,7 +113,7 @@ const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setAc
             <div className="telegram-nav-main">
               <Link 
                 to="/leads" 
-                className={`telegram-nav-item ${activeTab === 'leads' ? 'active' : ''}`}
+                className={`telegram-nav-item ${!isContactsPage && activeTab === 'leads' ? 'active' : ''}`}
                 onClick={() => setActiveTab('leads')}
               >
                 Лиды
@@ -132,7 +134,7 @@ const AuthenticatedApp = ({ session, isTelegram, handleSignOut, activeTab, setAc
               </Link>
               <Link 
                 to="/contacts" 
-                className={`telegram-nav-item ${activeTab === 'contacts' ? 'active' : ''}`}
+                className={`telegram-nav-item ${isContactsPage ? 'active' : ''}`}
                 onClick={() => setActiveTab('contacts')}
               >
                 Контакты

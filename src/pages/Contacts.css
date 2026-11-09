@@ -11,6 +11,26 @@
   /* Font inherited from body (Inter) */
 }
 
+@media (max-width: 760px) {
+  .app-contacts .app-nav .container {
+    flex-wrap: wrap;
+    height: auto;
+    gap: 4px 14px;
+    padding-block: 8px;
+  }
+
+  .app-contacts .nav-links {
+    flex-wrap: wrap;
+    height: auto;
+    gap: 0 14px;
+  }
+
+  .app-contacts .nav-link { padding-block: 9px; }
+  .app-contacts .nav-link.active::after { bottom: 3px; }
+  .app-contacts .user-info { min-width: 0; gap: 9px; }
+  .app-contacts .user-email { overflow-wrap: anywhere; }
+}
+
 /* ============ HEADER ============ */
 .contacts-header {
   display: flex;

@@ -128,6 +128,8 @@ export const auditApi = {
 
 // Contacts API
 export const contactsApi = {
+  getRegistry: (params, signal) => api.get('/contacts/registry', { params, signal }),
+  exportRegistry: (params) => api.get('/contacts/registry/export.csv', { params, responseType: 'blob' }),
   getAll: (params) => api.get('/contacts', { params }),
   exportCsv: (params) => api.get('/contacts/export/csv', { params, responseType: 'blob' }),
   getOne: (id) => api.get(`/contacts/${id}`),

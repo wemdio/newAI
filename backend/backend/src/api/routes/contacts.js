@@ -10,9 +10,11 @@ import { recalculateIndustryCategories } from '../../services/contactIndustry.js
 import logger from '../../utils/logger.js';
 import { normalizeCompanyName, normalizePositionTitle, normalizePositionType } from '../../utils/contactNormalization.js';
 import { requireContactsAdmin } from '../middleware/contactsAccess.js';
+import { createContactRegistryRouter } from './contactRegistry.js';
 
 const router = express.Router();
 router.use(requireContactsAdmin);
+router.use('/registry', createContactRegistryRouter());
 
 const VALID_SORT_FIELDS = ['messages_count', 'lead_score', 'last_seen_at', 'created_at', 'first_name'];
 
