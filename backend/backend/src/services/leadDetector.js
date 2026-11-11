@@ -5,6 +5,7 @@ import { resolveAnalysisBatchSize } from './analysisBatchSize.js';
 import { optimizeBatchSize, recordUsage } from './costOptimizer.js';
 import logger from '../utils/logger.js';
 import { DatabaseError } from '../utils/errorHandler.js';
+import { canUpgradeJoynioDuplicate, isDirectJoynioCandidate, isJoynioConfig } from './joynioLeadPolicy.js';
 
 /**
  * Gemini double-check cost optimization
@@ -204,7 +205,7 @@ export const fetchRecentMessages = async (options = {}) => {
  * @param {object} analysis - AI analysis result
  * @returns {object} Saved lead or null if duplicate
  */
-export const saveDetectedLead = async (userId, message, analysis) => {
+export const saveDetectedLead = async (userId, message, analysis, config = null) => {
   try {
     const supabase = getSupabase();
     const crypto = await import('crypto');
@@ -216,6 +217,21 @@ export const saveDetectedLead = async (userId, message, analysis) => {
     // Use username as sender identifier (this is the actual field in messages table)
     // Fallback to message_hash if no username
     const senderId = message.username || messageHash;
+    const now = Date.now();
+    const joynioUpgrade = isJoynioConfig(config) && config.user_id === userId &&
+      Boolean(message.username) && isDirectJoynioCandidate(message, now);
+    const leadData = {
+      user_id: userId,
+      message_id: message.id,
+      confidence_score: analysis.aiResponse.confidence_score,
+      reasoning: analysis.aiResponse.reasoning,
+      matched_criteria: analysis.aiResponse.matched_criteria,
+      posted_to_telegram: false,
+      is_contacted: false,
+      message_hash: messageHash,
+      sender_id: String(senderId),
+      from_rescue: !!message._fromRescue
+    };
 
     // Exact duplicate guard: same user, same source message.
     // This protects against overlapping scanner cycles re-processing the same message.
@@ -246,12 +262,14 @@ export const saveDetectedLead = async (userId, message, analysis) => {
     }
     
     // Check for duplicates in the last 7 days
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
     
     // Build duplicate check query
     let duplicateQuery = supabase
       .from('detected_leads')
-      .select('id, detected_at, sender_id')
+      .select(joynioUpgrade
+        ? 'id, detected_at, sender_id, message_id, confidence_score, posted_to_telegram, is_contacted, lead_status, skip_reason, notes'
+        : 'id, detected_at, sender_id')
       .eq('user_id', userId)
       .gte('detected_at', sevenDaysAgo.toISOString());
     
@@ -264,15 +282,40 @@ export const saveDetectedLead = async (userId, message, analysis) => {
       duplicateQuery = duplicateQuery.eq('message_hash', messageHash);
     }
     
-    const { data: existingLeads, error: checkError } = await duplicateQuery.limit(1);
+    const { data: existingLeads, error: checkError } = await duplicateQuery.limit(joynioUpgrade ? 2 : 1);
     
     if (checkError) {
+      if (joynioUpgrade) throw checkError;
       logger.warn('Failed to check for duplicates, proceeding with save', {
         error: checkError.message
       });
     }
     
     if (existingLeads && existingLeads.length > 0) {
+      const existing = existingLeads[0];
+      if (joynioUpgrade && existingLeads.length === 1 && existing.posted_to_telegram === false &&
+          existing.confidence_score < Number(config.telegram_min_confidence) &&
+          leadData.confidence_score >= Number(config.telegram_min_confidence)) {
+        const { data: earlier, error: earlierError } = await supabase.from('messages')
+          .select('id,user_id,chat_name,message_time,message').eq('id', existing.message_id).maybeSingle();
+        if (earlierError) throw earlierError;
+        if (canUpgradeJoynioDuplicate(existing, earlier, message, leadData.confidence_score, config, now)) {
+          const { data: updated, error: updateError } = await supabase.from('detected_leads')
+            .update({ ...leadData, detected_at: new Date(now).toISOString() })
+            .eq('id', existing.id).eq('user_id', userId).eq('message_id', existing.message_id)
+            .eq('confidence_score', existing.confidence_score).eq('posted_to_telegram', false)
+            .eq('is_contacted', false).eq('lead_status', 'lead')
+            .is('skip_reason', null).is('notes', null)
+            .select().maybeSingle();
+          if (updateError && !isUniqueViolation(updateError)) throw updateError;
+          if (updated) {
+            logger.info('Saved fuller Joynio lead in place of a fresh unsent duplicate', {
+              userId, leadId: updated.id, previousMessageId: existing.message_id, messageId: message.id
+            });
+            return updated;
+          }
+        }
+      }
       logger.info('Duplicate lead detected - skipping save', {
         userId,
         senderId: message.username ? senderId : 'no_username',
@@ -283,19 +326,6 @@ export const saveDetectedLead = async (userId, message, analysis) => {
       });
       return null; // Skip duplicate
     }
-    
-    const leadData = {
-      user_id: userId,
-      message_id: message.id,
-      confidence_score: analysis.aiResponse.confidence_score,
-      reasoning: analysis.aiResponse.reasoning,
-      matched_criteria: analysis.aiResponse.matched_criteria,
-      posted_to_telegram: false,
-      is_contacted: false,
-      message_hash: messageHash,
-      sender_id: String(senderId),
-      from_rescue: !!(message && message._fromRescue)
-    };
     
     const { data, error } = await supabase
       .from('detected_leads')

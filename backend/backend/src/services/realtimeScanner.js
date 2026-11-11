@@ -10,6 +10,7 @@ import { retryUnpostedLeads } from './leadRedelivery.js';
 import { isSleepTime } from '../utils/sleepWindow.js';
 import { processScanPage } from './scanProgress.js';
 import { createVerificationGate } from './verificationGate.js';
+import { joynioCriteria, reviewJoynioCandidates } from './joynioLeadPolicy.js';
 import logger from '../utils/logger.js';
 
 /**
@@ -428,10 +429,11 @@ const processMessagesForUser = async (messages, userConfig) => {
   if (messages.length === 0) return [];
 
   try {
+    const criteria = joynioCriteria(userConfig);
     // Pre-filter messages (with optional embedding rescue for keyword-rejected)
     const preFilterResult = await preFilterMessages(
       messages,
-      userConfig.lead_prompt,
+      criteria,
       { userId, apiKey: userConfig.openrouter_api_key }
     );
 
@@ -477,7 +479,7 @@ const processMessagesForUser = async (messages, userConfig) => {
     try {
       analysisResults = await analyzeBatch(
         preFilterResult.passed,
-        userConfig.lead_prompt,
+        criteria,
         userConfig.openrouter_api_key,
         {
           maxConcurrent: parseInt(process.env.AI_CONCURRENCY || '5', 10),
@@ -518,10 +520,23 @@ const processMessagesForUser = async (messages, userConfig) => {
         `All ${analysisResults.stats.failed} messages failed AI analysis — likely rate limited, will retry next cycle`
       );
     }
-    const failedIds = analysisResults.failed.map(result => result.message.id);
+    const reviewed = await reviewJoynioCandidates(
+      preFilterResult.passed, analysisResults, userConfig,
+      async (message, first) => {
+        const result = await verificationGate.check(
+          message, first, criteria, userConfig.openrouter_api_key, userId, { rescore: true }
+        );
+        logger.info('Joynio direct request independently evaluated', {
+          userId, messageId: message.id, originalScore: first.confidence_score,
+          confidence: result.confidence, verified: result.verified, retryable: result.retryable
+        });
+        return result;
+      }
+    );
+    const failedIds = [...analysisResults.failed.map(result => result.message.id), ...reviewed.retryIds];
 
     // Process matches (leads found)
-    if (analysisResults.matches.length === 0) {
+    if (reviewed.matches.length === 0) {
       logger.info('No leads found in batch', {
         userId,
         messagesAnalyzed: analysisResults.stats.analyzed
@@ -530,16 +545,17 @@ const processMessagesForUser = async (messages, userConfig) => {
     }
 
     // Process each matched lead
-    for (const match of analysisResults.matches) {
+    for (const match of reviewed.matches) {
       try {
         // ============= DOUBLE CHECK WITH GEMINI =============
-        const shouldDoubleCheck = shouldRunGeminiDoubleCheck(match.message, match.analysis.aiResponse);
+        const shouldDoubleCheck = !match.independentlyVerified &&
+          shouldRunGeminiDoubleCheck(match.message, match.analysis.aiResponse);
         
         if (shouldDoubleCheck) {
           const verification = await verificationGate.check(
             match.message,
             match.analysis.aiResponse,
-            userConfig.lead_prompt,
+            criteria,
             userConfig.openrouter_api_key,
             userId
           );
@@ -564,7 +580,7 @@ const processMessagesForUser = async (messages, userConfig) => {
 
           const originalReasoning = match.analysis.aiResponse.reasoning || '';
           match.analysis.aiResponse.reasoning = `[AI ✓] ${originalReasoning}`;
-        } else {
+        } else if (!match.independentlyVerified) {
           logger.debug('Skipping Gemini Double Check (smart mode)', {
             userId,
             messageId: match.message.id,
@@ -577,7 +593,8 @@ const processMessagesForUser = async (messages, userConfig) => {
         const savedLead = await saveDetectedLead(
           userId,
           match.message,
-          match.analysis
+          match.analysis,
+          userConfig
         );
 
         // Skip if duplicate (savedLead will be null)
@@ -593,7 +610,7 @@ const processMessagesForUser = async (messages, userConfig) => {
           userId,
           leadId: savedLead.id,
           confidence: match.analysis.aiResponse.confidence_score,
-          doubleChecked: shouldDoubleCheck
+          doubleChecked: shouldDoubleCheck || match.independentlyVerified === true
         });
 
         // Generate message suggestion if message_prompt is configured

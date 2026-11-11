@@ -3,14 +3,14 @@ export const createVerificationGate = (verify, now = Date.now) => {
   const retryAt = new Map();
   return {
     retryAt,
-    async check(message, analysis, criteria, apiKey, userId) {
+    async check(message, analysis, criteria, apiKey, userId, options) {
       const remaining = (retryAt.get(userId) || 0) - now();
       if (remaining > 0) {
         return { verified: false, retryable: true, retryAfterMs: remaining, reasoning: 'Verification cooldown' };
       }
       let result;
       try {
-        result = await verify(message, analysis, criteria, apiKey, userId);
+        result = await verify(message, analysis, criteria, apiKey, userId, options);
       } catch {
         result = { verified: false, retryable: true, reasoning: 'Verification failed - retry required' };
       }

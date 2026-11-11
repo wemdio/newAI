@@ -207,6 +207,34 @@ test('extra verifier scores cannot raise confidence or override an explicit reje
   assert.equal(globalThis.fetch.mock.callCount(), 0);
 });
 
+test('independent verifier uses its own score and rejects invalid verdicts', async (t) => {
+  t.mock.method(globalThis, 'fetch', async () => { throw new Error('Unexpected network call'); });
+  const client = initializeOpenRouter('test-only-key');
+  let payload;
+  const completion = t.mock.method(client.chat.completions, 'create', async () => ({
+    choices: [{ message: { content: JSON.stringify(payload) } }]
+  }));
+  const initial = { confidence_score: 75, reasoning: 'Distinct initial reasoning' };
+  for (const [verdict, confidence, retryable] of [
+    [{ verified: true, confidence_score: 91, reason: 'Clear request' }, 91, false],
+    [{ verified: true, confidence_score: 83, reason: 'Borderline fit' }, 83, false],
+    [{ verified: false, confidence_score: 99 }, 0, false],
+    [{ verified: true, reason: 'Missing score' }, 0, true],
+    [{ verified: true, confidence_score: '91', reason: 'Not an integer' }, 0, true],
+    [{ verified: true, confidence_score: 101, reason: 'Out of range' }, 0, true],
+    [{ verified: true, confidence_score: 90, reason: ' ' }, 0, true]
+  ]) {
+    payload = verdict;
+    const result = await doubleCheckLead({ id: 42, message: 'Request' }, initial, 'Criteria',
+      null, null, { rescore: true });
+    assert.equal(result.confidence, confidence);
+    assert.equal(result.retryable, retryable);
+    const prompt = completion.mock.calls.at(-1).arguments[0].messages[1].content;
+    assert.doesNotMatch(prompt, /Distinct initial reasoning|\b75\b/);
+  }
+  assert.equal(globalThis.fetch.mock.callCount(), 0);
+});
+
 test('verifier forbidden responses preserve status and do not get retried', async (t) => {
   t.mock.method(globalThis, 'fetch', async () => { throw new Error('Unexpected network call'); });
   const client = initializeOpenRouter('test-only-key');

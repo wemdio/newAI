@@ -145,7 +145,7 @@ export const buildLeadAnalysisCompletionParams = ({
  * @param {string} apiKey - OpenRouter API key
  * @returns {object} Verification result
  */
-export const doubleCheckLead = async (message, initialAnalysis, userCriteria, apiKey, userId = null) => {
+export const doubleCheckLead = async (message, initialAnalysis, userCriteria, apiKey, userId = null, { rescore = false } = {}) => {
   const startTime = Date.now();
   const model = process.env.DOUBLE_CHECK_MODEL || 'policy/lead-doublecheck';
 
@@ -160,7 +160,7 @@ export const doubleCheckLead = async (message, initialAnalysis, userCriteria, ap
     const client = getOpenRouter(apiKey);
 
     const { systemPrompt: systemContent, userPrompt: userContent } =
-      buildVerificationPrompts(message, initialAnalysis, userCriteria);
+      buildVerificationPrompts(message, initialAnalysis, userCriteria, { rescore });
 
     const response = await retryWithBackoff(async () => {
       try {
@@ -213,7 +213,7 @@ export const doubleCheckLead = async (message, initialAnalysis, userCriteria, ap
         .trim();
       
       const jsonMatch = cleanContent.match(/\{[^}]*verified[^}]*\}/i);
-      if (jsonMatch) {
+      if (!rescore && jsonMatch) {
         cleanContent = jsonMatch[0];
       }
       
@@ -221,6 +221,7 @@ export const doubleCheckLead = async (message, initialAnalysis, userCriteria, ap
       try {
         parsed = JSON.parse(cleanContent);
       } catch {
+        if (rescore) throw new Error('Invalid independent verification JSON');
         const hasTrue = /verified["']?\s*:\s*true/i.test(cleanContent);
         const hasFalse = /verified["']?\s*:\s*false/i.test(cleanContent);
         
@@ -237,11 +238,16 @@ export const doubleCheckLead = async (message, initialAnalysis, userCriteria, ap
         throw new Error('Invalid verified status in double-check response');
       }
       const verified = parsed.verified;
+      if (rescore && verified && (!Number.isInteger(parsed.confidence_score) ||
+          parsed.confidence_score < 0 || parsed.confidence_score > 100 ||
+          typeof parsed.reason !== 'string' || !parsed.reason.trim())) {
+        throw new Error('Independent verification omitted its score or evidence');
+      }
       result = {
         retryable: false,
         verified,
         reasoning: parsed.reason || parsed.reasoning || (verified ? 'Verified by AI' : 'Rejected by AI'),
-        confidence: verified ? initialAnalysis.confidence_score : 0,
+        confidence: verified ? (rescore ? parsed.confidence_score : initialAnalysis.confidence_score) : 0,
         model: response.model || model
       };
       
