@@ -79,6 +79,22 @@ export const initializeTelegramBot = (token = null) => {
 };
 
 /**
+ * Отдельный бот под чужой токен (через тот же прокси). В отличие от
+ * initializeTelegramBot не подменяет общий botInstance, которым шлются лиды.
+ */
+const standaloneBots = new Map();
+export const getStandaloneBot = (token) => {
+  if (!standaloneBots.has(token)) {
+    standaloneBots.set(token, new TelegramBot(token, {
+      polling: false,
+      filepath: false,
+      ...(telegramProxyAgent ? { request: { agent: telegramProxyAgent } } : {})
+    }));
+  }
+  return standaloneBots.get(token);
+};
+
+/**
  * Get Telegram bot instance
  * @param {string} token - Optional token for user-specific bot
  */

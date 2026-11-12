@@ -1,4 +1,4 @@
-import { getTelegramBot, formatLeadMessage, createLeadKeyboard, sendMessage } from '../config/telegram.js';
+import { getTelegramBot, getStandaloneBot, formatLeadMessage, createLeadKeyboard, sendMessage } from '../config/telegram.js';
 import { getSupabase } from '../config/database.js';
 import logger from '../utils/logger.js';
 import { TelegramError, DatabaseError, retryWithBackoff } from '../utils/errorHandler.js';
@@ -100,6 +100,45 @@ export const checkDuplicateLead = async (lead, userId, daysBack = 7) => {
 };
 
 /**
+ * Копия лида в общий чат продаж Polza («Продажи Polza», подчат General) — туда
+ * же, куда падают лиды автоаутрича и email-рассылок портала.
+ *
+ * Копируем только лиды из каналов SALES_COPY_SOURCE_CHANNELS (через запятую;
+ * по умолчанию «LeadScan Наш лидген»): лиды клиентов сканера в наш чат не идут.
+ * Отправляет бот SALES_COPY_BOT_TOKEN (бот портала, который уже пишет в этот
+ * чат); не задан — копия выключена. Сбой копии не мешает основному посту.
+ */
+const SALES_COPY_DEFAULT_SOURCES = '-1002988109791';
+const SALES_COPY_DEFAULT_CHAT = '-1001852890744';
+
+export const salesCopyTarget = (channelId, env = process.env) => {
+  const token = (env.SALES_COPY_BOT_TOKEN || '').trim();
+  if (!token || !channelId) return null;
+  const sources = (env.SALES_COPY_SOURCE_CHANNELS || SALES_COPY_DEFAULT_SOURCES)
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  if (!sources.includes(String(channelId).trim())) return null;
+  const chatId = (env.SALES_COPY_CHAT_ID || SALES_COPY_DEFAULT_CHAT).trim();
+  const threadId = Number((env.SALES_COPY_THREAD_ID || '').trim());
+  return { token, chatId, threadId: Number.isFinite(threadId) && threadId > 0 ? threadId : null };
+};
+
+const copyToSalesChat = async (channelId, message, keyboard, leadId) => {
+  const target = salesCopyTarget(channelId);
+  if (!target) return;
+  try {
+    // Не sendMessage(..., token): он через initializeTelegramBot подменил бы
+    // общий бот сканера, и следующие лиды ушли бы от бота портала.
+    const options = { parse_mode: 'MarkdownV2', disable_web_page_preview: true, reply_markup: keyboard };
+    if (target.threadId) options.message_thread_id = target.threadId;
+    const result = await retryWithBackoff(
+      () => getStandaloneBot(target.token).sendMessage(target.chatId, message, options), 3, 2000);
+    logger.info('Lead copied to sales chat', { leadId, chatId: target.chatId, messageId: result.message_id });
+  } catch (error) {
+    logger.error('Failed to copy lead to sales chat', { leadId, chatId: target.chatId, error: error.message });
+  }
+};
+
+/**
  * Post a single lead to Telegram channel
  * @param {object} lead - Lead data (from messages table)
  * @param {object} analysis - AI analysis results
@@ -165,7 +204,9 @@ export const postLeadToChannel = async (lead, analysis, channelId, botToken = nu
       messageId: result.message_id,
       channelId
     });
-    
+
+    await copyToSalesChat(channelId, message, keyboard, lead.id);
+
     return {
       success: true,
       messageId: result.message_id,
