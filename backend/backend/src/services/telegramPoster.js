@@ -107,6 +107,11 @@ export const checkDuplicateLead = async (lead, userId, daysBack = 7) => {
  * по умолчанию «LeadScan Наш лидген»): лиды клиентов сканера в наш чат не идут.
  * Отправляет бот SALES_COPY_BOT_TOKEN (бот портала, который уже пишет в этот
  * чат); не задан — копия выключена. Сбой копии не мешает основному посту.
+ *
+ * С 19.11.2026 лид сначала отдаём порталу (PORTAL_LEAD_URL + PORTAL_LEAD_SECRET):
+ * портал сам пишет сообщение в этот чат, заводит сделку в AMO (Источник
+ * «Лидскан») и дописывает ссылку на неё. Портал не ответил — копируем, как
+ * раньше, напрямую, чтобы лид не потерялся (сделку тогда заведут руками).
  */
 const SALES_COPY_DEFAULT_SOURCES = '-1002988109791';
 const SALES_COPY_DEFAULT_CHAT = '-1001852890744';
@@ -122,7 +127,66 @@ export const salesCopyTarget = (channelId, env = process.env) => {
   return { token, chatId, threadId: Number.isFinite(threadId) && threadId > 0 ? threadId : null };
 };
 
-const copyToSalesChat = async (channelId, message, keyboard, leadId) => {
+export const isSalesSource = (channelId, env = process.env) => {
+  if (!channelId) return false;
+  const sources = (env.SALES_COPY_SOURCE_CHANNELS || SALES_COPY_DEFAULT_SOURCES)
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  return sources.includes(String(channelId).trim());
+};
+
+export const portalLeadTarget = (env = process.env) => {
+  const url = (env.PORTAL_LEAD_URL || '').trim();
+  const secret = (env.PORTAL_LEAD_SECRET || '').trim();
+  return url && secret ? { url, secret } : null;
+};
+
+/** Поля лида для портала: то же, что видно в сообщении сканера. */
+export const portalLeadPayload = (lead, analysis) => ({
+  lead_id: String(lead.id),
+  username: lead.username || null,
+  first_name: lead.first_name || null,
+  last_name: lead.last_name || null,
+  bio: lead.bio || null,
+  chat_name: lead.chat_name || null,
+  message_time: lead.message_time || null,
+  message: lead.message || '',
+  confidence_score: analysis?.confidence_score ?? null,
+  reasoning: analysis?.reasoning || null,
+  matched_criteria: Array.isArray(analysis?.matched_criteria) ? analysis.matched_criteria : [],
+});
+
+/** true — портал принял лид (или он у него уже есть). */
+const sendLeadToPortal = async (lead, analysis) => {
+  const target = portalLeadTarget();
+  if (!target) return false;
+  try {
+    const res = await retryWithBackoff(async () => {
+      const r = await fetch(target.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${target.secret}` },
+        body: JSON.stringify(portalLeadPayload(lead, analysis)),
+        signal: AbortSignal.timeout(15000),
+      });
+      // 4xx — повтор не поможет (ключ, формат); 5xx и сеть — повторяем.
+      if (r.status >= 500) throw new Error(`portal HTTP ${r.status}`);
+      return r;
+    }, 3, 2000);
+    if (!res.ok) {
+      logger.error('Portal rejected lead', { leadId: lead.id, status: res.status, body: (await res.text().catch(() => '')).slice(0, 300) });
+      return false;
+    }
+    logger.info('Lead sent to portal', { leadId: lead.id });
+    return true;
+  } catch (error) {
+    logger.error('Failed to send lead to portal', { leadId: lead.id, error: error.message });
+    return false;
+  }
+};
+
+const copyToSalesChat = async (channelId, message, keyboard, lead, analysis) => {
+  if (!isSalesSource(channelId)) return;
+  if (await sendLeadToPortal(lead, analysis)) return;
+  const leadId = lead.id;
   const target = salesCopyTarget(channelId);
   if (!target) return;
   try {
@@ -205,7 +269,7 @@ export const postLeadToChannel = async (lead, analysis, channelId, botToken = nu
       channelId
     });
 
-    await copyToSalesChat(channelId, message, keyboard, lead.id);
+    await copyToSalesChat(channelId, message, keyboard, lead, analysis);
 
     return {
       success: true,
