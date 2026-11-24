@@ -26,11 +26,12 @@ class PromoConfigTests(unittest.TestCase):
 
 
 class PromoMenuTests(unittest.TestCase):
-    def test_main_menu_contains_promo_activation_button(self) -> None:
+    def test_free_menu_does_not_require_promo_activation(self) -> None:
         keyboard = main_menu_keyboard()
         labels = [button.text for row in keyboard.keyboard for button in row]
 
-        self.assertIn("Активировать промокод", labels)
+        self.assertNotIn("Активировать промокод", labels)
+        self.assertIn("Мои категории", labels)
 
 
 if __name__ == "__main__":

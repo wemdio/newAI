@@ -13,8 +13,7 @@ from .config import load_config
 from .db import Database, LOCK_REFRESH_SECONDS
 from .handlers import router
 from .leads import LeadService
-from .payments import PaymentService
-from .scheduler import start_lead_polling, start_payment_polling, start_subscription_renewal
+from .scheduler import start_lead_polling
 from .supabase_importer import SupabaseImporter
 
 
@@ -55,7 +54,6 @@ async def main() -> None:
     leads = LeadService(db, config)
     await leads.start()
     supabase = SupabaseImporter(db, config)
-    payments = PaymentService(config)
 
     # Route Telegram Bot API traffic through a proxy if configured (LEADBOT_PROXY).
     # Needed when the host network blocks api.telegram.org (e.g. RU hosting + RKN).
@@ -97,12 +95,10 @@ async def main() -> None:
     bg_tasks: list[asyncio.Task] = []
 
     async def on_startup() -> None:
+        await db.keep_renewing_categories_free()
         bg_tasks.append(asyncio.create_task(_refresh_lock_loop()))
         bg_tasks.append(asyncio.create_task(start_lead_polling(bot, db, leads, config)))
         bg_tasks.append(asyncio.create_task(supabase.run()))
-        if payments.enabled:
-            bg_tasks.append(asyncio.create_task(start_payment_polling(bot, db, payments, config, leads)))
-            bg_tasks.append(asyncio.create_task(start_subscription_renewal(bot, db, payments, config)))
 
     async def on_shutdown() -> None:
         for t in bg_tasks:
@@ -111,13 +107,12 @@ async def main() -> None:
                 await t
         await supabase.close()
         await leads.close()
-        await payments.close()
         await db.close()
 
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
 
-    await dp.start_polling(bot, db=db, config=config, leads=leads, payments=payments)
+    await dp.start_polling(bot, db=db, config=config, leads=leads)
 
 
 if __name__ == "__main__":

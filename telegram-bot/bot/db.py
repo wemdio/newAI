@@ -285,9 +285,22 @@ class Database:
             category_id,
         )
 
+    async def keep_renewing_categories_free(self) -> None:
+        # Carry over ongoing paid deliveries, not canceled, expired or time-limited grants.
+        await self._pool().execute(
+            f"""
+            UPDATE {SCHEMA}.user_category_state AS c SET free_started = TRUE, updated_at = $1
+            FROM {SCHEMA}.subscriptions s
+            WHERE (c.user_id, c.category_id) = (s.user_id, s.category_id)
+              AND NOT c.free_started AND s.grant_type = 'paid' AND s.status = 'active'
+              AND s.auto_renew AND s.canceled_at IS NULL AND s.end_date >= $1
+            """,
+            iso_now(),
+        )
+
     async def list_user_category_state_ids(self, user_id: int) -> list[int]:
         rows = await self._pool().fetch(
-            f"SELECT category_id FROM {SCHEMA}.user_category_state WHERE user_id = $1",
+            f"SELECT category_id FROM {SCHEMA}.user_category_state WHERE user_id = $1 AND free_started",
             user_id,
         )
         return [int(row["category_id"]) for row in rows]

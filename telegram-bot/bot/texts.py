@@ -1,144 +1,41 @@
-from datetime import datetime
-from typing import Optional
-
 from .constants import Category
 
 
 START_TEXT = (
-    "Бот присылает реальные заявки из Telegram-чатов.\n\n"
-    "Мы отслеживаем 200+ чатов и находим сообщения где ищут:\n\n"
-    "• разработчиков\n"
-    "• маркетологов\n"
-    "• дизайнеров\n"
-    "• подрядчиков\n"
-    "• специалистов\n\n"
-    "Вы получаете лиды сразу после появления.\n\n"
-    "🎁 При старте — 10 бесплатных лидов.\n"
-    "5 последних из базы + 5 новых.\n"
-    "Выберите категорию:"
+    "Лидсканер присылает заявки из Telegram-чатов. Выберите категорию, "
+    "чтобы получать новые заявки с контактами бесплатно. Карта не нужна."
+)
+
+POLZA_OFFER_HTML = (
+    "Лидсканер теперь бесплатный. Чтобы получать заявки, нажмите «Продолжить бесплатно».\n\n"
+    "<b>Нужны потенциальные клиенты в B2B?</b>\n"
+    '<a href="https://t.me/agencypolzabot?start=base_leadscan">'
+    "Забирайте контакты по вашему ICP в боте Polza Agency</a>.\n\n"
+    "<b>А ещё с Polza можно запартнёриться.</b> Для этого нужна своя база B2B-компаний.\n"
+    "Рекомендуйте нас и получайте 20% с первого платежа (средний чек 150 000 ₽) "
+    "и 10% с последующих платежей.\n\n"
+    "Кейс партнёра: за 6 месяцев он передал 65 лидов, 22 стали сделками. "
+    "Комиссия составила более 550 000 ₽.\n\n"
+    '<a href="https://polzaagency.ru/partner?utm_source=tg&amp;utm_medium=botleadscan">'
+    "Условия партнёрской программы</a>"
 )
 
 
-BONUS_ACCESS_TEXT = (
-    "Можно получить бесплатный доступ на 30 дней. "
-    "Если вы можете добавить нас в закрытый чат, где регулярно "
-    "публикуются заявки и ищут подрядчиков — напишите @sorichev. "
-    "После проверки мы выдадим бесплатный доступ к категориям."
-)
-
-REFERRAL_TEXT = "Также вы получаете +10 бесплатных заказов за каждого приглашенного друга."
+def categories_text() -> str:
+    return "Выберите категорию. Заявки и контакты бесплатны, без лимита по количеству."
 
 
-def categories_text(price_rub: int) -> str:
+
+
+def autorenew_disabled_text(category: Category) -> str:
+    return f"{category.title}: сохранённый способ оплаты отвязан. Доступ к заявкам бесплатный."
+
+
+def help_text() -> str:
     return (
-        "Выберите категорию заявок.\n\n"
-        f"{BONUS_ACCESS_TEXT}\n\n"
-        f"{REFERRAL_TEXT}"
-    )
-
-
-def category_text(category: Category, price_rub: int) -> str:
-    return (
-        f"Категория: {category.full_title}\n\n"
-        "Лидов:\n"
-        f"{category.monthly_leads} в месяц\n\n"
-        "Подписка:\n"
-        f"{price_rub} ₽ / месяц\n\n"
-        "После оплаты вы будете получать новые заявки сразу после их появления."
-    )
-
-
-def free_ended_text(price_rub: int) -> str:
-    return (
-        "Бесплатные лиды закончились.\n\n"
-        "Чтобы продолжить получать заявки, оформите подписку.\n\n"
-        "Стоимость:\n"
-        f"{price_rub} ₽ / месяц"
-    )
-
-
-def subscription_activated_text(category: Category, duration_days: int) -> str:
-    return (
-        "Подписка активирована.\n\n"
-        f"Категория:\n{category.title}\n\n"
-        f"Срок:\n{duration_days} дней\n\n"
-        "Новые лиды будут приходить автоматически."
-    )
-
-
-def subscription_renewed_text(category: Category, duration_days: int) -> str:
-    return (
-        "Подписка продлена.\n\n"
-        f"Категория:\n{category.title}\n\n"
-        f"Срок:\n{duration_days} дней\n\n"
-        "Новые лиды будут приходить автоматически."
-    )
-
-
-def payment_link_text(category: Category, price_rub: int, duration_days: int) -> str:
-    return (
-        "Оплата подписки.\n\n"
-        f"Категория:\n{category.title}\n\n"
-        f"Стоимость:\n{price_rub} ₽ / {duration_days} дней\n\n"
-        "При оплате способ оплаты будет сохранен для автопродления.\n"
-        "Отменить автопродление можно в разделе «Мои подписки»."
-    )
-
-
-def payment_pending_text() -> str:
-    return "Платеж еще обрабатывается. Попробуйте проверить позже."
-
-
-def payment_canceled_text(category: Category) -> str:
-    return (
-        "Платеж отменен или истек.\n\n"
-        f"Категория:\n{category.title}\n\n"
-        "Если хотите оформить подписку, попробуйте еще раз."
-    )
-
-
-def autorenew_disabled_text(category: Category, end_date: datetime) -> str:
-    if end_date >= datetime.now(end_date.tzinfo):
-        access_text = f"Доступ действует до:\n{end_date.strftime('%d.%m.%Y')}"
-    else:
-        access_text = f"Доступ закончился:\n{end_date.strftime('%d.%m.%Y')}"
-    return (
-        "Автопродление отключено.\n\n"
-        f"Категория:\n{category.title}\n\n"
-        f"{access_text}\n\n"
-        "Сохраненный способ оплаты удален. Новых автоматических списаний не будет."
-    )
-
-
-def autorenew_enabled_text(category: Category, end_date: datetime) -> str:
-    return (
-        "Автопродление включено.\n\n"
-        f"Категория:\n{category.title}\n\n"
-        f"Доступ действует до:\n{end_date.strftime('%d.%m.%Y')}"
-    )
-
-
-def renewal_failed_text(category: Category) -> str:
-    return (
-        "Не удалось продлить подписку.\n\n"
-        f"Категория:\n{category.title}\n\n"
-        "Банк отклонил автосписание (нехватка средств или лимит карты), "
-        "поэтому автопродление отключено.\n\n"
-        "Чтобы продолжить получать заявки, оформите подписку заново — "
-        "при оплате привяжется актуальная карта."
-    )
-
-
-def help_text(price_rub: int) -> str:
-    return (
-        "Бот присылает заявки из Telegram-чатов.\n\n"
-        "Подписка:\n"
-        f"{price_rub} ₽ / месяц за категорию.\n\n"
-        "Промокод можно активировать командой /promo КОД.\n\n"
-        "Вы получаете новые лиды сразу после их появления.\n\n"
-        "Если есть вопросы: @sorichev\n\n"
-        f"{BONUS_ACCESS_TEXT}\n\n"
-        f"{REFERRAL_TEXT}"
+        "Откройте /categories, выберите категорию и нажмите «Продолжить бесплатно». "
+        "Новые заявки будут приходить автоматически. Переходить по ссылкам Polza необязательно.\n\n"
+        "Ваши категории: /my."
     )
 
 
@@ -155,9 +52,9 @@ def grant_message(category: Category, duration_days: int, grant_type: str) -> st
 
 
 def my_subscriptions_text(lines: list[str]) -> str:
-    header = "Ваши подписки\n\n"
+    header = "Ваши категории\n\n"
     if not lines:
-        return header + "У вас пока нет подписок."
+        return header + "Вы пока не подключили ни одной категории."
     return header + "\n\n".join(lines)
 
 
@@ -199,14 +96,4 @@ def admin_stats_text(stats: dict) -> str:
 
 
 def invite_link_text(link: str) -> str:
-    return (
-        "Отправьте эту ссылку другу.\n"
-        "За каждого друга, который запустит бота, "
-        "вы получаете +10 бесплатных лидов.\n\n"
-        f"{link}"
-    )
-
-
-def referral_bonus_text(username: str) -> str:
-    who = f"@{username}" if username else "Новый пользователь"
-    return f"{who} запустил бота по вашей ссылке! Вам начислено +10 бесплатных лидов."
+    return f"Пригласите друга пользоваться Лидсканером бесплатно:\n{link}"
