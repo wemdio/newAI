@@ -187,6 +187,35 @@ async def cb_free_leads(
     await query.answer()
 
 
+async def _refresh_legacy_contact_card(query: CallbackQuery, category: Category) -> None:
+    msg = query.message
+    if (not isinstance(msg, Message) or msg.chat.type != "private"
+            or msg.chat.id != query.from_user.id or not msg.from_user
+            or msg.from_user.id != query.bot.id or not msg.reply_markup):
+        return
+    rows = msg.reply_markup.inline_keyboard
+    if (len(rows) != 1 or len(rows[0]) != 1 or rows[0][0].callback_data != query.data
+            or rows[0][0].text != "Открыть контакт — 90 ₽"):
+        return
+
+    # Only replace the bot's footer, never matching words or prices inside the lead.
+    text = msg.text or ""
+    if not text.startswith(f"Новая заявка\n\nКатегория: {category.title}\n\n"):
+        return
+    before, footer, source = text.rpartition("\n\nКонтакт скрыт.\n\nОформите подписку чтобы видеть контакты.")
+    if not footer or (source and not source.startswith("\n\nИсточник:\n")):
+        return
+    try:
+        await msg.edit_text(
+            before + "\n\nКонтакт доступен бесплатно." + source, parse_mode=None,
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
+                InlineKeyboardButton(text="Открыть контакт бесплатно", callback_data=query.data),
+            ]]),
+        )
+    except TelegramAPIError as exc:
+        log.info("Could not update legacy contact card: %s", type(exc).__name__)
+
+
 @router.callback_query(F.data.startswith("buycontact:"))
 @router.callback_query(F.data.startswith("reveal:"))
 async def cb_contact(query: CallbackQuery, db: Database, leads: LeadService) -> None:
@@ -202,6 +231,7 @@ async def cb_contact(query: CallbackQuery, db: Database, leads: LeadService) -> 
     if parts[0] == "buycontact":
         await query.answer()
         await _show_offer(query.message, f"reveal:{category_id}:{lead_id}")
+        await _refresh_legacy_contact_card(query, category)
         return
     user_id = await db.ensure_user(query.from_user.id, query.from_user.username)
     lead = await leads.get_by_id(lead_id) if await db.was_sent_lead(user_id, lead_id) else None

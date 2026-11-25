@@ -5,7 +5,8 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from aiogram import Bot, Dispatcher
-from aiogram.methods import SendMessage
+from aiogram.exceptions import TelegramBadRequest
+from aiogram.methods import EditMessageText, SendMessage
 from aiogram.types import Update
 
 from bot.db import Database
@@ -29,10 +30,12 @@ class FreeFunnelTests(unittest.IsolatedAsyncioTestCase):
         self.lead = Lead(77, 3, "Ищем маркетолога", "@example", "чат", "")
         self.cfg = SimpleNamespace(free_leads_total=10, leads_send_interval_seconds=0)
 
-    async def press(self, data):
+    async def press(self, data, message=None):
         self.session.reset_mock()
         user = {"id": 42, "is_bot": False, "first_name": "Test"}
         msg = {"message_id": 1, "date": 1, "chat": {"id": 42, "type": "private"}, "from": user}
+        if message:
+            msg.update(message)
         update = {"update_id": 1}
         if data.startswith("/"):
             update["message"] = {**msg, "text": data}
@@ -58,6 +61,41 @@ class FreeFunnelTests(unittest.IsolatedAsyncioTestCase):
                 self.assertIn('href="https://polzaagency.ru/partner?utm_source=tg&utm_medium=botleadscan"',
                               unescape(msg.text))
                 self.assertEqual(msg.reply_markup.inline_keyboard[0][0].callback_data, target)
+        self.assertEqual(self.db.method_calls, [])
+
+    async def test_old_card_is_edited_in_place_without_rewriting_lead_or_source(self):
+        data = "buycontact:3:77"
+        price = "Открыть контакт — 90 ₽"
+        body = "Новая заявка\n\nКатегория: Маркетинг\n\nБюджет 90 ₽ за клик <тест>."
+        footer = "\n\nКонтакт скрыт.\n\nОформите подписку чтобы видеть контакты."
+        source = "\n\nИсточник:\nКанал: тест"
+        def card(label, text):
+            return {"from": {"is_bot": True, "id": self.bot.id, "first_name": "Bot"},
+                    "text": text, "reply_markup": {"inline_keyboard": [[
+                        {"text": label, "callback_data": data}]]}}
+        def edits():
+            return [c.args[1] for c in self.session.await_args_list
+                    if isinstance(c.args[1], EditMessageText)]
+        for suffix in ("", source):
+            offer, = await self.press(data, card(price, body + footer + suffix))
+            edit, = edits()
+            self.assertEqual((edit.chat_id, edit.message_id), (42, 1))
+            self.assertEqual(edit.text, body + "\n\nКонтакт доступен бесплатно." + suffix)
+            btn = edit.reply_markup.inline_keyboard[0][0]
+            self.assertEqual((btn.text, btn.callback_data), ("Открыть контакт бесплатно", data))
+            self.assertEqual(offer.reply_markup.inline_keyboard[0][0].callback_data, "reveal:3:77")
+        for other in (card(btn.text, edit.text), card(price, body + footer + "\nцитата"),
+                      {**card(price, body + footer), "chat": {"id": -99, "type": "group"}},
+                      {**card(price, body + footer), "from": {"id": 7, "is_bot": True, "first_name": "Other"}}):
+            await self.press(data, other)
+            self.assertEqual(edits(), [])
+        async def cannot_edit(bot, method, **kwargs):
+            if isinstance(method, EditMessageText):
+                raise TelegramBadRequest(method, "message can't be edited")
+        self.session.side_effect = cannot_edit
+        offer, = await self.press(data, card(price, body + footer))
+        self.assertEqual(offer.reply_markup.inline_keyboard[0][0].callback_data, "reveal:3:77")
+        self.assertEqual(len(edits()), 1)
         self.assertEqual(self.db.method_calls, [])
 
     async def test_activate_and_receive_lead_without_opening_external_links(self):
